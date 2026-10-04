@@ -1,5 +1,7 @@
 package com.os4.musiccover.ui.screen.features
 
+import com.os4.musiccover.R
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.AnimationVector1D
@@ -16,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
@@ -64,13 +67,14 @@ import kotlin.math.sin
  */
 @Composable
 fun IslandDemo(modifier: Modifier = Modifier) {
-    DemoPager(DEMO_PAGES, modifier) { page, playing, done -> DemoPage(page, playing, done) }
+    DemoPager(islandPages(), modifier) { page, playing, done -> DemoPage(page, playing, done) }
 }
 
-private val DEMO_PAGES = listOf(
-    DemoText("切换与打断", "左右滑动切换岛；点按岛展开成卡片，和展开的卡片互换位置，动画中途点哪个岛都能随时打断；在卡片上下滑收回岛里。"),
-    DemoText("沉浸页面", "点按导航、倒计时或音乐的岛，锁屏换成地图、倒计时或专辑封面；点另一个岛直接切过去。"),
-    DemoText("聚合岛", "普通通知收进一个岛，点按或上滑展开成列表，整排岛一起变成卡片、时钟跟着缩小；在列表上下滑全部收回。"),
+@Composable
+private fun islandPages() = listOf(
+    DemoText(stringResource(R.string.demo_island_switch_title), stringResource(R.string.demo_island_switch_summary)),
+    DemoText(stringResource(R.string.demo_island_scene_title), stringResource(R.string.demo_island_scene_summary)),
+    DemoText(stringResource(R.string.demo_island_notifications_title), stringResource(R.string.demo_island_notifications_summary)),
 )
 
 @Composable

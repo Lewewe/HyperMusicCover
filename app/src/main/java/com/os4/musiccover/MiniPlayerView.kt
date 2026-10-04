@@ -169,7 +169,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         toggle.scaleType = ImageView.ScaleType.CENTER
         toggle.setPadding(dp(8), dp(8), dp(8), dp(8))
         toggle.background = null
-        toggle.contentDescription = "播放或暂停"
+        toggle.contentDescription = SystemUiLanguage.text("播放或暂停", "Play or pause")
         toggle.setOnClickListener { (toggleFaceClick ?: onToggle)?.invoke() }
         content.addView(toggle)
         toggle2.scaleType = ImageView.ScaleType.FIT_CENTER
@@ -178,7 +178,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         toggle2.visibility = View.GONE
         toggle2.setOnClickListener { secondFaceClick?.invoke() }
         content.addView(toggle2)
-        contentDescription = "锁屏超级岛"
+        contentDescription = SystemUiLanguage.text("锁屏超级岛", "Lock screen islands")
     }
 
     fun bind(
@@ -354,7 +354,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
             toggle.background = null
             toggle.scaleType = ImageView.ScaleType.CENTER
             toggle.setPadding(dp(8), dp(8), dp(8), dp(8))
-            toggle.contentDescription = "播放或暂停"
+            toggle.contentDescription = SystemUiLanguage.text("播放或暂停", "Play or pause")
             lastPlaying?.let { playing ->
                 toggle.setImageDrawable(MiniPlayerPathDrawable(if (playing) ICON_PAUSE else ICON_PLAY, Color.WHITE))
             }

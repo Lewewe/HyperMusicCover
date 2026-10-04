@@ -9037,7 +9037,7 @@ private class MiniPlayerController(
         val shown = traced("MC b.thumb") { thumbnailFor(musicCover(metadata), view) }
         view.setToggleShown(true)
         view.bind(
-            metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().ifBlank { "正在播放" },
+            metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().ifBlank { SystemUiLanguage.text("正在播放", "Now playing") },
             metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
                 .ifBlank { metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty() },
             shown,

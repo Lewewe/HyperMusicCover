@@ -72,7 +72,7 @@ android {
         }
     }
 
-    // The app is translated into Chinese (the default values/) and English, nothing else. The
+    // English is the default fallback; Simplified Chinese has an explicit locale. The
     // libraries bring strings for dozens more locales, and resources.arsc - which has to be stored
     // uncompressed - carries all of them.
     androidResources {

@@ -185,4 +185,23 @@
     <string name="shade_mode">When it applies</string>
     <string name="shade_mode_restore">System default</string>
     <string name="shade_mode_keep">Keep the album cover</string>
+
+    <string name="islands_page_title">Lock screen islands</string>
+    <string name="islands_enable">Enable lock screen islands</string>
+    <string name="islands_location_summary">Show islands between the shortcuts at the bottom of the lock screen</string>
+    <string name="islands_waiting_summary">Waiting for the System UI module to respond</string>
+    <string name="islands_adaptive_width">Use space from disabled shortcuts</string>
+    <string name="islands_adaptive_width_summary">Expand the islands into the space freed when the flashlight or camera shortcut is disabled in system settings</string>
+    <string name="demo_cover_title">Album art on the lock screen</string>
+    <string name="demo_cover_summary">Tap the pill to open the media player and album art. The clock shrinks to make room. Swipe down on the player to return to the pill.</string>
+    <string name="demo_lyrics_title">Lock screen lyrics</string>
+    <string name="demo_lyrics_summary">When lyrics are available, tap with two fingers to switch between lyrics and album art. Without lyrics, tap the large cover once to fold it into the media player.</string>
+    <string name="demo_aod_title">Keep the view on the always-on display</string>
+    <string name="demo_aod_summary">With full-screen always-on display enabled, the small clock and lyrics remain visible when the screen turns off. Lyrics continue when you wake the screen.</string>
+    <string name="demo_island_switch_title">Switch between islands</string>
+    <string name="demo_island_switch_summary">Swipe left or right to switch islands. Tap an island to expand its card, even during an animation. Swipe down on the card to collapse it.</string>
+    <string name="demo_island_scene_title">Full-screen views</string>
+    <string name="demo_island_scene_summary">Tap a navigation, timer, or music island to show its map, countdown, or album art on the lock screen. Tap another island to switch directly.</string>
+    <string name="demo_island_notifications_title">Grouped notifications</string>
+    <string name="demo_island_notifications_summary">Regular notifications share one island. Tap or swipe up to open the list; the islands expand into cards and the clock shrinks. Swipe down on the list to collapse them.</string>
 </resources>

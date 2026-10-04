@@ -236,7 +236,7 @@ final class CountdownScene implements ImmersiveScene {
     public void onPageTap() {
         mKeepOn = !mKeepOn;
         if (mView != null) mView.setKeepOn(mKeepOn);
-        Xp.log(TAG + "屏幕常亮 " + (mKeepOn ? "on" : "off"));
+        Xp.log(TAG + "Keep screen on " + (mKeepOn ? "on" : "off"));
         updateHold();
     }
 
@@ -370,8 +370,8 @@ final class CountdownScene implements ImmersiveScene {
 
         private Drawable mIconOn;
         private Drawable mIconOff;
-        private String mKeepOnText = "屏幕常亮";
-        private String mEndText = "计时结束";
+        private String mKeepOnText = SystemUiLanguage.text("屏幕常亮", "Keep screen on");
+        private String mEndText = SystemUiLanguage.text("计时结束", "Time is up");
         private Resources mClockRes;
 
         private LockIslands.Timer mTimer;
@@ -776,9 +776,9 @@ final class CountdownScene implements ImmersiveScene {
             int bits = (h > 0 ? 1 : 0) | (m > 0 ? 2 : 0) | (s > 0 ? 4 : 0);
             String text = "";
             if (bits != 0) {
-                String hs = h > 0 ? plural("hour", (int) h, "小时") : "";
-                String ms = m > 0 ? plural("minute", (int) m, "分钟") : "";
-                String ss = s > 0 ? plural("second", (int) s, "秒") : "";
+                String hs = h > 0 ? plural("hour", (int) h, "hour") : "";
+                String ms = m > 0 ? plural("minute", (int) m, "minute") : "";
+                String ss = s > 0 ? plural("second", (int) s, "second") : "";
                 String pattern = null;
                 try {
                     int id = mClockRes == null ? 0
@@ -786,11 +786,12 @@ final class CountdownScene implements ImmersiveScene {
                     if (id != 0) pattern = mClockRes.getStringArray(id)[bits - 1];
                 } catch (Throwable ignored) {
                 }
-                if (pattern == null) pattern = "共%1$s%2$s%3$s";
+                if (pattern == null) pattern = SystemUiLanguage.text("共%1$s%2$s%3$s", "Total: %1$s %2$s %3$s");
                 try {
                     text = String.format(pattern, hs, ms, ss);
                 } catch (Throwable e) {
-                    text = "共" + hs + ms + ss;
+                    text = SystemUiLanguage.isChinese() ? "共" + hs + ms + ss
+                            : "Total: " + hs + " " + ms + " " + ss;
                 }
             }
             mDurationText = text;
@@ -803,7 +804,12 @@ final class CountdownScene implements ImmersiveScene {
                 if (id != 0) return mClockRes.getQuantityString(id, n, n);
             } catch (Throwable ignored) {
             }
-            return n + unit;
+            if (SystemUiLanguage.isChinese()) {
+                String chineseUnit = "hour".equals(unit) ? "小时"
+                        : "minute".equals(unit) ? "分钟" : "秒";
+                return n + chineseUnit;
+            }
+            return n + " " + unit + (n == 1 ? "" : "s");
         }
     }
 
