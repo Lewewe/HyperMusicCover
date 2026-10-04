@@ -341,6 +341,8 @@ final class LockLyrics {
         if (!sEnabled || hasLyrics()) return;
         if (compact) sArtworkPage.preferCompact();
         else sArtworkPage.preferCover();
+        // Retarget the thumbnail immediately instead of waiting for an unrelated redraw.
+        Main.refreshMediaCardForMorph();
         refresh();
     }
 

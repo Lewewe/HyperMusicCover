@@ -17,6 +17,11 @@ final class CoverMorphMotion {
 
     void aim(boolean cover) { target = cover ? 1f : 0f; }
 
+    /** Artwork-only toggles should not inherit a slow whole-scene clock animation. */
+    static float responseFor(boolean compactToggle, float sceneResponse) {
+        return compactToggle ? 0.38f : sceneResponse;
+    }
+
     void step(float dt, float response) {
         if (dt <= 0f) return;
         double frequency = 2.0 * Math.PI / Math.max(0.18f, response);

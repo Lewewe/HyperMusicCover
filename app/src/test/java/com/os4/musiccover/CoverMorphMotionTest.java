@@ -5,6 +5,37 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class CoverMorphMotionTest {
+    @Test public void compactArtworkSettlesPromptlyEvenWithSlowSceneSettings() {
+        for (int fps : new int[]{60, 120}) {
+            CoverMorphMotion motion = new CoverMorphMotion();
+            motion.value = 1f;
+            motion.aim(false);
+            for (int frame = 0; frame < fps * 3 / 4; frame++) {
+                motion.step(1f / fps, CoverMorphMotion.responseFor(true, 0.60f));
+            }
+            assertTrue("Artwork should settle within three quarters of a second", motion.atRest());
+            assertEquals(0f, motion.value, 0f);
+        }
+    }
+
+    @Test public void compactArtworkStillTravelsAfterTheFirstTenthOfASecond() {
+        for (boolean expanding : new boolean[]{false, true}) {
+            CoverMorphMotion motion = new CoverMorphMotion();
+            motion.value = expanding ? 0f : 1f;
+            motion.aim(expanding);
+            for (int frame = 0; frame < 12; frame++) {
+                motion.step(1f / 120f, CoverMorphMotion.responseFor(true, 0.18f));
+            }
+            assertFalse(motion.atRest());
+            assertTrue(Math.abs(motion.value - motion.target) > 0.25f);
+        }
+    }
+
+    @Test public void wholeSceneMorphsKeepTheirConfiguredResponse() {
+        assertEquals(0.60f, CoverMorphMotion.responseFor(false, 0.60f), 0f);
+        assertEquals(0.38f, CoverMorphMotion.responseFor(true, 0.18f), 0f);
+    }
+
     @Test public void curvedPathKeepsBothEndpointsAndReversesOnItself() {
         CoverMorphMotion.Box thumb = new CoverMorphMotion.Box(70f, 1460f, 158f, 158f);
         CoverMorphMotion.Box cover = new CoverMorphMotion.Box(58f, 485f, 826f, 826f);

@@ -28,6 +28,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     private boolean cardMode;
     private CoverMorphMotion.Box thumb, cover;
     private long lastFrame, startedAt;
+    private boolean compactToggle;
     private boolean awaitArtworkPush;
     private float fullAlpha;
     private boolean running;
@@ -68,6 +69,14 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
 
     /** Called before the state switch so the source is still at its visible location. */
     static boolean begin(boolean toCover) {
+        return begin(toCover, false);
+    }
+
+    static boolean beginCompact(boolean toCover) {
+        return begin(toCover, true);
+    }
+
+    private static boolean begin(boolean toCover, boolean compactToggle) {
         if (Looper.myLooper() != Looper.getMainLooper() || !Main.coverMorphEligible()) return false;
         // The square card only. The full-screen cover keeps its own transition - the clock
         // squeeze and the wallpaper crossfade - untouched.
@@ -78,6 +87,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         CoverMorphLayer old = sView;
         if (old != null && old.running) {
             if (!old.mini && old.cardMode == Main.coverMorphCardMode()) {
+                old.compactToggle = compactToggle;
                 old.motion.aim(toCover);
                 old.revealAt = 0L;
                 old.startedAt = SystemClock.uptimeMillis();
@@ -93,7 +103,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         if (root == null || art == null || art.isRecycled() || thumb == null || cover == null) {
             return false;
         }
-        run(root, art, thumb, cover, toCover, false);
+        run(root, art, thumb, cover, toCover, false, compactToggle);
         return true;
     }
 
@@ -125,12 +135,12 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         if (root == null || art == null || art.isRecycled() || slot == null || cover == null) {
             return false;
         }
-        run(root, art, slot, cover, toCover, true);
+        run(root, art, slot, cover, toCover, true, false);
         return true;
     }
 
     private static void run(ViewGroup root, Bitmap art, CoverMorphMotion.Box thumb,
-                            CoverMorphMotion.Box cover, boolean toCover, boolean mini) {
+                            CoverMorphMotion.Box cover, boolean toCover, boolean mini, boolean compactToggle) {
         CoverMorphLayer v = sView;
         if (v == null || v.getParent() != root) {
             if (v != null && v.getParent() instanceof ViewGroup) {
@@ -145,6 +155,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         if (root.getChildAt(root.getChildCount() - 1) != v) v.bringToFront();
         v.reset(art, Main.coverMorphCardMode(), thumb, cover, toCover);
         v.mini = mini;
+        v.compactToggle = compactToggle;
         if (mini) MiniPlayerRuntime.setArtBridged(true);
         v.setVisibility(VISIBLE);
         v.running = true;
@@ -156,6 +167,11 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     }
 
     static boolean active() { return sView != null && sView.running; }
+
+    static float response() {
+        return CoverMorphMotion.responseFor(active() && sView.compactToggle,
+                Main.sClockResponse);
+    }
 
     /** How quickly an end catches up with where its live box has moved to, in seconds. */
     private static final double ENDPOINT_TAU = 0.06;
@@ -221,7 +237,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         float dt = lastFrame == 0L ? 1f / 120f
                 : Math.min(0.05f, Math.max(0f, (nowNs - lastFrame) / 1e9f));
         lastFrame = nowNs;
-        motion.step(dt, Main.sClockResponse);
+        motion.step(dt, response());
         CoverMorphMotion.Box liveThumb = mini
                 ? MiniPlayerRuntime.artworkRestBox() : Main.coverMorphThumbnail();
         // Both ends chase their live boxes rather than taking them: the target is placed between

@@ -7562,7 +7562,7 @@ public class Main extends XposedModule {
             sLyricArtAt = now;
             if (dt > 0f) {
                 final float zeta = EASE_COVER[0];
-                final float w0 = (float) (2 * Math.PI / sClockResponse);
+                final float w0 = (float) (2 * Math.PI / CoverMorphLayer.response());
                 final float k = w0 * w0, damp = 2f * zeta * w0;
                 // Sub-stepped: a spring integrated at 60Hz with a response this short is not
                 // stable, and the clock's own loop substeps for the same reason.
@@ -7963,7 +7963,7 @@ public class Main extends XposedModule {
                 // during the gesture (the OEM can re-lay the card out at any point) would
                 // otherwise send the tap the wrong way.
                 if (sCoverMode && LockLyrics.compactWithoutLyrics()) {
-                    beginMorph(true);
+                    beginCompactArtworkMorph(true);
                     LockLyrics.setArtworkCompact(false);
                 } else if (sCoverMode) exitFromTap("artwork tapped");
                 else if (MiniPlayerRuntime.wantsNativeArtworkGesture()) miniPlayerEnterCover();
@@ -8535,6 +8535,11 @@ public class Main extends XposedModule {
 
     /** The card's track when the running morph began; a different one is what cancels it. */
     private static String sMorphKey = "";
+
+    private static void beginCompactArtworkMorph(boolean toCover) {
+        if (!CoverMorphLayer.active()) sMorphKey = sCardKey;
+        CoverMorphLayer.beginCompact(toCover);
+    }
 
     private static void beginMorph(boolean toCover) {
         long t0 = System.nanoTime();
@@ -9811,7 +9816,7 @@ public class Main extends XposedModule {
             int to = LockLyrics.willAttachAfterTapToggle()
                     ? CoverMorphRoute.LYRICS : CoverMorphRoute.COVER;
             if (CoverMorphRoute.shouldMorph(from, to)) {
-                beginMorph(to == CoverMorphRoute.COVER);
+                beginCompactArtworkMorph(to == CoverMorphRoute.COVER);
             }
         }
         LockLyrics.toggleByTap(sTrackKey, sWatched);
@@ -9923,7 +9928,7 @@ public class Main extends XposedModule {
             if (LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
                 // Keep the media player and clock in place; this is not a scene exit to pill.
                 if (!LockLyrics.compactWithoutLyrics()) {
-                    beginMorph(false);
+                    beginCompactArtworkMorph(false);
                     LockLyrics.setArtworkCompact(true);
                 }
             } else {
