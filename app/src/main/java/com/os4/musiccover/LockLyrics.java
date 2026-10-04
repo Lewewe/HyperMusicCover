@@ -1177,6 +1177,7 @@ final class LockLyrics {
 
     /** Anything that may change whether the view should be showing. */
     static void refresh() {
+        ClockCollapse.refreshArtworkSize();
         updateBlur();
         updateHdr();
         if (wantsAttached()) attach();

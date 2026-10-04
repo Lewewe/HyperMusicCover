@@ -598,6 +598,44 @@ final class ClockCollapse {
         releaseNow(why);
     }
 
+    private static float sCompactSize;
+    private static boolean sCompactSizeTarget;
+    private static float sCompactTop = Float.NaN;
+    private static float sCompactDate = Float.NaN;
+    private static android.animation.ValueAnimator sCompactSizeAnimator;
+
+    /** Resize the clock independently so the media card stays in its current scene. */
+    static void refreshArtworkSize() {
+        boolean compact = LockLyrics.compactWithoutLyricsOnEntry()
+                && !ImmersiveHost.holdsClock();
+        if (!active()) {
+            if (sCompactSizeAnimator != null) sCompactSizeAnimator.cancel();
+            sCompactSizeAnimator = null;
+            sCompactSizeTarget = compact;
+            sCompactSize = compact ? 1f : 0f;
+            sCompactTop = sCompactDate = Float.NaN;
+            return;
+        }
+        if (compact == sCompactSizeTarget) return;
+        sCompactSizeTarget = compact;
+        if (sCompactSizeAnimator != null) sCompactSizeAnimator.cancel();
+        if (compact && Float.isNaN(sCompactTop) && sPhase == Phase.ON) {
+            sCompactTop = sPoseTop;
+            sCompactDate = sPoseDate;
+        }
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(
+                sCompactSize, compact ? 1f : 0f);
+        sCompactSizeAnimator = animator;
+        animator.setDuration(420L);
+        animator.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        animator.addUpdateListener(a -> {
+            sCompactSize = (float) a.getAnimatedValue();
+            if (sCompactSize == 0f) sCompactTop = sCompactDate = Float.NaN;
+            refresh();
+        });
+        animator.start();
+    }
+
     /** A setting that changes the destination moved; the next frame picks it up. */
     static void refresh() {
         if (!active()) return;
@@ -869,9 +907,12 @@ final class ClockCollapse {
      * adaptTimeHeight. NaN when no size is set - the dp default is small enough that the floor
      * is always right for it.
      */
-    private static float wantedOemHeight(float max) {
-        float s = Main.sClockSize;
-        return Float.isNaN(s) || !(max > 0f) ? Float.NaN : s * max;
+    private static float wantedOemHeight(float min, float max) {
+        float size = Main.sClockSize;
+        if (!(max > 0f)) return Float.NaN;
+        if (Float.isNaN(size) && sCompactSize == 0f) return Float.NaN;
+        float base = Float.isNaN(size) ? min : Math.max(min, size * max);
+        return base + (max - base) * sCompactSize;
     }
 
     /**
@@ -893,7 +934,7 @@ final class ClockCollapse {
             if (it == null) return floor;
             float min = num(Xp.getObjectField(it, "timeMinHeight"));
             float max = num(Xp.getObjectField(it, "adaptTimeHeight"));
-            float want = wantedOemHeight(max);
+            float want = wantedOemHeight(min, max);
             if (Float.isNaN(want) || !(want > min + 0.5f)) return floor;
             float y = floor + (Math.min(want, max) - min);
             if (!Float.isNaN(natural) && y > natural) y = natural;
@@ -1062,7 +1103,7 @@ final class ClockCollapse {
             float min = num(Xp.getObjectField(it, "timeMinHeight"));
             float max = num(Xp.getObjectField(it, "adaptTimeHeight"));
             float next = Float.NaN;
-            float want = wantedOemHeight(max);
+            float want = wantedOemHeight(min, max);
             if (h > min + 0.5f && h < max - 0.5f) {
                 next = y - h + min;
                 sExactFloor = next;
@@ -1758,6 +1799,7 @@ final class ClockCollapse {
     }
 
     private static void frame() {
+        refreshArtworkSize();
         Phase phase = sPhase;
         if (phase == Phase.OFF) return;
         Live m = LIVE;
@@ -1865,6 +1907,7 @@ final class ClockCollapse {
         float coverUnit = Float.isNaN(size) ? Main.sClockHeightDp * d : size * full;
         if (coverUnit > full) coverUnit = full;
         if (coverUnit < Main.MIN_CLOCK_K * full) coverUnit = Main.MIN_CLOCK_K * full;
+        coverUnit += (full - coverUnit) * sCompactSize;
         // The date and the clock move as one block.
         float offset = Main.sClockOffsetDp * d;
         float coverDate, coverTop;
@@ -1874,6 +1917,11 @@ final class ClockCollapse {
         } else {
             coverDate = m.dateTop + offset;
             coverTop = m.inkTop + offset;
+            // OEM glyph sizing can move its layout; keep our top anchor unchanged.
+            if (sCompactSize > 0f && !Float.isNaN(sCompactTop)) {
+                coverTop = sCompactTop;
+                if (!Float.isNaN(sCompactDate)) coverDate = sCompactDate;
+            }
         }
 
         // Notifications. The OEM squeezes its full clock out of their way - down to its minimum
