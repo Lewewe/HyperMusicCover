@@ -7477,7 +7477,7 @@ public class Main extends XposedModule {
         }
         float exc = stepLyricArt((sMcArtInLyrics || LockLyrics.compactWithoutLyrics())
                 && sLyricUp);
-        // Keep text placement in sync with the thumbnail visibility.
+        // Slide both text lines into the thumbnail's freed space as the artwork leaves.
         float hideP = sMcHideArt ? p * (1f - exc) : 0f;
         View art = sCardArt;
         if (art != null) {
@@ -7512,8 +7512,8 @@ public class Main extends XposedModule {
                 if (art.getAlpha() != a) art.setAlpha(a);
             }
         }
-        centreCardText(card, (TextView) sCardTitle, hideP);
-        centreCardText(card, (TextView) sCardArtist, hideP);
+        alignCardTextLeft(card, (TextView) sCardTitle, hideP);
+        alignCardTextLeft(card, (TextView) sCardArtist, hideP);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
     }
@@ -7684,35 +7684,37 @@ public class Main extends XposedModule {
         }
     }
 
-    /**
-     * Centres one line of the card's text on the card.
-     *
-     * translationX only - it moves the view without touching the constraints, so the OEM can
-     * re-run its own layout without fighting us and letting go is a single write back to zero.
-     *
-     * What is moved is the GLYPH RUN, not the view. The two obvious approaches both fail here:
-     * the text views are constrained to the space beside the artwork, so centring the view in
-     * the card leaves the text sitting at the left edge of a box that is wider than the words;
-     * and setGravity(CENTER_HORIZONTAL) had no effect on this card at all (reported from the
-     * device: text still hard left). Reading the drawn line straight off the Layout sidesteps
-     * both - it already accounts for whatever gravity, padding and ellipsis are in force, so
-     * the sum below is "where the ink starts now" against "where it should start".
-     */
-    private static void centreCardText(View card, TextView t, float p) {
-        if (t == null) return;
-        if (p <= 0f) {
-            if (t.getTranslationX() != 0f) t.setTranslationX(0f);
+    /** Move the drawn text into the hidden thumbnail's slot without rewriting OEM constraints. */
+    private static void alignCardTextLeft(View card, TextView text, float progress) {
+        if (text == null) return;
+        if (progress <= 0f) {
+            if (text.getTranslationX() != 0f) text.setTranslationX(0f);
             return;
         }
-        Layout lay = t.getLayout();
-        if (lay == null || lay.getLineCount() < 1 || card.getWidth() <= 0) return;
-        float ink = lay.getLineWidth(0);
-        if (ink <= 0f) return;
-        float have = t.getLeft() + t.getPaddingLeft() + lay.getLineLeft(0);
-        // Scaled by the progress, so the line slides between where the OEM put it and the
-        // centre instead of jumping between the two.
-        float dx = ((card.getWidth() - ink) / 2f - have) * p;
-        if (t.getTranslationX() != dx) t.setTranslationX(dx);
+        Layout layout = text.getLayout();
+        if (layout == null || layout.getLineCount() == 0) return;
+        float textLeft = leftWithinCard(card, text);
+        if (Float.isNaN(textLeft)) return;
+        float start = leftWithinCard(card, sCardArt);
+        if (Float.isNaN(start)) {
+            start = card.getPaddingLeft() + 24f * card.getResources().getDisplayMetrics().density;
+        }
+        start = Math.max(card.getPaddingLeft(), start);
+        float inkLeft = textLeft + text.getPaddingLeft() + layout.getLineLeft(0);
+        float dx = (start - inkLeft) * progress;
+        if (text.getTranslationX() != dx) text.setTranslationX(dx);
+    }
+
+    /** Untranslated layout coordinates also work when the OEM nests the text or artwork. */
+    private static float leftWithinCard(View card, View view) {
+        float left = 0f;
+        while (view != null && view != card) {
+            left += view.getLeft();
+            android.view.ViewParent parent = view.getParent();
+            if (!(parent instanceof View)) return Float.NaN;
+            view = (View) parent;
+        }
+        return view == card ? left : Float.NaN;
     }
 
     /**
