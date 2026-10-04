@@ -5191,15 +5191,12 @@ public class Main extends XposedModule {
      */
     static Bitmap albumArt(Context ctx, boolean allowCard, int[] sessionBits) {
         if (sessionBits != null) sessionBits[0] = -1;
-        MediaController c = pickController(ctx);
+        MediaController c = controllerFromCard(ctx);
+        if (c == null) c = pickController(ctx);
         if (c != null) {
             MediaMetadata md = c.getMetadata();
             if (md != null) {
-                Bitmap b = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
-                if (b == null) b = md.getBitmap(MediaMetadata.METADATA_KEY_ART);
-                if (b == null && md.getDescription() != null) {
-                    b = md.getDescription().getIconBitmap();
-                }
+                Bitmap b = bestSessionArt(md);
                 if (b != null) {
                     if (sessionBits != null) sessionBits[0] = 1;
                     Xp.log(TAG + "album art from " + c.getPackageName()
@@ -5214,6 +5211,47 @@ public class Main extends XposedModule {
         }
         if (!allowCard) return null;
         return cardThumbnail();
+    }
+
+    private static Bitmap bestSessionArt(MediaMetadata md) {
+        Bitmap best = null;
+
+        String[] fields = {
+                MediaMetadata.METADATA_KEY_ALBUM_ART,
+                MediaMetadata.METADATA_KEY_ART,
+                MediaMetadata.METADATA_KEY_DISPLAY_ICON
+        };
+
+        for (String field : fields) {
+            Bitmap candidate = md.getBitmap(field);
+            if (candidate == null || candidate.isRecycled()) continue;
+
+            if (best == null || CoverPush.isArtworkUpgrade(
+                    best.getWidth(), best.getHeight(),
+                    candidate.getWidth(), candidate.getHeight())) {
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    static Bitmap sessionArtForTrack(Context ctx, String key) {
+        MediaController controller = controllerFromCard(ctx);
+        if (controller == null) controller = pickController(ctx);
+        if (controller == null) return null;
+
+        MediaMetadata md = controller.getMetadata();
+        if (md == null) return null;
+
+        String actualKey = controller.getPackageName()
+                + "|" + md.getString(MediaMetadata.METADATA_KEY_TITLE)
+                + "|" + md.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                + "|" + md.getString(MediaMetadata.METADATA_KEY_ALBUM);
+
+        if (!sameTrack(key, actualKey)) return null;
+
+        return bestSessionArt(md);
     }
 
     /**
@@ -9348,6 +9386,7 @@ public class Main extends XposedModule {
             // against - each payload once, three per track. Cheap enough to reach from a path
             // that a title-in-the-metadata player runs on every sung line.
             LockLyrics.onTrack(key, sWatched);
+            CoverPush.refreshArtworkQuality();
             return;
         }
         sTrackKey = key;
@@ -9379,6 +9418,7 @@ public class Main extends XposedModule {
         // the right one. Pushing again would compose the same picture and fade it over itself.
         if (sCoverMode && Prefetch.wasPredicted(titleOf(sWatched))) {
             Xp.log(TAG + "cover already up from the press, no second push");
+            CoverPush.confirmPrefetchedArtwork(key);
             return;
         }
         if (sCoverMode) CoverPush.pushArtAsync(true, true);

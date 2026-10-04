@@ -70,7 +70,79 @@ final class CoverPush {
         pushArtToWallpaper(ctx, on, on ? Main.albumArt(ctx) : null);
     }
 
+    // Worker-owned original for the temporary thumbnail treatment. Never retain or recycle
+    // the player's bitmap: the fallback below owns a separate software copy.
+    private static Bitmap sUnsoftenedArt;
+    private static int sSoftArtGen = -1;
+    private static final Runnable sSoftArtFallback = new Runnable() {
+        @Override public void run() {
+            finishArtworkQualityWatch(Main.sAppCtx, sSoftArtGen, Main.sTrackKey);
+        }
+    };
+
+    static boolean shouldSoftenArtwork(int width, int height) {
+        return width > 0 && height > 0 && Math.min(width, height) < 512;
+    }
+
+    private static void clearSoftArtwork() {
+        Main.worker().removeCallbacks(sSoftArtFallback);
+        if (sUnsoftenedArt != null && !sUnsoftenedArt.isRecycled()) {
+            sUnsoftenedArt.recycle();
+        }
+        sUnsoftenedArt = null;
+        sSoftArtGen = -1;
+    }
+
     private static void pushArtToWallpaper(Context ctx, boolean on, Bitmap art) {
+        clearSoftArtwork();
+        if (!on || art == null || !shouldSoftenArtwork(art.getWidth(), art.getHeight())) {
+            pushRenderedArtToWallpaper(ctx, on, art);
+            return;
+        }
+        final int gen = Main.sPushGen;
+        Bitmap original = null;
+        Bitmap soft = null;
+        try {
+            original = art.copy(Bitmap.Config.ARGB_8888, false);
+            // A single small-radius pass softens thumbnail edges while retaining detail.
+            int smallWidth = Math.max(1, Math.min(128, original.getWidth() / 2));
+            soft = CoverCompose.blur(original, smallWidth, 1, 1);
+        } catch (Throwable t) {
+            if (original != null && !original.isRecycled()) original.recycle();
+            Xp.log(Main.TAG + "thumbnail softening failed: " + t);
+            pushRenderedArtToWallpaper(ctx, on, art);
+            return;
+        }
+        try {
+            pushRenderedArtToWallpaper(ctx, true, soft);
+            sUnsoftenedArt = original;
+            sSoftArtGen = gen;
+            original = null;
+            // Also bound late callback upgrades and manual pushes that have no polling loop.
+            Main.worker().postDelayed(sSoftArtFallback, 5000L);
+        } finally {
+            if (soft != sUnsoftenedArt && !soft.isRecycled()) soft.recycle();
+            if (original != null && !original.isRecycled()) original.recycle();
+        }
+    }
+
+    private static void finishArtworkQualityWatch(Context ctx, int gen, String key) {
+        if (ctx == null || gen != Main.sPushGen || !Main.sCoverMode
+                || !Main.sameTrack(key, Main.sTrackKey)
+                || sSoftArtGen != gen || sUnsoftenedArt == null) return;
+        Main.worker().removeCallbacks(sSoftArtFallback);
+        Bitmap original = sUnsoftenedArt;
+        sUnsoftenedArt = null;
+        sSoftArtGen = -1;
+        try {
+            // Some players never publish a larger bitmap. Do not leave them softened forever.
+            pushRenderedArtToWallpaper(ctx, true, original);
+        } finally {
+            if (!original.isRecycled()) original.recycle();
+        }
+    }
+
+    private static void pushRenderedArtToWallpaper(Context ctx, boolean on, Bitmap art) {
         long t0 = android.os.SystemClock.uptimeMillis();
         Intent out = wallpaperIntent("art");
         out.putExtra("cardmode", Main.sCoverCardStyle.mode == CoverCardStyle.CARD);
@@ -1194,6 +1266,38 @@ final class CoverPush {
             public void run() {
                 if (gen != Main.sPushGen) return;
                 pushArtToWallpaper(ctx, true, art);
+                // The session still names the previous track here. Record the image now,
+                // but bind its track key only after the player confirms the prediction.
+                sArtPrint = artPrint(art);
+                sArtW = art.getWidth();
+                sArtH = art.getHeight();
+                sArtLong = Math.max(sArtW, sArtH);
+                sArtKey = "";
+                sPrefetchedArtGen = gen;
+            }
+        });
+    }
+
+    /** Worker-owned generation of the last artwork actually sent by noteSkip(). */
+    private static int sPrefetchedArtGen = -1;
+
+    static void confirmPrefetchedArtwork(final String key) {
+        final Context ctx = Main.sAppCtx;
+        if (ctx == null) return;
+        final int gen = Main.sPushGen;
+        Main.worker().post(new Runnable() {
+            @Override
+            public void run() {
+                if (gen != Main.sPushGen || !Main.sCoverMode
+                        || !Main.sameTrack(key, Main.sTrackKey)) return;
+                if (sPrefetchedArtGen != gen) {
+                    // A prediction may be confirmed before its worker push was queued,
+                    // or after another push replaced it. Resolve through the normal path.
+                    pushArtAsync(true, true);
+                    return;
+                }
+                sArtKey = key;
+                startArtworkQualityWatch(ctx, gen, key);
             }
         });
     }
@@ -1261,6 +1365,106 @@ final class CoverPush {
         java.io.File f = new java.io.File(SHARE_DIR, SHARE_SOURCE);
         CoverCompose.writeSource(f, src, w, h, bias);
         return f.getAbsolutePath();
+    }
+
+    static boolean isArtworkUpgrade(
+            int oldWidth, int oldHeight, int width, int height) {
+        return oldWidth > 0
+                && oldHeight > 0
+                && width >= oldWidth
+                && height >= oldHeight
+                && (width > oldWidth || height > oldHeight);
+    }
+
+    private static final Runnable sQualityRefresh = new Runnable() {
+        @Override
+        public void run() {
+            upgradeArtwork(
+                    Main.sAppCtx,
+                    Main.sPushGen,
+                    Main.sTrackKey
+            );
+        }
+    };
+
+    static void refreshArtworkQuality() {
+        Main.worker().removeCallbacks(sQualityRefresh);
+        Main.worker().post(sQualityRefresh);
+    }
+
+    private static void upgradeArtwork(Context ctx, int gen, String key) {
+        if (ctx == null
+                || gen != Main.sPushGen
+                || !Main.sCoverMode
+                || !Main.sameTrack(key, Main.sTrackKey)
+                || !Main.sameTrack(key, sArtKey)) {
+            return;
+        }
+
+        try {
+            Bitmap art = Main.sessionArtForTrack(ctx, key);
+            if (art == null) return;
+
+            if (!isArtworkUpgrade(
+                    sArtW, sArtH,
+                    art.getWidth(), art.getHeight())) {
+                return;
+            }
+
+            if (gen != Main.sPushGen
+                    || !Main.sameTrack(key, Main.sTrackKey)) {
+                return;
+            }
+
+            Xp.log(Main.TAG + "upgrading artwork "
+                    + sArtW + "x" + sArtH
+                    + " -> " + art.getWidth() + "x" + art.getHeight());
+
+            sArtPrint = artPrint(art);
+            sArtW = art.getWidth();
+            sArtH = art.getHeight();
+            sArtLong = Math.max(sArtW, sArtH);
+
+            pushArtToWallpaper(ctx, true, art);
+        } catch (Throwable t) {
+            Xp.log(Main.TAG + "artwork quality refresh failed: " + t);
+        }
+    }
+
+    // Metadata callbacks still check immediately; polling is only a bounded safety net.
+    static final int QUALITY_CHECKS = 10;
+
+    static long artworkQualityDelayMs(int remaining) {
+        return 500L;
+    }
+
+    private static void startArtworkQualityWatch(Context ctx, int gen, String key) {
+        watchArtworkQuality(ctx, gen, key, QUALITY_CHECKS);
+    }
+
+    private static void watchArtworkQuality(
+            final Context ctx,
+            final int gen,
+            final String key,
+            final int remaining) {
+        Main.worker().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (gen != Main.sPushGen
+                        || !Main.sCoverMode
+                        || !Main.sameTrack(key, Main.sTrackKey)) {
+                    return;
+                }
+
+                upgradeArtwork(ctx, gen, key);
+
+                if (remaining > 1) {
+                    watchArtworkQuality(ctx, gen, key, remaining - 1);
+                } else {
+                    finishArtworkQualityWatch(ctx, gen, key);
+                }
+            }
+        }, artworkQualityDelayMs(remaining));
     }
 
     static void pushArtAsync(final boolean on, final boolean fresh) {
@@ -1355,7 +1559,13 @@ final class CoverPush {
                 } finally {
                     android.os.Trace.endSection();
                 }
-                boolean stale = fresh && art != null && sArtPrint != 0 && print == sArtPrint;
+                boolean stale = fresh
+                        && art != null
+                        && sArtPrint != 0
+                        && print == sArtPrint
+                        && !isArtworkUpgrade(
+                        sArtW, sArtH,
+                        art.getWidth(), art.getHeight());
                 // The same track, and the copy being offered is smaller than the one already on
                 // the wallpaper. Only on a fresh push: a non-fresh one is an explicit "hand it
                 // over again" - after the wallpaper process restarted it may have nothing at all
@@ -1384,6 +1594,8 @@ final class CoverPush {
                 if (stale) {
                     // The next track off the same album really does have the same cover.
                     Xp.log(Main.TAG + "same artwork as the last track, wallpaper left alone");
+                    sArtKey = Main.sTrackKey;
+                    startArtworkQualityWatch(ctx, gen, sArtKey);
                     return;
                 }
                 if (worse) {
@@ -1408,6 +1620,10 @@ final class CoverPush {
                 Main.sCtTries = attempt + 1;
                 Main.sCtArt = android.os.SystemClock.uptimeMillis();
                 pushArtToWallpaper(ctx, true, art);
+
+                if (art != null) {
+                    startArtworkQualityWatch(ctx, gen, sArtKey);
+                }
             }
         }, attempt == 0 ? 0L : ART_RETRY_MS);
     }
