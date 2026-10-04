@@ -7910,7 +7910,7 @@ public class Main extends XposedModule {
      * shade, where the OEM's own click is the right one.
      */
     private static boolean wantsArtTap() {
-        return singleCoverTapEnabled() && sCardShowing;
+        return (singleCoverTapEnabled() || LockLyrics.wantsAttached()) && sCardShowing;
     }
 
     private static boolean singleCoverTapEnabled() {
@@ -7967,6 +7967,9 @@ public class Main extends XposedModule {
                 if (sCoverMode && LockLyrics.compactWithoutLyrics()) {
                     beginCompactArtworkMorph(true);
                     LockLyrics.setArtworkCompact(false);
+                } else if (sCoverMode && LockLyrics.wantsAttached()) {
+                    beginCompactArtworkMorph(true);
+                    LockLyrics.toggleByTap(sTrackKey, sWatched);
                 } else if (sCoverMode) exitFromTap("artwork tapped");
                 else if (MiniPlayerRuntime.wantsNativeArtworkGesture()) miniPlayerEnterCover();
                 else enterFromTap("artwork tapped");
