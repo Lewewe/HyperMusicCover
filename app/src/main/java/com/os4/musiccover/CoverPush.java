@@ -1276,6 +1276,7 @@ final class CoverPush {
                 // The session still names the previous track here. Record the image now,
                 // but bind its track key only after the player confirms the prediction.
                 sArtPrint = artPrint(art);
+                sArtPixels = artworkPixels(art);
                 sArtW = art.getWidth();
                 sArtH = art.getHeight();
                 sArtLong = Math.max(sArtW, sArtH);
@@ -1311,6 +1312,7 @@ final class CoverPush {
 
     /** What the wallpaper currently shows, coarsely, so a stale source can be recognised. */
     private static volatile int sArtPrint;
+    private static volatile int[] sArtPixels;
     /** The last composed cover's inputs and the clock tint measured off it. Worker thread only. */
     private static String sTintKey = "";
     private static int sTintValue;
@@ -1394,9 +1396,27 @@ final class CoverPush {
         }
     };
 
+    private static int sMetadataArtChecks;
+    private static final Runnable sMetadataArtWatch = new Runnable() {
+        @Override public void run() {
+            if (!Main.sCoverMode || !ArtworkChangePolicy.isYouTube(Main.sTrackKey)) return;
+            upgradeArtwork(Main.sAppCtx, Main.sPushGen, Main.sTrackKey);
+            if (--sMetadataArtChecks > 0) Main.worker().postDelayed(this, 500L);
+        }
+    };
+
     static void refreshArtworkQuality() {
         Main.worker().removeCallbacks(sQualityRefresh);
         Main.worker().post(sQualityRefresh);
+    }
+
+    static void watchMetadataArtwork() {
+        Main.worker().post(() -> {
+            Main.worker().removeCallbacks(sMetadataArtWatch);
+            if (!ArtworkChangePolicy.isYouTube(Main.sTrackKey)) return;
+            sMetadataArtChecks = QUALITY_CHECKS;
+            Main.worker().postDelayed(sMetadataArtWatch, 500L);
+        });
     }
 
     private static void upgradeArtwork(Context ctx, int gen, String key) {
@@ -1412,7 +1432,10 @@ final class CoverPush {
             Bitmap art = Main.sessionArtForTrack(ctx, key);
             if (art == null) return;
 
-            if (!isArtworkUpgrade(
+            int[] pixels = ArtworkChangePolicy.isYouTube(key) ? artworkPixels(art) : null;
+            boolean replacement = ArtworkChangePolicy.changed(key, sArtW, sArtH, sArtPixels,
+                    art.getWidth(), art.getHeight(), pixels);
+            if (!replacement && !isArtworkUpgrade(
                     sArtW, sArtH,
                     art.getWidth(), art.getHeight())) {
                 return;
@@ -1423,11 +1446,12 @@ final class CoverPush {
                 return;
             }
 
-            Xp.log(Main.TAG + "upgrading artwork "
+            Xp.log(Main.TAG + (replacement ? "replacing playback artwork " : "upgrading artwork ")
                     + sArtW + "x" + sArtH
                     + " -> " + art.getWidth() + "x" + art.getHeight());
 
             sArtPrint = artPrint(art);
+            sArtPixels = pixels != null ? pixels : artworkPixels(art);
             sArtW = art.getWidth();
             sArtH = art.getHeight();
             sArtLong = Math.max(sArtW, sArtH);
@@ -1480,6 +1504,7 @@ final class CoverPush {
         final int gen = ++Main.sPushGen;
         if (!on) {
             sArtPrint = 0;
+            sArtPixels = null;
             sArtW = 0;
             sArtH = 0;
             sArtLong = 0;
@@ -1566,7 +1591,12 @@ final class CoverPush {
                 } finally {
                     android.os.Trace.endSection();
                 }
-                boolean stale = fresh
+                boolean presentationChanged = art != null
+                        && ArtworkChangePolicy.isYouTube(Main.sTrackKey)
+                        && Main.sameTrack(sArtKey, Main.sTrackKey)
+                        && ArtworkChangePolicy.changed(Main.sTrackKey, sArtW, sArtH, sArtPixels,
+                            art.getWidth(), art.getHeight(), artworkPixels(art));
+                boolean stale = fresh && !presentationChanged
                         && art != null
                         && sArtPrint != 0
                         && print == sArtPrint
@@ -1581,7 +1611,7 @@ final class CoverPush {
                 // loosely as that: the keys one track arrives under disagree about everything but
                 // the package and the title.
                 boolean worse = fresh && art != null && sArtPrint != 0 && !stale
-                        && sArtLong > 0 && Main.sameTrack(sArtKey, Main.sTrackKey)
+                        && !presentationChanged && sArtLong > 0 && Main.sameTrack(sArtKey, Main.sTrackKey)
                         && Math.max(art.getWidth(), art.getHeight()) < sArtLong;
                 if ((art == null || stale || worse) && !last) {
                     // 0 is "a session was there and carried no bitmap", which more tries will not
@@ -1619,6 +1649,7 @@ final class CoverPush {
                 // was empty and disarm the stale-art check on the next track change.
                 if (art != null) {
                     sArtPrint = print;
+                    sArtPixels = artworkPixels(art);
                     sArtW = art.getWidth();
                     sArtH = art.getHeight();
                     sArtLong = Math.max(sArtW, sArtH);
@@ -2304,6 +2335,24 @@ final class CoverPush {
             Xp.log(Main.TAG + "lock wallpaper cleared, back to following the home one");
         } catch (Throwable t) {
             Xp.log(Main.TAG + "clearLockWallpaper failed: " + t);
+        }
+    }
+
+    /** A normalized sample makes content comparison independent of source resolution. */
+    private static int[] artworkPixels(Bitmap source) {
+        Bitmap readable = null, sample = null;
+        try {
+            readable = source.getConfig() == Bitmap.Config.HARDWARE
+                    ? source.copy(Bitmap.Config.ARGB_8888, false) : source;
+            sample = Bitmap.createScaledBitmap(readable, 8, 8, true);
+            int[] pixels = new int[64];
+            sample.getPixels(pixels, 0, 8, 0, 0, 8, 8);
+            return pixels;
+        } catch (Throwable ignored) {
+            return null;
+        } finally {
+            if (sample != null && sample != readable) sample.recycle();
+            if (readable != null && readable != source) readable.recycle();
         }
     }
 

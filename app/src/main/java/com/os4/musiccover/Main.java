@@ -9238,6 +9238,7 @@ public class Main extends XposedModule {
                         if (w != null) updateCoverCardPlayback(w.getPlaybackState());
                         if (sCoverWanted) attachCover();
                         onMediaUpdate();
+                        CoverPush.watchMetadataArtwork();
                     }
 
                     @Override
