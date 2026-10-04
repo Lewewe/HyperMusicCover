@@ -598,39 +598,54 @@ final class ClockCollapse {
         releaseNow(why);
     }
 
-    private static float sCompactSize;
-    private static boolean sCompactSizeTarget;
+    private static float sNativeClockSize;
+    private static boolean sNativeClockSizeTarget;
+    private static float sArtworkClockScale = 1f;
+    private static float sArtworkClockScaleTarget = 1f;
     private static float sCompactTop = Float.NaN;
     private static float sCompactDate = Float.NaN;
-    private static android.animation.ValueAnimator sCompactSizeAnimator;
+    private static android.animation.ValueAnimator sNativeClockSizeAnimator;
 
     /** Resize the clock independently so the media card stays in its current scene. */
     static void refreshArtworkSize() {
         boolean compact = LockLyrics.compactWithoutLyricsOnEntry()
                 && !ImmersiveHost.holdsClock();
+        android.graphics.Bitmap art = CoverCardLayer.currentArt();
+        boolean coverVisible = Main.sCoverCardStyle.mode == CoverCardStyle.CARD
+                && !LockLyrics.wantsCompactArtwork() && !ImmersiveHost.holdsClock()
+                && art != null && !art.isRecycled();
+        float aspect = coverVisible ? CoverCardStyle.aspect(art.getWidth(), art.getHeight()) : 1f;
+        float artworkScale = CoverCardStyle.clockScale(aspect);
+        boolean nativeSize = compact || coverVisible && CoverCardStyle.usesNativeClock(aspect);
         if (!active()) {
-            if (sCompactSizeAnimator != null) sCompactSizeAnimator.cancel();
-            sCompactSizeAnimator = null;
-            sCompactSizeTarget = compact;
-            sCompactSize = compact ? 1f : 0f;
+            if (sNativeClockSizeAnimator != null) sNativeClockSizeAnimator.cancel();
+            sNativeClockSizeAnimator = null;
+            sNativeClockSizeTarget = nativeSize;
+            sArtworkClockScale = sArtworkClockScaleTarget = artworkScale;
+            sNativeClockSize = nativeSize ? 1f : 0f;
             sCompactTop = sCompactDate = Float.NaN;
             return;
         }
-        if (compact == sCompactSizeTarget) return;
-        sCompactSizeTarget = compact;
-        if (sCompactSizeAnimator != null) sCompactSizeAnimator.cancel();
-        if (compact && Float.isNaN(sCompactTop) && sPhase == Phase.ON) {
+        if (nativeSize == sNativeClockSizeTarget
+                && Math.abs(artworkScale - sArtworkClockScaleTarget) < 0.001f) return;
+        sNativeClockSizeTarget = nativeSize;
+        sArtworkClockScaleTarget = artworkScale;
+        if (sNativeClockSizeAnimator != null) sNativeClockSizeAnimator.cancel();
+        if (nativeSize && Float.isNaN(sCompactTop) && sPhase == Phase.ON) {
             sCompactTop = sPoseTop;
             sCompactDate = sPoseDate;
         }
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(
-                sCompactSize, compact ? 1f : 0f);
-        sCompactSizeAnimator = animator;
+        final float fromCompact = sNativeClockSize, toCompact = nativeSize ? 1f : 0f;
+        final float fromScale = sArtworkClockScale, toScale = artworkScale;
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        sNativeClockSizeAnimator = animator;
         animator.setDuration(420L);
         animator.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
         animator.addUpdateListener(a -> {
-            sCompactSize = (float) a.getAnimatedValue();
-            if (sCompactSize == 0f) sCompactTop = sCompactDate = Float.NaN;
+            float progress = (float) a.getAnimatedValue();
+            sNativeClockSize = fromCompact + (toCompact - fromCompact) * progress;
+            sArtworkClockScale = fromScale + (toScale - fromScale) * progress;
+            if (sNativeClockSize == 0f) sCompactTop = sCompactDate = Float.NaN;
             refresh();
         });
         animator.start();
@@ -910,9 +925,9 @@ final class ClockCollapse {
     private static float wantedOemHeight(float min, float max) {
         float size = Main.sClockSize;
         if (!(max > 0f)) return Float.NaN;
-        if (Float.isNaN(size) && sCompactSize == 0f) return Float.NaN;
-        float base = Float.isNaN(size) ? min : Math.max(min, size * max);
-        return base + (max - base) * sCompactSize;
+        if (Float.isNaN(size) && sNativeClockSize == 0f) return Float.NaN;
+        float base = Float.isNaN(size) ? min : Math.max(min, Math.min(max, size * sArtworkClockScale * max));
+        return base + (max - base) * sNativeClockSize;
     }
 
     /**
@@ -1904,10 +1919,11 @@ final class ClockCollapse {
         android.os.Trace.beginSection("MC c.full");
         try { full = fullUnitFor(phase, m); } finally { android.os.Trace.endSection(); }
         float size = Main.sClockSize;
-        float coverUnit = Float.isNaN(size) ? Main.sClockHeightDp * d : size * full;
+        float coverUnit = (Float.isNaN(size) ? Main.sClockHeightDp * d : size * full)
+                * sArtworkClockScale;
         if (coverUnit > full) coverUnit = full;
         if (coverUnit < Main.MIN_CLOCK_K * full) coverUnit = Main.MIN_CLOCK_K * full;
-        coverUnit += (full - coverUnit) * sCompactSize;
+        coverUnit += (full - coverUnit) * sNativeClockSize;
         // The date and the clock move as one block.
         float offset = Main.sClockOffsetDp * d;
         float coverDate, coverTop;
@@ -1918,7 +1934,7 @@ final class ClockCollapse {
             coverDate = m.dateTop + offset;
             coverTop = m.inkTop + offset;
             // OEM glyph sizing can move its layout; keep our top anchor unchanged.
-            if (sCompactSize > 0f && !Float.isNaN(sCompactTop)) {
+            if (sNativeClockSize > 0f && !Float.isNaN(sCompactTop)) {
                 coverTop = sCompactTop;
                 if (!Float.isNaN(sCompactDate)) coverDate = sCompactDate;
             }

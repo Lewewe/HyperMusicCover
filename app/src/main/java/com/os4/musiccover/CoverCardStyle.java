@@ -121,6 +121,16 @@ final class CoverCardStyle {
         return Math.max(1f / MAX_ASPECT, Math.min(MAX_ASPECT, w / h));
     }
 
+    /** Landscape covers use the original clock size; portrait covers retain a smaller clock. */
+    static boolean usesNativeClock(float aspect) {
+        return Float.isFinite(aspect) && aspect > 1f;
+    }
+
+    static float clockScale(float aspect) {
+        if (!Float.isFinite(aspect) || aspect <= 0f) return 1f;
+        return Math.max(0.75f, Math.min(1f, (float) Math.sqrt(aspect)));
+    }
+
     static float finite(float v, float lo, float hi, float fallback) {
         return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback;
     }
@@ -128,6 +138,15 @@ final class CoverCardStyle {
     /** The square reserves its full playing size even while the paused artwork scales inward. */
     Rect place(float width, float height, float density, float clockBottom,
                float mediaTop) {
+        return place(width, height, density, clockBottom, mediaTop, 1f);
+    }
+
+    /** Reserve the artwork's actual height while retaining the square-based morph coordinates. */
+    Rect place(float width, float height, float density, float clockBottom,
+               float mediaTop, float artworkAspect) {
+        float aspect = finite(artworkAspect, 1f / MAX_ASPECT, MAX_ASPECT, 1f);
+        float widthRatio = Math.min(1f, aspect);
+        float heightRatio = Math.min(1f, 1f / aspect);
         if (!(width > 0f && height > 0f && density > 0f)
                 || !Float.isFinite(width) || !Float.isFinite(height)
                 || !Float.isFinite(density)) return null;
@@ -139,12 +158,14 @@ final class CoverCardStyle {
         if (!Float.isFinite(mediaTop) || mediaTop <= height / 3f
                 || mediaTop > height) return null;
         float bottom = mediaTop - gap;
-        float room = Math.min(width - 2f * gap, bottom - top);
+        float room = Math.min((width - 2f * gap) / widthRatio,
+                (bottom - top) / heightRatio);
         float least = 96f * density;
         if (room < least || !Float.isFinite(room)) return null;
         // A small share of a tight room is held at the least size rather than dropped.
         float side = Math.max(least, room * fill);
-        float y = top + (bottom - top - side) * pos;
+        float artHeight = side * heightRatio;
+        float y = top + (bottom - top - artHeight) * pos - (side - artHeight) / 2f;
         return new Rect((width - side) * 0.5f, y, side);
     }
 

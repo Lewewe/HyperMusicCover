@@ -5,6 +5,41 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class CoverCardStyleTest {
+    @Test public void artworkShapeAdjustsTheClockWithinLimits() {
+        assertEquals(1f, CoverCardStyle.clockScale(1f), 0f);
+        assertEquals(1f, CoverCardStyle.clockScale(16f / 9f), 0f);
+        assertTrue(CoverCardStyle.usesNativeClock(16f / 9f));
+        assertFalse(CoverCardStyle.usesNativeClock(1f));
+        assertFalse(CoverCardStyle.usesNativeClock(9f / 16f));
+        assertFalse(CoverCardStyle.usesNativeClock(Float.NaN));
+        assertTrue(CoverCardStyle.clockScale(9f / 16f) < 1f);
+        assertEquals(1f, CoverCardStyle.clockScale(20f), 0f);
+        assertEquals(0.75f, CoverCardStyle.clockScale(0.01f), 0f);
+        assertEquals(1f, CoverCardStyle.clockScale(Float.NaN), 0f);
+    }
+
+    @Test public void rectangularArtworkKeepsTheSameMinimumGaps() {
+        CoverCardStyle style = new CoverCardStyle(CoverCardStyle.CARD, 1f, 0.5f, 0.12f);
+        for (float aspect : new float[]{16f / 9f, 9f / 16f, 1f}) {
+            CoverCardStyle.Rect r = style.place(400f, 850f, 1f, 450f, 640f, aspect);
+            assertNotNull(r);
+            CoverMorphMotion.Box drawn = CoverMorphMotion.cardBox(r.x, r.y, r.side, 1f, aspect);
+            assertEquals(16f, drawn.y - 450f, 0.01f);
+            assertEquals(16f, 640f - drawn.y - drawn.h, 0.01f);
+            assertTrue(drawn.x >= 16f - 0.01f);
+            assertTrue(drawn.x + drawn.w <= 384f + 0.01f);
+        }
+    }
+
+    @Test public void squareArtworkRetainsItsOriginalPlacement() {
+        CoverCardStyle style = new CoverCardStyle(CoverCardStyle.CARD, 1f, 0.5f, 0.12f);
+        CoverCardStyle.Rect old = style.place(400f, 850f, 1f, 190f, 640f);
+        CoverCardStyle.Rect square = style.place(400f, 850f, 1f, 190f, 640f, 1f);
+        assertEquals(old.x, square.x, 0f);
+        assertEquals(old.y, square.y, 0f);
+        assertEquals(old.side, square.side, 0f);
+    }
+
     @Test public void defaultsAreFullCoverFillingItsRoom() {
         CoverCardStyle style = CoverCardStyle.defaults();
         assertEquals(CoverCardStyle.FULL, style.mode);

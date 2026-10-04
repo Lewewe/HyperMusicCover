@@ -535,6 +535,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         if (previous != null) previous.recycle();
         previous = current;
         current = p;
+        ClockCollapse.refreshArtworkSize();
         changedAt = SystemClock.uptimeMillis();
         start();
     }
@@ -623,7 +624,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         int[] loc = tmpLoc;
         getLocationOnScreen(loc);
         return style.place(getWidth(), getHeight(), getResources().getDisplayMetrics().density,
-                clock - loc[1], media - loc[1]);
+                clock - loc[1], media - loc[1], shownAspect());
     }
 
     /**
@@ -718,12 +719,13 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         getLocationOnScreen(loc);
         // Screen distances into this view's own coordinates, which the zoom above it scales.
         float top = (clock - loc[1]) / k, bottom = (media - loc[1]) / k;
-        float room = bottom - top - held.side;
+        float artHeight = held.side * Math.min(1f, 1f / shownAspect());
+        float room = bottom - top - artHeight;
         if (room < 0f) {
             aodPlaceNote = "no room clock=" + clock + " media=" + media;
             return held;
         }
-        float y = top + room / 2f;
+        float y = top + room / 2f - (held.side - artHeight) / 2f;
         aodPlaceNote = "centred clock=" + clock + " media=" + media + " k=" + k
                 + " y=" + Math.round(held.y) + "->" + Math.round(y);
         return new CoverCardStyle.Rect(held.x, y, held.side);
