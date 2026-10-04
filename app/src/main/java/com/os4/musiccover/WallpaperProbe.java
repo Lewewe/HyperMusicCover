@@ -2374,7 +2374,7 @@ public class WallpaperProbe {
                         // CoverCompose.frostedFor() - but cached under `b`, which is what every
                         // reader asks with once this becomes the art.
                         cacheFrosted(b, CoverCompose.frostedFor(s.src, s.w, s.h,
-                                cardMode ? 0.5f : s.bias));
+                                cardMode ? 0.5f : s.bias, cardMode));
                     }
                     sTmFrosted = SystemClock.uptimeMillis();
                     saveSourceLater(c, s, cardMode);

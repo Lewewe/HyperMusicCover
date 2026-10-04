@@ -273,9 +273,10 @@ final class CoverPush {
         if (Main.sVideoWallpaper) {
             final Bitmap srcArt = art;
             final int fw = w, fh = h;
-            final float fb = Main.sCoverCardStyle.mode == CoverCardStyle.CARD ? 0.5f : Main.sBias;
+            final boolean cardMode = Main.sCoverCardStyle.mode == CoverCardStyle.CARD;
+            final float fb = cardMode ? 0.5f : Main.sBias;
             frostTask = new java.util.concurrent.FutureTask<>(
-                    () -> CoverCompose.frostedFor(srcArt, fw, fh, fb));
+                    () -> CoverCompose.frostedFor(srcArt, fw, fh, fb, cardMode));
             new Thread(frostTask, "mc-cover-frost").start();
         }
         Bitmap full;

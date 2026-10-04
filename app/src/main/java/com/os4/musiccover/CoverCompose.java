@@ -167,22 +167,59 @@ final class CoverCompose {
         return out;
     }
 
-    /** Card mode uses the same mirrored, softened artwork as the full-cover backdrop. */
+    /** Card mode fills the screen with one cropped cover and artwork-derived color regions. */
     static Bitmap cardBackground(Bitmap src, int w, int h) {
-        Bitmap backdrop = mirroredBackground(src, w, h, 0.5f);
-        Bitmap soft = blur(backdrop, 48, 4, 3);
+        Bitmap small = cardBackdrop(src, w, h);
         try {
             Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            android.graphics.Canvas cv = new android.graphics.Canvas(out);
-            android.graphics.Paint p = new android.graphics.Paint(
-                    android.graphics.Paint.FILTER_BITMAP_FLAG);
-            cv.drawBitmap(soft, null, new android.graphics.RectF(0, 0, w, h), p);
-            cv.drawColor(0x14000000);
+            new android.graphics.Canvas(out).drawBitmap(small, null,
+                    new android.graphics.RectF(0, 0, w, h),
+                    new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
             return out;
         } finally {
-            if (soft != backdrop) soft.recycle();
+            small.recycle();
+        }
+    }
+
+    private static Bitmap cardBackdrop(Bitmap src, int w, int h) {
+        int bw = Math.max(1, Math.min(256, w / 4));
+        int bh = Math.max(1, Math.round(bw * h / (float) w));
+        Bitmap backdrop = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+        android.graphics.Paint paint = new android.graphics.Paint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.FILTER_BITMAP_FLAG);
+        float scale = Math.max(bw / (float) src.getWidth(), bh / (float) src.getHeight());
+        float drawnW = src.getWidth() * scale, drawnH = src.getHeight() * scale;
+        new android.graphics.Canvas(backdrop).drawBitmap(src, null,
+                new android.graphics.RectF((bw - drawnW) / 2f, (bh - drawnH) / 2f,
+                        (bw + drawnW) / 2f, (bh + drawnH) / 2f), paint);
+        Bitmap soft;
+        try {
+            soft = blur(backdrop, Math.min(48, bw), 4, 3);
+        } finally {
             backdrop.recycle();
         }
+        // Sample the entire cover, including colors outside the cropped background.
+        Bitmap sample = Bitmap.createScaledBitmap(src, 32, 32, true);
+        int[] pixels = new int[32 * 32];
+        sample.getPixels(pixels, 0, 32, 0, 0, 32, 32);
+        if (sample != src) sample.recycle();
+        int[] colors = CoverBackdropPalette.colors(pixels);
+        float[][] regions = CoverBackdropPalette.regions(colors);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(soft);
+        for (int i = 0; i < regions.length; i++) {
+            float[] region = regions[i];
+            int rgb = colors[i % colors.length] & 0x00ffffff;
+            int color = (Math.round(region[3] * 255f) << 24) | rgb;
+            paint.setShader(new android.graphics.RadialGradient(
+                    region[0] * soft.getWidth(), region[1] * soft.getHeight(),
+                    region[2] * Math.max(soft.getWidth(), soft.getHeight()),
+                    color, rgb, android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, soft.getWidth(), soft.getHeight(), paint);
+        }
+        paint.setShader(null);
+        // The backdrop stays five percentage points lighter than the temporary 20% cover shade.
+        canvas.drawColor(0x26000000);
+        return soft;
     }
 
     /**
@@ -291,7 +328,11 @@ final class CoverCompose {
      * a little first, because darkening alone turns a bright cover grey.
      */
     static Bitmap frosted(Bitmap src) {
-        return frostedOf(blur(src, 36, 3, 3), src, src.getWidth(), src.getHeight());
+        return frosted(src, src.getWidth(), src.getHeight());
+    }
+
+    private static Bitmap frosted(Bitmap src, int w, int h) {
+        return frostedOf(blur(src, 36, 3, 3), src, w, h);
     }
 
     /**
@@ -308,7 +349,16 @@ final class CoverCompose {
      * same artwork in the same place and vanishes at 36 pixels either way, and the 8% darkening
      * over the backdrop, which is applied here so the two paths agree.
      */
-    static Bitmap frostedFor(Bitmap src, int w, int h, float bias) {
+    static Bitmap frostedFor(Bitmap src, int w, int h, float bias, boolean cardMode) {
+        if (cardMode) {
+            Bitmap backdrop = cardBackdrop(src, w, h);
+            try {
+                // Reuse the same crop, colors and shade underneath the lyrics.
+                return frosted(backdrop, w, h);
+            } finally {
+                backdrop.recycle();
+            }
+        }
         Bitmap bg = mirroredBackground(src, w, h, bias);
         Bitmap soft = blur(bg, 36, 3, 3);
         if (soft != bg) bg.recycle();
