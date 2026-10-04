@@ -451,7 +451,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     static void leaving() {
         CoverCardLayer v = sView;
         if (v != null) v.exitWithCard = v.opacity > 0.05f
-                && !LockLyrics.wantsAttached();
+                && !LockLyrics.wantsCompactArtwork();
     }
 
     static void playback(boolean on) {
@@ -767,8 +767,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         else if (aodSince == 0L) aodSince = nowNs;
         boolean inAod = Main.coverCardInAod();
         boolean visible = style.mode == CoverCardStyle.CARD && Main.coverCardVisible();
-        // 0.2.2 can keep lyrics in the full-screen AOD. The selected lyric page owns this space.
-        boolean lyrics = LockLyrics.wantsAttached();
+        // Lyrics and the lyricless compact page both keep artwork in the media player.
+        boolean compactArtwork = LockLyrics.wantsCompactArtwork();
         // A doze under the OEM's big clock hides the square. Its wake holds the square at the
         // place the landed lock screen gave it and lets the collapsing clock uncover it - see
         // reveal(). Shown at once it sat full size across the big digits, and placed live it was
@@ -788,7 +788,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
                 && !ClockCollapse.exiting();
         boolean underBig = bigWake || bigFall;
         float target = visible && current != null && (!afterBigClock || underBig)
-                && (phase == ClockCollapse.Phase.EXIT && !bigFall ? exitWithCard : !lyrics)
+                && (phase == ClockCollapse.Phase.EXIT && !bigFall ? exitWithCard : !compactArtwork)
                 ? (inAod ? 1f : underBig ? reveal() : Main.cardProgress()) : 0f;
         float response = Math.max(0.18f, Main.sClockResponse);
         // Tied to the clock's own flight on the lit screen, and to the big clock's edge on the way
@@ -815,7 +815,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
             float u = 1f - Math.min(1f, (nowNs - wakeAt) / 1e9f / WAKE_FADE_S);
             lit = wakeFrom + (1f - wakeFrom) * (1f - u * u * u);
             opacity = target * lit;
-        } else if ((inAod && lyrics) || phase == ClockCollapse.Phase.ENTER
+        } else if ((inAod && compactArtwork) || phase == ClockCollapse.Phase.ENTER
                 || (phase == ClockCollapse.Phase.EXIT && Main.screenOn())) {
             opacity = target;
         } else {
@@ -868,7 +868,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         // A doze frame may draw before the queued animation frame clears a stale lock-screen
         // opacity. The lyric page must never show the square underneath it in the full AOD.
         if (opacity <= 0f || CoverMorphLayer.cardSuppressed()
-                || (Main.coverCardInAod() && LockLyrics.wantsAttached())) return;
+                || (Main.coverCardInAod() && LockLyrics.wantsCompactArtwork())) return;
         float density = getResources().getDisplayMetrics().density;
         if (Float.isNaN(drawX)) return;
         CoverMorphMotion.Box actual = CoverMorphMotion.cardBox(drawX, drawY,

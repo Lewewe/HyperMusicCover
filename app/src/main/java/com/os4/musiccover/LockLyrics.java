@@ -59,6 +59,8 @@ final class LockLyrics {
      */
     static volatile boolean sTapHidden;
 
+    private static final ArtworkPageState sArtworkPage = new ArtworkPageState();
+
     private static String sKey = "";
     private static List<LyricLine> sLines = Collections.emptyList();
     private static int sVersion;
@@ -320,6 +322,26 @@ final class LockLyrics {
     /** Whether the view belongs in the keyguard right now. */
     static boolean wantsAttached() {
         return wanted() && Main.coverModeOn() && hasLyrics();
+    }
+
+    /** The native media player keeps its thumbnail without opening an empty lyric view. */
+    static boolean compactWithoutLyrics() {
+        return Main.coverModeOn() && compactWithoutLyricsOnEntry();
+    }
+
+    static boolean compactWithoutLyricsOnEntry() {
+        return sArtworkPage.compactWithoutLyrics(sEnabled, hasLyrics());
+    }
+
+    static boolean wantsCompactArtwork() {
+        return wantsAttached() || compactWithoutLyrics();
+    }
+
+    static void setArtworkCompact(boolean compact) {
+        if (!sEnabled || hasLyrics()) return;
+        if (compact) sArtworkPage.preferCompact();
+        else sArtworkPage.preferCover();
+        refresh();
     }
 
     /**
@@ -782,6 +804,7 @@ final class LockLyrics {
             rereadIfNewPayload(key, c);
             return;
         }
+        sArtworkPage.onTrackChanged(wantsAttached(), key.isEmpty());
         sKey = key;
         sTrackChangedAt = SystemClock.uptimeMillis();
         sTrackAt = sTrackChangedAt;
@@ -1165,6 +1188,7 @@ final class LockLyrics {
     /** The app's switch. The setting: it is written to the state file and the app reads it back. */
     static void setEnabled(boolean on, String key, MediaController c) {
         sEnabled = on;
+        sArtworkPage.preferCover();
         // The switch is the master, so it takes the tap's answer with it. Switching the lyrics
         // off and on again brings them back; without this, turning them on while a previous tap
         // had hidden them would leave the lock screen on the cover with the switch saying on.
@@ -1184,6 +1208,8 @@ final class LockLyrics {
     static void toggleByTap(String key, MediaController c) {
         if (!sEnabled) return;
         sTapHidden = !sTapHidden;
+        if (sTapHidden) sArtworkPage.preferCover();
+        else sArtworkPage.preferCompact();
         Xp.log(TAG + "two-finger tap: lyrics " + (sTapHidden ? "hidden" : "shown"));
         show(!sTapHidden, key, c, "hidden by the two-finger tap");
         Main.saveState();
@@ -1352,7 +1378,8 @@ final class LockLyrics {
             return;
         }
         boolean on = wanted();
-        boolean want = on && (!sLines.isEmpty() || (sLoading && blurWanted()));
+        boolean want = compactWithoutLyrics()
+                || on && (!sLines.isEmpty() || (sLoading && blurWanted()));
         long cur = sBlurSent;
         boolean wasOn = (cur & 1L) != 0L;
         if (!again && cur != 0L && wasOn == want) return;
@@ -1380,6 +1407,7 @@ final class LockLyrics {
 
     private static void setLines(List<LyricLine> lines, String why) {
         sLines = lines == null ? Collections.<LyricLine>emptyList() : lines;
+        if (!sLines.isEmpty() && wanted()) sArtworkPage.preferCompact();
         // Only a settled answer: the empty set a track change puts up while it looks is not one.
         if (!sLoading) sHadLyrics = !sLines.isEmpty();
         sVersion++;

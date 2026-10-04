@@ -6421,7 +6421,8 @@ public class Main extends XposedModule {
         // the same blink with the direction reversed. wantsAttached() rather than wantsShown()
         // because nothing is on screen yet - it answers "will the lyrics be up", which is the
         // question this state is about.
-        sLyricUp = sMcArtInLyrics && LockLyrics.wantsAttached();
+        sLyricUp = sMcArtInLyrics && LockLyrics.wantsAttached()
+                || LockLyrics.compactWithoutLyrics();
         sLyricArtP = sLyricArtTo = sLyricUp ? 1f : 0f;
         sLyricArtV = 0f;
         sLyricArtAt = 0L;
@@ -7469,18 +7470,15 @@ public class Main extends XposedModule {
             // drawing this card, lost the thumbnail every time the screen went dark. With the
             // screen off, or in the AOD a wake has not left yet, the question is the standing one
             // instead: are the lyrics what this lock screen is showing.
-            sLyricUp = LockLyrics.wantsShown() || LockLyrics.heldForBlur()
+            sLyricUp = LockLyrics.compactWithoutLyrics()
+                    || LockLyrics.wantsShown() || LockLyrics.heldForBlur()
                     || ((ClockCollapse.phase() == ClockCollapse.Phase.AOD || !screenOnCached())
                         && LockLyrics.wantsAttached());
         }
-        float exc = stepLyricArt(sMcArtInLyrics && sLyricUp);
-        // One number, on purpose. Centring is not a setting of its own any more - a title with no
-        // thumbnail beside it belongs in the middle and a title that has one does not - so the
-        // title follows the same value the thumbnail does, and both now ride the exception's
-        // progress instead of stepping to it: the thumbnail comes back and the title slides
-        // aside for it, at the speed of the transition they are part of.
+        float exc = stepLyricArt((sMcArtInLyrics || LockLyrics.compactWithoutLyrics())
+                && sLyricUp);
+        // Keep text placement in sync with the thumbnail visibility.
         float hideP = sMcHideArt ? p * (1f - exc) : 0f;
-        float centreP = hideP;
         View art = sCardArt;
         if (art != null) {
             // INVISIBLE at the far end, not GONE: the constraints around it are the card's
@@ -7514,8 +7512,8 @@ public class Main extends XposedModule {
                 if (art.getAlpha() != a) art.setAlpha(a);
             }
         }
-        centreCardText(card, (TextView) sCardTitle, centreP);
-        centreCardText(card, (TextView) sCardArtist, centreP);
+        centreCardText(card, (TextView) sCardTitle, hideP);
+        centreCardText(card, (TextView) sCardArtist, hideP);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
     }
@@ -7910,7 +7908,12 @@ public class Main extends XposedModule {
      * shade, where the OEM's own click is the right one.
      */
     private static boolean wantsArtTap() {
-        return sTapToggle && sCardShowing;
+        return singleCoverTapEnabled() && sCardShowing;
+    }
+
+    private static boolean singleCoverTapEnabled() {
+        // A lyricless track needs a way to fold its artwork even when legacy taps are off.
+        return sTapToggle || LockLyrics.sEnabled && !LockLyrics.hasLyrics();
     }
 
     /**
@@ -7959,7 +7962,10 @@ public class Main extends XposedModule {
                 // is read at UP rather than at DOWN: a cover that came up under the finger
                 // during the gesture (the OEM can re-lay the card out at any point) would
                 // otherwise send the tap the wrong way.
-                if (sCoverMode) exitFromTap("artwork tapped");
+                if (sCoverMode && LockLyrics.compactWithoutLyrics()) {
+                    beginMorph(true);
+                    LockLyrics.setArtworkCompact(false);
+                } else if (sCoverMode) exitFromTap("artwork tapped");
                 else if (MiniPlayerRuntime.wantsNativeArtworkGesture()) miniPlayerEnterCover();
                 else enterFromTap("artwork tapped");
             }
@@ -8589,7 +8595,7 @@ public class Main extends XposedModule {
      * and the next thing the user plays then starts from the cover as it always did.
      */
     private static void exitFromTapNow(String why) {
-        int from = LockLyrics.wantsAttached()
+        int from = LockLyrics.wantsCompactArtwork()
                 ? CoverMorphRoute.LYRICS : CoverMorphRoute.COVER;
         if (MiniPlayerRuntime.prepareSceneExit()) {
             beginMiniMorph(false, from == CoverMorphRoute.COVER);
@@ -8610,7 +8616,7 @@ public class Main extends XposedModule {
      */
     private static void enterFromTapNow(String why) {
         // Guarded on the two questions onMediaUpdate asks before it does anything.
-        int to = LockLyrics.willAttachOnEntry()
+        int to = (LockLyrics.willAttachOnEntry() || LockLyrics.compactWithoutLyricsOnEntry())
                 ? CoverMorphRoute.LYRICS : CoverMorphRoute.COVER;
         if (sAuto && sCardShowing && MiniPlayerRuntime.prepareSceneEntry()) {
             beginMiniMorph(true, to == CoverMorphRoute.COVER);
@@ -9606,7 +9612,7 @@ public class Main extends XposedModule {
     private static void feedTap(MotionEvent ev) {
         if (ev == null) return;
         feedTwoFingerTap(ev);
-        if (!sTapToggle) return;
+        if (!singleCoverTapEnabled()) return;
         // A gesture the system took away is never going to produce the second tap.
         if (ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
             cancelPendingTap("gesture cancelled");
@@ -9824,7 +9830,7 @@ public class Main extends XposedModule {
      * ours, and every double tap the framework itself did not recognise as one.
      */
     private static void armLockTap(final float y) {
-        if (!sTapToggle) return;
+        if (!singleCoverTapEnabled()) return;
         // Decided at the DOWN, because by the time this runs the centre - or the charging
         // animation - may have closed under the guard in onLockTap. See the dispatch hook for
         // the full account.
@@ -9877,7 +9883,7 @@ public class Main extends XposedModule {
      * this device has simply not taken yet.
      */
     private static void onLockTap(float y) {
-        if (!sTapToggle) return;
+        if (!singleCoverTapEnabled()) return;
         if (!screenOn() || !keyguardShowing()) return;
         // Only the keyguard shows the clock container, so this is also what rules out the shade
         // being pulled down over an unlocked phone - the same test the card restyle uses.
@@ -9914,7 +9920,15 @@ public class Main extends XposedModule {
         }
         if (y < top || y > bottom) return;
         if (sCoverMode) {
-            exitFromTap("tap at y=" + y);
+            if (LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
+                // Keep the media player and clock in place; this is not a scene exit to pill.
+                if (!LockLyrics.compactWithoutLyrics()) {
+                    beginMorph(false);
+                    LockLyrics.setArtworkCompact(true);
+                }
+            } else {
+                exitFromTap("tap at y=" + y);
+            }
         } else if (sTapSuppressed) {
             enterFromTap("tap at y=" + y);
         }
