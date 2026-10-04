@@ -375,6 +375,7 @@ final class ClockCollapse {
             return;
         }
         Phase was = sPhase;
+        stopAodCoverZoom();
         if (wake) {
             sWaking = false;
             Main.noteAwake();
@@ -555,6 +556,7 @@ final class ClockCollapse {
             sTv = 0f;
             sExitToAod = false;
             sPhase = Phase.AOD;
+            startAodCoverZoom();
             sGlassFrom = sGlassTo = sGlassP;
             install();
             Xp.log(TAG + "clock: into the AOD holding the cover pose (top="
@@ -596,6 +598,38 @@ final class ClockCollapse {
     /** Everything of ours off the clock - the phone was unlocked, or cover mode went away. */
     static void release(String why) {
         releaseNow(why);
+    }
+
+    private static float sAodCoverZoom = 1f;
+    private static android.animation.ValueAnimator sAodCoverZoomAnimator;
+
+    private static void stopAodCoverZoom() {
+        if (sAodCoverZoomAnimator != null) sAodCoverZoomAnimator.cancel();
+        sAodCoverZoomAnimator = null;
+    }
+
+    /** Expand the held clock alongside the AOD media card's contraction. */
+    private static void startAodCoverZoom() {
+        stopAodCoverZoom();
+        sAodCoverZoom = 1f;
+        sAodTop = sFromTop;
+        sAodUnit = sFromUnit;
+        sAodDate = sFromDate;
+        if (Main.sCoverCardStyle.mode != CoverCardStyle.CARD || !Main.coverModeOn()
+                || LockLyrics.wantsCompactArtwork()) return;
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(1f, 1.50f);
+        sAodCoverZoomAnimator = animator;
+        animator.setDuration(420L);
+        animator.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        animator.addUpdateListener(a -> {
+            if (sPhase != Phase.AOD || !sAodHeld) {
+                stopAodCoverZoom();
+                return;
+            }
+            sAodCoverZoom = (float) a.getAnimatedValue();
+            invalidate();
+        });
+        animator.start();
     }
 
     private static float sNativeClockSize;
@@ -1509,6 +1543,8 @@ final class ClockCollapse {
     private static void releaseNow(String why) {
         boolean was = sPhase != Phase.OFF || Main.sHoldY != null;
         stopFrame();
+        stopAodCoverZoom();
+        sAodCoverZoom = 1f;
         sPhase = Phase.OFF;
         sExitToAod = false;
         sAodHeld = false;
@@ -1848,10 +1884,11 @@ final class ClockCollapse {
                 if (!Float.isNaN(sAodHoldY)) hold(sAodHoldY);
                 // Held still in the unzoomed pixels, so the doze's zoom takes it in with the rest
                 // of the screen - see parentTop().
-                writePose(m, sFromTop, sFromUnit, sFromDate, false);
-                // The wake starts from what is on screen, which is this pose.
+                float heldUnit = sFromUnit * sAodCoverZoom;
+                writePose(m, sFromTop, heldUnit, sFromDate, false);
+                // The wake starts from what is on screen, including a partly completed zoom.
                 sAodTop = sFromTop;
-                sAodUnit = sFromUnit;
+                sAodUnit = heldUnit;
                 sAodDate = sFromDate;
                 return;
             } else {
