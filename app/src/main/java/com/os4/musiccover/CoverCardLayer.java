@@ -247,6 +247,10 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     /** Called on the existing art worker. Never retain the player's bitmap. */
     static void publish(Bitmap source) {
+        publish(source, false);
+    }
+
+    static void publish(Bitmap source, boolean temporaryThumbnail) {
         final int generation = ++sGeneration;
         if (source == null || source.isRecycled()) return;
         Bitmap readable = null, art = null, aodBackdrop = null;
@@ -266,6 +270,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
             new Canvas(art).drawBitmap(readable, crop,
                     new Rect(0, 0, art.getWidth(), art.getHeight()),
                     new Paint(Paint.FILTER_BITMAP_FLAG));
+            // Shade only the large cover's copy; wallpaper and AOD backdrops keep their brightness.
+            if (temporaryThumbnail) new Canvas(art).drawColor(0x33000000);
             // The AOD's own dimming can flatten the wallpaper almost to black. A small copy of
             // the same static blur is drawn over it at low alpha only in the full-screen AOD.
             // Prepare it with the artwork, off the UI thread, then reuse it without animation.

@@ -108,13 +108,14 @@ final class CoverPush {
             int smallWidth = Math.max(1, Math.min(128, original.getWidth() / 2));
             soft = CoverCompose.blur(original, smallWidth, 1, 1);
         } catch (Throwable t) {
+            if (soft != null && !soft.isRecycled()) soft.recycle();
             if (original != null && !original.isRecycled()) original.recycle();
             Xp.log(Main.TAG + "thumbnail softening failed: " + t);
             pushRenderedArtToWallpaper(ctx, on, art);
             return;
         }
         try {
-            pushRenderedArtToWallpaper(ctx, true, soft);
+            pushRenderedArtToWallpaper(ctx, true, soft, true);
             sUnsoftenedArt = original;
             sSoftArtGen = gen;
             original = null;
@@ -143,6 +144,11 @@ final class CoverPush {
     }
 
     private static void pushRenderedArtToWallpaper(Context ctx, boolean on, Bitmap art) {
+        pushRenderedArtToWallpaper(ctx, on, art, false);
+    }
+
+    private static void pushRenderedArtToWallpaper(
+            Context ctx, boolean on, Bitmap art, boolean temporaryThumbnail) {
         long t0 = android.os.SystemClock.uptimeMillis();
         Intent out = wallpaperIntent("art");
         out.putExtra("cardmode", Main.sCoverCardStyle.mode == CoverCardStyle.CARD);
@@ -190,7 +196,7 @@ final class CoverPush {
             return;
         }
         if (art == null) { Xp.log(Main.TAG + "pushart: no album art"); return; }
-        if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) CoverCardLayer.publish(art);
+        if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) CoverCardLayer.publish(art, temporaryThumbnail);
         int w = Main.sScreenW, h = Main.sScreenH;
         if (!Main.sVideoWallpaper && Main.sWpComposes) {
             // The source goes over instead of the composed picture, and the wallpaper process
