@@ -204,4 +204,7 @@
     <string name="demo_island_scene_summary">Tap a navigation, timer, or music island to show its map, countdown, or album art on the lock screen. Tap another island to switch directly.</string>
     <string name="demo_island_notifications_title">Grouped notifications</string>
     <string name="demo_island_notifications_summary">Regular notifications share one island. Tap or swipe up to open the list; the islands expand into cards and the clock shrinks. Swipe down on the list to collapse them.</string>
+    <string name="islands_background_blur">Blur background</string>
+    <string name="islands_background_blur_summary">Blur behind the pill and shortcut buttons instead of using a solid color</string>
+    <string name="islands_background_blur_radius">Background blur strength</string>
 </resources>

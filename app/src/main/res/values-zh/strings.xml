@@ -212,4 +212,7 @@
     <string name="demo_island_scene_summary">点按导航、倒计时或音乐的岛，锁屏换成地图、倒计时或专辑封面；点另一个岛直接切过去。</string>
     <string name="demo_island_notifications_title">聚合岛</string>
     <string name="demo_island_notifications_summary">普通通知收进一个岛，点按或上滑展开成列表，整排岛一起变成卡片、时钟跟着缩小；在列表上下滑全部收回。</string>
+    <string name="islands_background_blur">背景模糊</string>
+    <string name="islands_background_blur_summary">为超级岛和底部快捷按钮使用模糊背景，替代纯色背景</string>
+    <string name="islands_background_blur_radius">背景模糊强度</string>
 </resources>

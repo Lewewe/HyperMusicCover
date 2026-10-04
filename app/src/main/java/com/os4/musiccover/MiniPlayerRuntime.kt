@@ -59,6 +59,7 @@ object MiniPlayerRuntime {
 
     @JvmStatic fun applyConfig(context: Context, raw: String?) {
         MiniPlayerConfig.apply(prefs(context), raw)
+        materialGeneration++
         lastRoot?.get()?.let { root -> root.post { attach(root, lastShortcutController?.get()) } }
         refresh()
     }
@@ -198,7 +199,11 @@ object MiniPlayerRuntime {
      * The pill's material key: the effect, then the generation after a '#'. The pill builds a
      * new layer only when the effect before the '#' changes (MiniPlayerMaterialState).
      */
-    internal val materialStyleKey: String get() = "$cardEffect#$materialGeneration"
+    internal val materialStyleKey: String get() {
+        val blur = prefs?.let { JSONObject(MiniPlayerConfig.fromPreferences(it))
+            .optBoolean(MiniPlayerConfig.BACKGROUND_BLUR) } ?: false
+        return "$cardEffect:${if (blur) "blur" else "solid"}#$materialGeneration"
+    }
     /** The last recipe's values, for telling a new one from the same one again. */
     private var materialSignature: Any? = null
     private var materialRepeats = 0
@@ -1613,7 +1618,54 @@ object MiniPlayerRuntime {
      * no such ancestor - the element alone drew nothing at all - so the pill is made a
      * container the way ElementSurfaceModel.updateBlurContainer makes one.
      */
+    private val backgroundMode by lazy {
+        View::class.java.getMethod("setMiBackgroundBlurMode", Int::class.javaPrimitiveType)
+    }
+    private val backgroundRadius by lazy {
+        View::class.java.getMethod("setMiBackgroundBlurRadius", Int::class.javaPrimitiveType)
+    }
+    private val viewBlurMode by lazy {
+        View::class.java.getMethod("setMiViewBlurMode", Int::class.javaPrimitiveType)
+    }
+    private val passWindowBlur by lazy {
+        View::class.java.getMethod("setPassWindowBlurEnabled", Boolean::class.javaPrimitiveType)
+    }
+
+    /** Blur the backdrop only; glyphs and shortcut icons remain outside the blurred content. */
+    private fun configuredBackground(view: ImageView): Boolean = runCatching {
+        val config = JSONObject(configJson(view.context))
+        val blur = config.optBoolean(MiniPlayerConfig.BACKGROUND_BLUR)
+        val container = view.parent as? View ?: return false
+        val radius = (MiniPlayerConfig.blurRadius(config.optDouble(
+            MiniPlayerConfig.BACKGROUND_BLUR_RADIUS, 30.0))
+            * view.resources.displayMetrics.density).toInt()
+        EdgeWatch.ours {
+            // Remove the recorded media card's glass and blend before applying our own material.
+            for (target in listOf(container, view)) {
+                runCatching { View::class.java.getMethod("clearMiBackgroundBlendColor").invoke(target) }
+                runCatching { View::class.java.getMethod("setMiGlassBlurRadius",
+                    Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).invoke(target, 0, 0) }
+                backgroundMode.invoke(target, if (blur && target === container) 1 else 0)
+                backgroundRadius.invoke(target, if (blur && target === container) radius else 0)
+                viewBlurMode.invoke(target, if (blur) 1 else 0)
+                passWindowBlur.invoke(target, blur)
+            }
+        }
+        view.background = null
+        view.setImageDrawable(GradientDrawable().apply {
+            setColor(if (blur) 0x331F2324 else 0x9E1F2324.toInt())
+        })
+        watchEdge(view)
+        dressedViews.add(view)
+        aodDimArgs?.let { EdgeWatch.ours { dimView(view, it) } }
+        true
+    }.getOrElse {
+        Xp.log("MCMini: configured background unavailable: $it")
+        false
+    }
+
     internal fun material(view: ImageView, classLoader: ClassLoader) {
+        if (configuredBackground(view)) return
         val ctx = view.context
         runCatching {
             val res = ctx.resources

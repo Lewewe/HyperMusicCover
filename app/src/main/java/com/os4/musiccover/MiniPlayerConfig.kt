@@ -11,6 +11,11 @@ object MiniPlayerConfig {
     const val WIDTH = "widthDp"
     const val HEIGHT_RADIUS = "heightRadiusDp"
     const val ART_RADIUS = "artRadiusDp"
+    const val BACKGROUND_BLUR = "backgroundBlur"
+    const val BACKGROUND_BLUR_RADIUS = "backgroundBlurRadiusDp"
+
+    @JvmStatic fun blurRadius(value: Double): Float =
+        if (value.isFinite()) value.toFloat().coerceIn(0f, 80f) else 30f
 
     /** The row takes the room a switched-off torch or camera leaves (MiniPlayerRuntime.pillRest). */
     const val ADAPTIVE_WIDTH = "adaptiveWidth"
@@ -21,13 +26,15 @@ object MiniPlayerConfig {
         HEIGHT_RADIUS to 27f,
         ART_RADIUS to 12f,
         ADAPTIVE_WIDTH to false,
+        BACKGROUND_BLUR to false,
+        BACKGROUND_BLUR_RADIUS to 30f,
     )
 
     @JvmStatic fun defaultJson(): String = normalizedJson(null)
 
     /**
-     * The config as the module will use it: [ENABLED] and [ADAPTIVE_WIDTH] from the input, the
-     * three size keys always at the values above.
+     * Preserve feature switches and the bounded background blur radius. The three size keys
+     * always use the fixed values above.
      *
      * The sizes were sliders and are not settings any more - the app has no rows for them - so a
      * config that still carries one is not obeyed, whoever wrote it. They stay in the JSON all
@@ -47,8 +54,10 @@ object MiniPlayerConfig {
         val input = runCatching { JSONObject(raw.orEmpty()) }.getOrDefault(JSONObject())
         val out = JSONObject()
         defaults.forEach { (key, fallback) ->
-            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH) {
+            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH || key == BACKGROUND_BLUR) {
                 runCatching { input.getBoolean(key) }.getOrDefault(fallback)
+            } else if (key == BACKGROUND_BLUR_RADIUS) {
+                blurRadius(input.optDouble(key, 30.0))
             } else {
                 fallback
             })

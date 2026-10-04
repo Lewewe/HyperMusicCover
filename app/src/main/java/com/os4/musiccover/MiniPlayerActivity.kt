@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.os4.musiccover.ui.screen.features.IslandDemo
+import com.os4.musiccover.ui.screen.features.ValueSlider
 import com.os4.musiccover.ui.theme.AppTheme
 import com.os4.musiccover.ui.util.PageScaffold
 import org.json.JSONObject
@@ -97,6 +98,19 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
                         checked = config.optBoolean(MiniPlayerConfig.ADAPTIVE_WIDTH),
                         enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
                         onCheckedChange = { push(MiniPlayerConfig.ADAPTIVE_WIDTH, it) })
+                    SwitchPreference(title = stringResource(R.string.islands_background_blur),
+                        summary = stringResource(R.string.islands_background_blur_summary),
+                        checked = config.optBoolean(MiniPlayerConfig.BACKGROUND_BLUR),
+                        enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
+                        onCheckedChange = { push(MiniPlayerConfig.BACKGROUND_BLUR, it) })
+                    if (config.optBoolean(MiniPlayerConfig.BACKGROUND_BLUR)) {
+                        ValueSlider(title = stringResource(R.string.islands_background_blur_radius),
+                            value = config.optDouble(MiniPlayerConfig.BACKGROUND_BLUR_RADIUS, 30.0).toFloat(),
+                            valueRange = 0f..80f,
+                            enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
+                            label = { "${it.toInt()} dp" },
+                            onValueChange = { push(MiniPlayerConfig.BACKGROUND_BLUR_RADIUS, it) })
+                    }
                 }
             }
         }
