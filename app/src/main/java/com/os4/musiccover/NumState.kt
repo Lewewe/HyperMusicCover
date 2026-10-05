@@ -101,6 +101,7 @@ internal object NumState {
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
         if (!folding || info == null || !LockIslands.foldsToCount()) return null
+        if (LockIslands.keepsCoverStack()) return null
         val event = (Xp.getObjectField(info, "stackShowEvent") as? Enum<*>)?.name
         if (event != "HANDS_UP" || Xp.getObjectField(info, "isNumberState") == true) return null
         if ((Xp.getObjectField(info, "normalNotifCount") as Number).toInt() <= 0) return null
@@ -375,6 +376,7 @@ internal object NumState {
     private val foldCheck = Runnable {
         if (!folding || !LockIslands.foldsToCount()) return@Runnable
         // The list the spread opened, passing through the pile on its way: not folded back.
+        if (LockIslands.keepsCoverStack()) return@Runnable
         if (LockIslands.spreadingNow()) { trace("pile check skipped: spread ($foldWhy)"); return@Runnable }
         if (busy()) { foldIfPiled(foldWhy); return@Runnable }
         if (state() == "STACK") goTo("NUMBER", anim = true, why = "piled ($foldWhy)")

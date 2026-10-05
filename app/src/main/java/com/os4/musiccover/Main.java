@@ -6466,6 +6466,7 @@ public class Main extends XposedModule {
     private static void exitCoverMode(boolean animate) {
         CoverCardLayer.leaving();
         sCoverMode = false;
+        LockLyrics.setNotificationCompact(false);
         applyGlassBrightness();
         LockIslands.INSTANCE.setCoverMode(false);
         CoverCardLayer.refresh();
@@ -8562,6 +8563,18 @@ public class Main extends XposedModule {
 
     /** The card's track when the running morph began; a different one is what cancels it. */
     private static String sMorphKey = "";
+
+    /** Keep artwork in the media player while a multi-notification list is open. */
+    static void notificationListArtwork(boolean open, int count) {
+        boolean was = LockLyrics.notificationCompact();
+        boolean compact = NotificationArtworkPolicy.compact(was, open, count,
+                sCoverMode && keyguardShowing(), !LockLyrics.wantsCompactArtwork());
+        if (was == compact) return;
+        if (sCoverMode && keyguardShowing()) beginCompactArtworkMorph(!compact);
+        LockLyrics.setNotificationCompact(compact);
+        refreshMediaCardForMorph();
+        LockLyrics.refresh();
+    }
 
     private static void beginCompactArtworkMorph(boolean toCover) {
         if (!CoverMorphLayer.active()) sMorphKey = sCardKey;

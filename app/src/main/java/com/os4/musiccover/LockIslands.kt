@@ -317,6 +317,7 @@ internal object LockIslands {
     fun setSpread(on: Boolean) {
         if (spreading == on) return
         spreading = on
+        if (on) beginNotificationListArtwork()
         NumState.trace("spread=$on")
         // Over: the island stands as the stack does. A pull let go before the stack ever left its
         // fold said nothing (no exitNumState), and the island taken out for it stayed out.
@@ -462,9 +463,12 @@ internal object LockIslands {
             main.removeCallbacks(coverOff)
             if (!cover) {
                 cover = true
+                notificationArtworkNavigation.reset()
                 if (!active) invalidate("cover up")
             }
+            updateNotificationArtwork()
         } else if (cover) {
+            notificationArtworkNavigation.reset()
             main.removeCallbacks(coverOff)
             main.postDelayed(coverOff, COVER_RELEASE_MS)
         }
@@ -534,7 +538,12 @@ internal object LockIslands {
     fun openStack(why: String, scroll: Boolean = true) {
         // Not scrolled (no model to ask): the island stays, or nothing would be left to tap.
         // [scroll] false: a finger scrolls it (the spread pulled open) - only the island goes.
-        if (scroll && !NumState.goTo("LIST", why = why).startsWith("scrollY")) return
+        if (scroll) beginNotificationListArtwork()
+        if (scroll && !NumState.goTo("LIST", why = why).startsWith("scrollY")) {
+            notificationArtworkNavigation.reset()
+            updateNotificationArtwork()
+            return
+        }
         if (!stackOut) {
             stackOut = true
             NumState.trace("$why: island out")
@@ -832,8 +841,53 @@ internal object LockIslands {
         publish()
     }
 
+    /** Keep HyperOS's intermediate pile while the cover owns the media scene. */
+    fun keepsCoverStack(): Boolean = Main.coverModeOn() && stackMembers.size > 1
+
+    private val notificationArtworkNavigation = NotificationArtworkPolicy()
+    private var previousArtworkScroll: Int? = null
+    private var requestedArtworkListAt = 0L
+
+    private fun beginNotificationListArtwork() {
+        if (!keepsCoverStack()) return
+        requestedArtworkListAt = android.os.SystemClock.uptimeMillis()
+        notificationArtworkNavigation.requestList()
+        Main.notificationListArtwork(true, stackMembers.size)
+    }
+
+    private val notificationArtworkUpdate = object : Runnable {
+        override fun run() {
+            val open = spreading || stackOut
+            val position = NumState.position()
+            val previous = previousArtworkScroll
+            previousArtworkScroll = position
+            val listY = NumState.listScroll()
+            val numberY = NumState.scrollTo("NUMBER")
+            val towardList = position != null && previous != null && listY != null && numberY != null
+                && (position - previous) * (if (listY >= numberY) 1 else -1) > 2
+            if (requestedArtworkListAt != 0L
+                && android.os.SystemClock.uptimeMillis() - requestedArtworkListAt > 1200L) {
+                requestedArtworkListAt = 0L
+                notificationArtworkNavigation.expireRequest()
+            }
+            val list = notificationArtworkNavigation.listOpen(open, NumState.state(), NumState.busy(), towardList)
+            Main.notificationListArtwork(list, stackMembers.size)
+            // STACK and LIST both leave number mode; its enter/exit callbacks cannot distinguish them.
+            if (Main.coverModeOn() && Main.keyguardLocked() && Main.screenOnCached()) {
+                main.postDelayed(this, if (open) 32L else 64L)
+            }
+        }
+    }
+
+    private fun updateNotificationArtwork() {
+        // Coalesce filter runs and stack callbacks, then read the latest settled count.
+        main.removeCallbacks(notificationArtworkUpdate)
+        main.post(notificationArtworkUpdate)
+    }
+
     /** The islands put together from the last run: the focus ones and the stack island. */
     private fun publish() {
+        updateNotificationArtwork()
         val stack = stackNote?.takeIf { !stackOut }
         // Spread out, the count stays hidden too: the row folding back comes into its place.
         if (nativeStack) NumState.hideCount(spreading || active && stack != null)

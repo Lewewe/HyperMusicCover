@@ -6360,6 +6360,13 @@ private class MiniPlayerController(
                 endSpread(folded = s.progress < 0.5f, why = "lock screen gone")
                 return
             }
+            // A first downward swipe can land on the native pile; only the next folds to the pill.
+            if (LockIslands.keepsCoverStack() && NumState.state() == "STACK"
+                && !NumState.busy() && !stackDragged()
+                && (s.phase == SPREAD_OPEN || s.phase == SPREAD_CLOSING)) {
+                endSpread(folded = false, why = "native pile")
+                return
+            }
             when (s.phase) {
                 SPREAD_WAIT -> waitSpread(s)
                 SPREAD_OPEN -> watchOpen(s)
@@ -6540,7 +6547,8 @@ private class MiniPlayerController(
         // Let go on the way home: sent there now. A fling never reaches the hands-up (NumState),
         // and a fling let go at 0.67 came to rest as the pile (filmed and logged 2026-09-30).
         val dragged = stackDragged()
-        if (s.phase == SPREAD_CLOSING && s.wasDragged && !dragged && p < SPREAD_FOLD_BELOW && !s.letGoSent) {
+        if (s.phase == SPREAD_CLOSING && !LockIslands.keepsCoverStack()
+            && s.wasDragged && !dragged && p < SPREAD_FOLD_BELOW && !s.letGoSent) {
             s.letGoSent = true
             NumState.goTo("NUMBER", why = "spread let go folding at ${"%.2f".format(p)}")
         }
