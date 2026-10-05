@@ -28,11 +28,16 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         final Bitmap aodBackdrop;
         final int generation;
         final int pushGeneration;
-        Prepared(Bitmap art, Bitmap aodBackdrop, int generation, int pushGeneration) {
+        final boolean temporaryThumbnail;
+        final String trackKey;
+        Prepared(Bitmap art, Bitmap aodBackdrop, int generation, int pushGeneration,
+                 boolean temporaryThumbnail, String trackKey) {
             this.art = art;
             this.aodBackdrop = aodBackdrop;
             this.generation = generation;
             this.pushGeneration = pushGeneration;
+            this.temporaryThumbnail = temporaryThumbnail;
+            this.trackKey = trackKey;
         }
         void recycle() {
             art.recycle();
@@ -255,6 +260,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     static void publish(Bitmap source, boolean temporaryThumbnail) {
         final int generation = ++sGeneration;
         final int pushGeneration = Main.sPushGen;
+        final String trackKey = Main.sTrackKey;
         if (source == null || source.isRecycled()) return;
         Bitmap readable = null, art = null, aodBackdrop = null;
         try {
@@ -287,7 +293,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
             } catch (Throwable t) {
                 Xp.log("[MCCard] AOD backdrop preparation failed: " + t);
             }
-            final Prepared p = new Prepared(art, aodBackdrop, generation, pushGeneration);
+            final Prepared p = new Prepared(art, aodBackdrop, generation, pushGeneration,
+                    temporaryThumbnail, trackKey);
             art = null;
             aodBackdrop = null;
             final Prepared old = sPending;
@@ -305,7 +312,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
                     // wallpaper to start its own - see releaseHeld() - with a ceiling in case
                     // that word never comes.
                     Main.main().removeCallbacks(ADOPT_HELD);
-                    if (v.current == null) v.adoptPending();
+                    if (v.current == null || v.isReadyRectangularUpgrade(sPending)) v.adoptPending();
                     else Main.main().postDelayed(ADOPT_HELD, HOLD_MAX_MS);
                 }
             });
@@ -570,13 +577,23 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         return v.opacity >= 0.995f && v.scale.atRest(target);
     }
 
+    /** A quality reveal of the same rectangular cover need not wait for a background swap. */
+    private boolean isReadyRectangularUpgrade(Prepared p) {
+        return p != null && current != null && current.temporaryThumbnail
+                && !p.temporaryThumbnail && Main.sameTrack(current.trackKey, p.trackKey)
+                && Math.abs(aspectOf(p) - 1f) > 0.01f;
+    }
+
     private void adoptPending() {
         Prepared p = sPending;
         if (p == null || p == current || p.generation != sGeneration
                 || p.pushGeneration != Main.sPushGen) return;
+        boolean revealReady = isReadyRectangularUpgrade(p);
         if (previous != null) previous.recycle();
         previous = current;
         current = p;
+        // Reveal ready artwork promptly, but fade out the treatment rather than cutting it.
+        trackFadeMs = revealReady ? 120L : TRACK_FADE_MS;
         // The incoming artwork owns its normal quality treatment; the outgoing wait ends here.
         if (previousWaiting && !Main.sameTrack(previousWaitKey, Main.sTrackKey)) {
             endPreviousWait();
@@ -889,7 +906,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         else scale.step(scaleTarget, dt, Main.sClockResponse);
         boolean placing = followPlace(phase, dt, response, target);
         if (previous != null && (phase == ClockCollapse.Phase.AOD
-                || SystemClock.uptimeMillis() - changedAt > TRACK_FADE_MS)) {
+                || SystemClock.uptimeMillis() - changedAt > trackFadeMs)) {
             previous.recycle();
             previous = null;
         }
@@ -1152,10 +1169,11 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
      * together instead of the art lagging the background by 400ms.
      */
     private static final long TRACK_FADE_MS = 180L;
+    private long trackFadeMs = TRACK_FADE_MS;
 
     private float fadeFraction() {
         if (previous == null) return 1f;
-        float t = Math.min(1f, (SystemClock.uptimeMillis() - changedAt) / (float) TRACK_FADE_MS);
+        float t = Math.min(1f, (SystemClock.uptimeMillis() - changedAt) / (float) trackFadeMs);
         return 1f - (1f - t) * (1f - t) * (1f - t);
     }
 

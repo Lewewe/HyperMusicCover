@@ -81,9 +81,11 @@ final class CoverPush {
     };
 
     static boolean shouldSoftenArtwork(int width, int height) {
-        // The card fits artwork by its long edge. A full-size video thumbnail can have a
-        // shorter edge below 512 without needing the temporary blur and dim treatment.
-        return width > 0 && height > 0 && Math.max(width, height) < 512;
+        // YouTube can finish at 480x270 without publishing a larger video thumbnail.
+        // Use its ready long edge for rectangular art, retaining 512 for square covers.
+        if (width <= 0 || height <= 0) return false;
+        boolean rectangular = Math.abs(width / (float) height - 1f) > 0.01f;
+        return Math.max(width, height) < (rectangular ? 480 : 512);
     }
 
     private static void clearSoftArtwork() {
@@ -1423,7 +1425,8 @@ final class CoverPush {
             Main.worker().removeCallbacks(sMetadataArtWatch);
             if (!ArtworkChangePolicy.isYouTube(Main.sTrackKey)) return;
             sMetadataArtChecks = QUALITY_CHECKS;
-            Main.worker().postDelayed(sMetadataArtWatch, 500L);
+            // Check the metadata update now; the remaining checks keep the bounded cadence.
+            Main.worker().post(sMetadataArtWatch);
         });
     }
 
