@@ -9375,17 +9375,6 @@ public class Main extends XposedModule {
         return end < 0 ? key.substring(from) : key.substring(from, end);
     }
 
-    /** The session's track title, which is what a queue item can be matched against. */
-    private static String titleOf(MediaController c) {
-        if (c == null) return null;
-        try {
-            MediaMetadata md = c.getMetadata();
-            return md == null ? null : md.getString(MediaMetadata.METADATA_KEY_TITLE);
-        } catch (Throwable t) {
-            return null;
-        }
-    }
-
     /** The controller the card is bound to, or null if the card has not named one. */
     private static MediaController controllerFromCard(Context ctx) {
         android.media.session.MediaSession.Token t = sCardToken;
@@ -9411,6 +9400,12 @@ public class Main extends XposedModule {
         // a card" must not mean "put the cover back".
         if (sTapSuppressed) return;
         String key = sCardKey.isEmpty() ? trackKey(sWatched) : sCardKey;
+        // A player's card can report an older item during rapid skips. Prefer the live
+        // session of that same player, keeping the card fallback for missing metadata.
+        String sessionKey = trackKey(sWatched);
+        String sessionTitle = keyField(sessionKey, 1);
+        if (!sessionTitle.isEmpty() && !"null".equals(sessionTitle)
+                && keyField(sessionKey, 0).equals(keyField(key, 0))) key = sessionKey;
         // One track, several keys. The string itself changes under a track that has not: the
         // card's own key is pkg|song|artist and the session fallback appends the album, so the
         // moment the card is torn down and rebuilt - which is what a wake from the AOD is - the
@@ -9457,17 +9452,8 @@ public class Main extends XposedModule {
         // Started here rather than once the cover has settled, so the fetch overlaps the
         // transition instead of following it.
         LockLyrics.onTrack(key, sWatched);
-        // What is coming after this one, for the next press. Always, not only when the cover is
-        // on: the queue is what makes a press answerable at all, and reading it costs nothing
-        // when it has not moved.
+        // Queue reads still warm lyric lookups. Artwork waits for the confirmed session.
         Prefetch.onTrack(sWatched);
-        // The player has caught up with a press this already acted on, and the cover on screen is
-        // the right one. Pushing again would compose the same picture and fade it over itself.
-        if (sCoverMode && Prefetch.wasPredicted(titleOf(sWatched))) {
-            Xp.log(TAG + "cover already up from the press, no second push");
-            CoverPush.confirmPrefetchedArtwork(key);
-            return;
-        }
         if (sCoverMode) CoverPush.pushArtAsync(true, true);
         else setCoverEnabled(true, true);
     }

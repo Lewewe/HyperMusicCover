@@ -98,12 +98,21 @@ final class CoverPush {
     }
 
     private static void pushArtToWallpaper(Context ctx, boolean on, Bitmap art) {
+        pushArtToWallpaper(ctx, on, art, Main.sPushGen, null);
+    }
+
+    private static boolean currentPush(int gen, String key) {
+        return gen == Main.sPushGen && (key == null || Main.sameTrack(key, Main.sTrackKey));
+    }
+
+    private static void pushArtToWallpaper(Context ctx, boolean on, Bitmap art,
+                                           int gen, String key) {
+        if (!currentPush(gen, key)) return;
         clearSoftArtwork();
         if (!on || art == null || !shouldSoftenArtwork(art.getWidth(), art.getHeight())) {
-            pushRenderedArtToWallpaper(ctx, on, art);
+            pushRenderedArtToWallpaper(ctx, on, art, false, gen, key);
             return;
         }
-        final int gen = Main.sPushGen;
         Bitmap original = null;
         Bitmap soft = null;
         try {
@@ -115,11 +124,13 @@ final class CoverPush {
             if (soft != null && !soft.isRecycled()) soft.recycle();
             if (original != null && !original.isRecycled()) original.recycle();
             Xp.log(Main.TAG + "thumbnail softening failed: " + t);
-            pushRenderedArtToWallpaper(ctx, on, art);
+            pushRenderedArtToWallpaper(ctx, on, art, false, gen, key);
             return;
         }
         try {
-            pushRenderedArtToWallpaper(ctx, true, soft, true);
+            if (!currentPush(gen, key)) return;
+            pushRenderedArtToWallpaper(ctx, true, soft, true, gen, key);
+            if (!currentPush(gen, key)) return;
             sUnsoftenedArt = original;
             sSoftArtGen = gen;
             original = null;
@@ -141,18 +152,15 @@ final class CoverPush {
         sSoftArtGen = -1;
         try {
             // Some players never publish a larger bitmap. Do not leave them softened forever.
-            pushRenderedArtToWallpaper(ctx, true, original);
+            pushRenderedArtToWallpaper(ctx, true, original, false, gen, key);
         } finally {
             if (!original.isRecycled()) original.recycle();
         }
     }
 
-    private static void pushRenderedArtToWallpaper(Context ctx, boolean on, Bitmap art) {
-        pushRenderedArtToWallpaper(ctx, on, art, false);
-    }
-
     private static void pushRenderedArtToWallpaper(
-            Context ctx, boolean on, Bitmap art, boolean temporaryThumbnail) {
+            Context ctx, boolean on, Bitmap art, boolean temporaryThumbnail, int gen, String key) {
+        if (!currentPush(gen, key)) return;
         long t0 = android.os.SystemClock.uptimeMillis();
         Intent out = wallpaperIntent("art");
         out.putExtra("cardmode", Main.sCoverCardStyle.mode == CoverCardStyle.CARD);
@@ -184,7 +192,7 @@ final class CoverPush {
         out.putExtra("fade", Main.sFadeWp && Main.screenOn());
         if (!on) {
             CoverCardLayer.clear();
-            if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0);
+            if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0, gen, key);
             out.putExtra("off", true);
             ProbeGuard.send(ctx, out);
             Main.sTrackKey = "";
@@ -200,7 +208,10 @@ final class CoverPush {
             return;
         }
         if (art == null) { Xp.log(Main.TAG + "pushart: no album art"); return; }
-        if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) CoverCardLayer.publish(art, temporaryThumbnail);
+        if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) {
+            CoverCardLayer.publish(art, temporaryThumbnail, gen, key);
+        }
+        if (!currentPush(gen, key)) return;
         int w = Main.sScreenW, h = Main.sScreenH;
         if (!Main.sVideoWallpaper && Main.sWpComposes) {
             // The source goes over instead of the composed picture, and the wallpaper process
@@ -221,6 +232,10 @@ final class CoverPush {
                 android.os.Trace.endSection();
             }
             if (shared != null) {
+                if (!currentPush(gen, key)) {
+                    if (src != null) src.recycle();
+                    return;
+                }
                 out.putExtra("src", shared);
                 out.putExtra("tsent", android.os.SystemClock.uptimeMillis());
                 ProbeGuard.send(ctx, out);
@@ -306,7 +321,7 @@ final class CoverPush {
             } catch (Throwable t) {
                 Xp.log(Main.TAG + "frosted video cover failed: " + t);
             }
-            showVideoCover(ctx, true, full, frosted, artPrint(art));
+            showVideoCover(ctx, true, full, frosted, artPrint(art), gen, key);
         }
         long tc = android.os.SystemClock.uptimeMillis();
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
@@ -335,6 +350,10 @@ final class CoverPush {
         // The byte path stays as the fallback: a build whose SELinux refuses the write still
         // has to work, and that is what it worked with before.
         String shared = writeSharedArt(jpg);
+        if (!currentPush(gen, key)) {
+            if (!Main.sVideoWallpaper) full.recycle();
+            return;
+        }
         if (shared != null) out.putExtra("file", shared);
         else out.putExtra("jpg", jpg);
         // Send broadcast first so wallpaper process begins decoding/encoding immediately!
@@ -371,7 +390,8 @@ final class CoverPush {
      * the composed bitmap goes straight onto the view.
      */
     private static void showVideoCover(Context ctx, boolean on, final Bitmap full,
-                                       final Bitmap frosted, final int artPrint) {
+                                       final Bitmap frosted, final int artPrint,
+                                       final int gen, final String key) {
         if (!on) {
             // Held and faded out rather than dropped on the spot: see armCoverFadeOut(). The
             // wallpaper's cut-out subject comes back with the view going, not now - it draws in
@@ -391,6 +411,11 @@ final class CoverPush {
         Main.main().post(new Runnable() {
             @Override
             public void run() {
+                if (!currentPush(gen, key)) {
+                    full.recycle();
+                    if (frosted != null) frosted.recycle();
+                    return;
+                }
                 try {
                     ViewGroup layer = coverLayer();
                     if (layer == null) {
@@ -1258,66 +1283,9 @@ final class CoverPush {
         sSkipAt = android.os.SystemClock.uptimeMillis();
         sSkipDir = dir;
         if (!Main.sCoverMode || !Main.screenOn()) return;
-        // Previous can restart the current track instead of changing it. Keep its artwork
-        // until metadata confirms a different track rather than displaying a queue prediction.
-        if (dir < 0) {
-            if (Main.shouldAnimatePrevious()) CoverCardLayer.beginPreviousWait();
-            return;
-        }
-        // What the queue says is coming. Null for a player that publishes no queue, or a track
-        // whose artwork has not been fetched yet - and then this does nothing and the cover waits
-        // for the player exactly as it used to.
-        final Bitmap art = Prefetch.take(dir);
-        if (art == null) return;
-        final Context ctx = Main.sAppCtx;
-        if (ctx == null) return;
-        // Superseding anything in flight, the way a real track change does: this IS the track
-        // change, ~0.8s before the player will admit to it.
-        final int gen = ++Main.sPushGen;
-        Main.sCtTrack = sSkipAt;
-        Main.sCtArt = sSkipAt;
-        Main.sCtTries = 0;
-        Main.sCtCheckMs = 0L;
-        Main.worker().post(new Runnable() {
-            @Override
-            public void run() {
-                if (gen != Main.sPushGen) return;
-                pushArtToWallpaper(ctx, true, art);
-                // The session still names the previous track here. Record the image now,
-                // but bind its track key only after the player confirms the prediction.
-                sArtPrint = artPrint(art);
-                sArtPixels = artworkPixels(art);
-                sArtW = art.getWidth();
-                sArtH = art.getHeight();
-                sArtLong = Math.max(sArtW, sArtH);
-                sArtKey = "";
-                sPrefetchedArtGen = gen;
-            }
-        });
-    }
-
-    /** Worker-owned generation of the last artwork actually sent by noteSkip(). */
-    private static int sPrefetchedArtGen = -1;
-
-    static void confirmPrefetchedArtwork(final String key) {
-        final Context ctx = Main.sAppCtx;
-        if (ctx == null) return;
-        final int gen = Main.sPushGen;
-        Main.worker().post(new Runnable() {
-            @Override
-            public void run() {
-                if (gen != Main.sPushGen || !Main.sCoverMode
-                        || !Main.sameTrack(key, Main.sTrackKey)) return;
-                if (sPrefetchedArtGen != gen) {
-                    // A prediction may be confirmed before its worker push was queued,
-                    // or after another push replaced it. Resolve through the normal path.
-                    pushArtAsync(true, true);
-                    return;
-                }
-                sArtKey = key;
-                startArtworkQualityWatch(ctx, gen, key);
-            }
-        });
+        // Keep artwork on the confirmed track for every player. Queues can lag, shuffle,
+        // or interpret Previous as a restart, so a transport request never predicts artwork.
+        if (dir < 0 && Main.shouldAnimatePrevious()) CoverCardLayer.beginPreviousWait();
     }
 
     /** What the wallpaper currently shows, coarsely, so a stale source can be recognised. */
@@ -1467,7 +1435,7 @@ final class CoverPush {
             sArtH = art.getHeight();
             sArtLong = Math.max(sArtW, sArtH);
 
-            pushArtToWallpaper(ctx, true, art);
+            pushArtToWallpaper(ctx, true, art, gen, key);
         } catch (Throwable t) {
             Xp.log(Main.TAG + "artwork quality refresh failed: " + t);
         }
@@ -1540,7 +1508,7 @@ final class CoverPush {
                         return;
                     }
                     ImmersiveHost.coverOffSent();
-                    pushArtToWallpaper(ctx, false, null);
+                    pushArtToWallpaper(ctx, false, null, gen, null);
                 }
             }, hold);
             return;
@@ -1661,17 +1629,18 @@ final class CoverPush {
                 // Only when something is really going out. A push with no art leaves the
                 // wallpaper showing what it already showed, and recording 0 here would claim it
                 // was empty and disarm the stale-art check on the next track change.
+                if (!currentPush(gen, key)) return;
                 if (art != null) {
                     sArtPrint = print;
                     sArtPixels = artworkPixels(art);
                     sArtW = art.getWidth();
                     sArtH = art.getHeight();
                     sArtLong = Math.max(sArtW, sArtH);
-                    sArtKey = Main.sTrackKey;
+                    sArtKey = key;
                 }
                 Main.sCtTries = attempt + 1;
                 Main.sCtArt = android.os.SystemClock.uptimeMillis();
-                pushArtToWallpaper(ctx, true, art);
+                pushArtToWallpaper(ctx, true, art, gen, key);
 
                 if (art != null) {
                     startArtworkQualityWatch(ctx, gen, sArtKey);

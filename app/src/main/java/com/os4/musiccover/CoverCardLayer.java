@@ -258,9 +258,13 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     }
 
     static void publish(Bitmap source, boolean temporaryThumbnail) {
+        publish(source, temporaryThumbnail, Main.sPushGen, Main.sTrackKey);
+    }
+
+    static void publish(Bitmap source, boolean temporaryThumbnail, int pushGeneration,
+                        String expectedKey) {
         final int generation = ++sGeneration;
-        final int pushGeneration = Main.sPushGen;
-        final String trackKey = Main.sTrackKey;
+        final String trackKey = expectedKey == null ? Main.sTrackKey : expectedKey;
         if (source == null || source.isRecycled()) return;
         Bitmap readable = null, art = null, aodBackdrop = null;
         try {
