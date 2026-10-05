@@ -4,6 +4,13 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class PreviousArtworkPolicyTest {
+    @Test public void nextWaitsButPreviousRestartDoesNot() {
+        assertTrue(PreviousArtworkPolicy.shouldAnimateSkip(1, false));
+        assertTrue(PreviousArtworkPolicy.shouldAnimateSkip(-1, true));
+        assertFalse(PreviousArtworkPolicy.shouldAnimateSkip(-1, false));
+        assertFalse(PreviousArtworkPolicy.shouldAnimateSkip(0, true));
+    }
+
     @Test public void restartAfterFiveSecondsNeverStartsTheEffect() {
         assertTrue(PreviousArtworkPolicy.shouldAnimate(0L, 100L, 1f, false, 100L));
         assertTrue(PreviousArtworkPolicy.shouldAnimate(5000L, 100L, 1f, false, 100L));

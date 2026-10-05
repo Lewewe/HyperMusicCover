@@ -8,6 +8,9 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.RenderNode;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Choreographer;
@@ -404,31 +407,33 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
      * pad went. It blurs itself now, eased with the pad - the same as LyricView.followBouncer.
      */
     private float bouncerP;
-    private boolean previousWaiting;
-    private float previousWaitP;
-    private String previousWaitKey;
+    private boolean skipWaiting;
+    private float skipWaitP;
+    private float outgoingWaitP;
+    private final RenderNode currentWaitNode = new RenderNode("Cover skip wait");
+    private final RenderNode outgoingWaitNode = new RenderNode("Outgoing cover skip wait");
     private float renderedBlur = -1f;
-    private final Runnable previousWaitTimeout = () -> endPreviousWait();
+    private final Runnable skipWaitTimeout = () -> endSkipWait();
 
-    /** Treat the outgoing artwork while Previous waits for the player to answer. */
-    static void beginPreviousWait() {
+    /** Treat only the outgoing cover while a transport request waits for new artwork. */
+    static void beginSkipWait() {
+        final String requestedKey = Main.sTrackKey;
         Main.main().post(() -> {
             CoverCardLayer v = sView;
             if (v == null || v.current == null || !Main.coverCardVisible()
-                    || LockLyrics.wantsCompactArtwork()) return;
-            v.previousWaiting = true;
-            v.previousWaitKey = Main.sTrackKey;
-            v.removeCallbacks(v.previousWaitTimeout);
-            v.postDelayed(v.previousWaitTimeout, 4000L);
+                    || LockLyrics.wantsCompactArtwork()
+                    || !Main.sameTrack(requestedKey, Main.sTrackKey)
+                    || !Main.sameTrack(requestedKey, v.current.trackKey)) return;
+            v.skipWaiting = true;
+            v.removeCallbacks(v.skipWaitTimeout);
+            v.postDelayed(v.skipWaitTimeout, 4000L);
             v.start();
         });
     }
 
-    private void endPreviousWait() {
-        previousWaiting = false;
-        previousWaitP = 0f;
-        previousWaitKey = null;
-        removeCallbacks(previousWaitTimeout);
+    private void endSkipWait() {
+        skipWaiting = false;
+        removeCallbacks(skipWaitTimeout);
         start();
         invalidate();
     }
@@ -450,17 +455,17 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         float k = dt <= 0f ? 0.25f : (float) (1.0 - Math.exp(-dt / BOUNCER_TAU));
         bouncerP += (want - bouncerP) * k;
         if (Math.abs(want - bouncerP) < 0.01f) bouncerP = want;
-        float waiting = previousWaiting ? 1f : 0f;
-        previousWaitP += (waiting - previousWaitP) * k;
-        if (Math.abs(waiting - previousWaitP) < 0.01f) previousWaitP = waiting;
-        float r = Math.max(bouncerP * BOUNCER_BLUR_DP, previousWaitP * 2f)
+        float waiting = skipWaiting ? 1f : 0f;
+        skipWaitP += (waiting - skipWaitP) * k;
+        if (Math.abs(waiting - skipWaitP) < 0.01f) skipWaitP = waiting;
+        float r = bouncerP * BOUNCER_BLUR_DP
                 * getResources().getDisplayMetrics().density;
         if (Math.abs(r - renderedBlur) > 0.01f) {
             renderedBlur = r;
             setRenderEffect(r < 0.5f ? null : android.graphics.RenderEffect.createBlurEffect(
                     r, r, android.graphics.Shader.TileMode.DECAL));
         }
-        return bouncerP != want || previousWaitP != waiting;
+        return bouncerP != want || skipWaitP != waiting;
     }
 
     /**
@@ -498,10 +503,10 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     }
 
     private void hideImmediately() {
-        previousWaiting = false;
-        previousWaitP = 0f;
-        previousWaitKey = null;
-        removeCallbacks(previousWaitTimeout);
+        skipWaiting = false;
+        skipWaitP = 0f;
+        outgoingWaitP = 0f;
+        removeCallbacks(skipWaitTimeout);
         stop();
         opacity = 0f;
         exitWithCard = false;
@@ -606,10 +611,12 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         current = p;
         // Reveal ready artwork promptly, but fade out the treatment rather than cutting it.
         trackFadeMs = revealReady ? 120L : TRACK_FADE_MS;
-        // The incoming artwork owns its normal quality treatment; the outgoing wait ends here.
-        if (previousWaiting && !Main.sameTrack(previousWaitKey, Main.sTrackKey)) {
-            endPreviousWait();
-            followBouncer(0f);
+        // Keep the wait treatment on the outgoing image throughout the normal crossfade.
+        // The ready incoming image is never blurred or dimmed by a transport request.
+        outgoingWaitP = skipWaitP;
+        if (previous != null && !Main.sameTrack(previous.trackKey, p.trackKey)) {
+            endSkipWait();
+            skipWaitP = 0f;
         }
         ClockCollapse.refreshArtworkSize();
         changedAt = SystemClock.uptimeMillis();
@@ -990,13 +997,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         clipPath.reset();
         clipPath.addRoundRect(square, radius, radius, Path.Direction.CW);
         canvas.clipPath(clipPath);
-        drawArt(canvas, previous, 1f);
-        drawArt(canvas, current, fadeFraction());
-        if (previousWaitP > 0f) {
-            paint.setColor(0xFF000000);
-            paint.setAlpha(Math.round(51f * opacity * previousWaitP));
-            canvas.drawRect(square, paint);
-        }
+        drawWaitingArt(canvas, previous, 1f, outgoingWaitP, outgoingWaitNode);
+        drawWaitingArt(canvas, current, fadeFraction(), skipWaitP, currentWaitNode);
         canvas.restoreToCount(save);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(density);
@@ -1230,6 +1232,35 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     }
 
     private final Rect artSrc = new Rect();
+
+    /** Isolate the waiting effect so it cannot soften an incoming cover or the backdrop. */
+    private void drawWaitingArt(Canvas canvas, Prepared p, float fraction,
+                                float treatment, RenderNode node) {
+        if (p == null || fraction <= 0f) return;
+        if (treatment <= 0f) {
+            drawArt(canvas, p, fraction);
+            return;
+        }
+        Canvas target = canvas;
+        boolean hardware = canvas.isHardwareAccelerated();
+        if (hardware) {
+            int left = (int) Math.floor(square.left), top = (int) Math.floor(square.top);
+            int right = (int) Math.ceil(square.right), bottom = (int) Math.ceil(square.bottom);
+            node.setPosition(left, top, right, bottom);
+            float radius = treatment * 2f * getResources().getDisplayMetrics().density;
+            node.setRenderEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
+            target = node.beginRecording(right - left, bottom - top);
+            target.translate(-left, -top);
+        }
+        drawArt(target, p, fraction);
+        paint.setColor(0xFF000000);
+        paint.setAlpha(Math.round(51f * opacity * fraction * treatment));
+        target.drawRect(square, paint);
+        if (hardware) {
+            node.endRecording();
+            canvas.drawRenderNode(node);
+        }
+    }
 
     private void drawArt(Canvas canvas, Prepared p, float fraction) {
         if (p == null || fraction <= 0f) return;

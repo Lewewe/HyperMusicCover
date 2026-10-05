@@ -1285,7 +1285,8 @@ final class CoverPush {
         if (!Main.sCoverMode || !Main.screenOn()) return;
         // Keep artwork on the confirmed track for every player. Queues can lag, shuffle,
         // or interpret Previous as a restart, so a transport request never predicts artwork.
-        if (dir < 0 && Main.shouldAnimatePrevious()) CoverCardLayer.beginPreviousWait();
+        if (PreviousArtworkPolicy.shouldAnimateSkip(dir,
+                dir < 0 && Main.shouldAnimatePrevious())) CoverCardLayer.beginSkipWait();
     }
 
     /** What the wallpaper currently shows, coarsely, so a stale source can be recognised. */
