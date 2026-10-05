@@ -5,6 +5,69 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class CoverMorphMotionTest {
+    @Test public void notificationThumbnailLandsWithin450msWithoutCuttingTheMainFlight() {
+        for (int fps : new int[]{60, 120}) {
+            CoverMorphMotion motion = new CoverMorphMotion();
+            motion.value = 1f;
+            motion.aim(false);
+            for (int frame = 0; frame < fps * 45 / 100; frame++) {
+                motion.step(1f / fps, CoverMorphMotion.responseFor(true, 0.60f));
+                motion.settleNotificationThumbnail();
+                if (frame < fps / 10) assertFalse(motion.atRest());
+            }
+            assertTrue(motion.atRest());
+            assertEquals(0f, motion.value, 0f);
+        }
+    }
+
+    @Test public void notificationTailShortcutDoesNotSnapCoverExpansion() {
+        CoverMorphMotion motion = new CoverMorphMotion();
+        motion.value = 0.995f;
+        motion.velocity = 0.1f;
+        motion.aim(true);
+        motion.settleNotificationThumbnail();
+        assertEquals(0.995f, motion.value, 0f);
+        assertEquals(0.1f, motion.velocity, 0f);
+    }
+
+    @Test public void landedCompactArtworkReleasesWhileNotificationsKeepMoving() {
+        for (int fps : new int[]{60, 120}) {
+            CoverMorphMotion motion = new CoverMorphMotion();
+            motion.value = 1f;
+            motion.aim(false);
+            boolean released = false;
+            for (int frame = 0; frame < fps; frame++) {
+                motion.step(1f / fps, CoverMorphMotion.responseFor(true, 0.60f));
+                if (motion.canRelease(true, true, false, true, frame * 1000L / fps)) {
+                    released = true;
+                    break;
+                }
+            }
+            assertTrue("Scrolling endpoints must not retain a landed thumbnail copy", released);
+        }
+    }
+
+    @Test public void compactArtworkWaitsForLandingAndThumbnailFade() {
+        CoverMorphMotion motion = new CoverMorphMotion();
+        motion.value = 0.5f;
+        motion.aim(false);
+        assertFalse(motion.canRelease(true, true, false, false, 400L));
+        motion.value = 0f;
+        assertFalse(motion.canRelease(true, false, false, false, 600L));
+        assertTrue(motion.canRelease(true, true, false, false, 720L));
+    }
+
+    @Test public void expansionAndWholeSceneStillWaitForTheirEndpoints() {
+        CoverMorphMotion motion = new CoverMorphMotion();
+        motion.value = 1f;
+        motion.aim(true);
+        assertFalse(motion.canRelease(true, true, false, false, 720L));
+        motion.value = 0f;
+        motion.aim(false);
+        assertFalse(motion.canRelease(false, true, false, false, 720L));
+        assertTrue(motion.canRelease(false, true, true, false, 720L));
+    }
+
     @Test public void compactArtworkSettlesPromptlyEvenWithSlowSceneSettings() {
         for (int fps : new int[]{60, 120}) {
             CoverMorphMotion motion = new CoverMorphMotion();

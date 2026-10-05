@@ -44,6 +44,21 @@ final class CoverMorphMotion {
         return Math.abs(value - target) < 0.001f && Math.abs(velocity) < 0.012f;
     }
 
+    /** End the barely visible spring tail before a notification drag can carry its copy away. */
+    void settleNotificationThumbnail() {
+        if (target == 0f && Math.abs(value) < 0.008f && Math.abs(velocity) < 0.20f) {
+            value = velocity = 0f;
+        }
+    }
+
+    /** A landed compact thumbnail belongs to the scrolling media player, not the copy. */
+    boolean canRelease(boolean compactToggle, boolean handoffDone, boolean endsSettled,
+                       boolean clockFlying, long elapsedMs) {
+        if (!atRest() || !handoffDone) return false;
+        if (compactToggle && target == 0f) return true;
+        return endsSettled && (!clockFlying || elapsedMs > 2200L);
+    }
+
     /** The card's reserved placement is centred around its live playback scale. */
     static Box cardSquare(float x, float y, float side, float scale) {
         float drawn = side * scale;

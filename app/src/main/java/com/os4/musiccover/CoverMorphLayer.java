@@ -29,6 +29,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     private CoverMorphMotion.Box thumb, cover;
     private long lastFrame, startedAt;
     private boolean compactToggle;
+    private boolean notificationMorph;
     private boolean awaitArtworkPush;
     private float fullAlpha;
     private boolean running;
@@ -76,6 +77,12 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         return begin(toCover, true);
     }
 
+    static boolean beginNotificationCompact(boolean toCover) {
+        boolean started = begin(toCover, true);
+        if (started && sView != null) sView.notificationMorph = true;
+        return started;
+    }
+
     private static boolean begin(boolean toCover, boolean compactToggle) {
         if (Looper.myLooper() != Looper.getMainLooper() || !Main.coverMorphEligible()) return false;
         // The square card only. The full-screen cover keeps its own transition - the clock
@@ -87,6 +94,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         CoverMorphLayer old = sView;
         if (old != null && old.running) {
             if (!old.mini && old.cardMode == Main.coverMorphCardMode()) {
+                old.notificationMorph = false;
                 old.compactToggle = compactToggle;
                 old.motion.aim(toCover);
                 old.revealAt = 0L;
@@ -155,6 +163,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         if (root.getChildAt(root.getChildCount() - 1) != v) v.bringToFront();
         v.reset(art, Main.coverMorphCardMode(), thumb, cover, toCover);
         v.mini = mini;
+        v.notificationMorph = false;
         v.compactToggle = compactToggle;
         if (mini) MiniPlayerRuntime.setArtBridged(true);
         v.setVisibility(VISIBLE);
@@ -213,7 +222,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         // way as on the card's own route. Back to the pill the thumbnail was never the source.
         if (v.mini) return v.motion.target == 1f ? 0f : 1f;
         if (v.motion.target != 0f || v.revealAt == 0L) return 0f;
-        float r = (SystemClock.uptimeMillis() - v.revealAt) / (float) THUMB_FADE_MS;
+        float r = (SystemClock.uptimeMillis() - v.revealAt) / (float) (v.notificationMorph ? 80L : THUMB_FADE_MS);
         return Math.max(0f, Math.min(1f, r));
     }
     static boolean cardSuppressed() { return active() && sView.cardMode; }
@@ -238,13 +247,18 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
                 : Math.min(0.05f, Math.max(0f, (nowNs - lastFrame) / 1e9f));
         lastFrame = nowNs;
         motion.step(dt, response());
+        if (notificationMorph) motion.settleNotificationThumbnail();
         CoverMorphMotion.Box liveThumb = mini
                 ? MiniPlayerRuntime.artworkRestBox() : Main.coverMorphThumbnail();
         // Both ends chase their live boxes rather than taking them: the target is placed between
         // a clock that is collapsing and a media card being re-laid out, and one of them stepped
         // mid-flight - filmed as the copy sliding sideways at a constant size for a frame.
         float follow = (float) (1.0 - Math.exp(-dt / ENDPOINT_TAU));
-        if (liveThumb != null) thumb = chase(thumb, liveThumb, follow);
+        if (liveThumb != null) {
+            // Notification drags move the destination continuously; keep its anchor under the real thumbnail.
+            thumb = compactToggle && motion.target == 0f && (notificationMorph || motion.atRest())
+                    ? liveThumb : chase(thumb, liveThumb, follow);
+        }
         CoverMorphMotion.Box liveCover = Main.coverMorphTarget(art);
         if (liveCover != null) cover = chase(cover, liveCover, follow);
         boolean endsSettled = (liveThumb == null || near(thumb, liveThumb))
@@ -271,8 +285,8 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         // Back at the thumbnail, the layer stays until the thumbnail has fully faded in.
         boolean handoffDone = motion.target == 0f ? mini || thumbAlpha() >= 1f
                 : artworkReady && cardReady && (cardMode || fullAlpha < 0.01f);
-        if (motion.atRest() && handoffDone && endsSettled && (!clockFlying
-                || SystemClock.uptimeMillis() - startedAt > 2200L)) {
+        if (motion.canRelease(compactToggle, handoffDone, endsSettled, clockFlying,
+                SystemClock.uptimeMillis() - startedAt)) {
             finish();
         } else {
             Choreographer.getInstance().postFrameCallback(this);

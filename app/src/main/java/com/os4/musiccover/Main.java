@@ -8570,7 +8570,10 @@ public class Main extends XposedModule {
         boolean compact = NotificationArtworkPolicy.compact(was, open, count,
                 sCoverMode && keyguardShowing(), !LockLyrics.wantsCompactArtwork());
         if (was == compact) return;
-        if (sCoverMode && keyguardShowing()) beginCompactArtworkMorph(!compact);
+        if (sCoverMode && keyguardShowing()) {
+            if (!CoverMorphLayer.active()) sMorphKey = sCardKey;
+            CoverMorphLayer.beginNotificationCompact(!compact);
+        }
         LockLyrics.setNotificationCompact(compact);
         refreshMediaCardForMorph();
         LockLyrics.refresh();
