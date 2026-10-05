@@ -1256,6 +1256,12 @@ final class CoverPush {
         sSkipAt = android.os.SystemClock.uptimeMillis();
         sSkipDir = dir;
         if (!Main.sCoverMode || !Main.screenOn()) return;
+        // Previous can restart the current track instead of changing it. Keep its artwork
+        // until metadata confirms a different track rather than displaying a queue prediction.
+        if (dir < 0) {
+            if (Main.shouldAnimatePrevious()) CoverCardLayer.beginPreviousWait();
+            return;
+        }
         // What the queue says is coming. Null for a player that publishes no queue, or a track
         // whose artwork has not been fetched yet - and then this does nothing and the cover waits
         // for the player exactly as it used to.
@@ -1582,17 +1588,20 @@ final class CoverPush {
                     Xp.log(Main.TAG + "art push superseded, dropping it");
                     return;
                 }
+                final String key = Main.sTrackKey;
                 boolean last = attempt >= ART_TRIES - 1;
                 int[] sessionBits = new int[1];
                 android.os.Trace.beginSection("MC push.read");
                 Bitmap art;
                 int print;
                 try {
-                    art = Main.albumArt(ctx, last || allowCard, sessionBits);
+                    art = Main.albumArtForTrack(ctx, last || allowCard, sessionBits, key);
                     print = art == null ? 0 : artPrint(art);
                 } finally {
                     android.os.Trace.endSection();
                 }
+                // Reading a media session or waiting for the card can span another skip.
+                if (gen != Main.sPushGen || !Main.sameTrack(key, Main.sTrackKey)) return;
                 boolean presentationChanged = art != null
                         && ArtworkChangePolicy.isYouTube(Main.sTrackKey)
                         && Main.sameTrack(sArtKey, Main.sTrackKey)

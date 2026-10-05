@@ -5190,12 +5190,23 @@ public class Main extends XposedModule {
      * the other is a player that never publishes one - and this is the only place that sees it.
      */
     static Bitmap albumArt(Context ctx, boolean allowCard, int[] sessionBits) {
+        return albumArtForTrack(ctx, allowCard, sessionBits, null);
+    }
+
+    /** A track change must not borrow artwork from a session or card still on another song. */
+    static Bitmap albumArtForTrack(Context ctx, boolean allowCard, int[] sessionBits,
+                                   String expectedKey) {
         if (sessionBits != null) sessionBits[0] = -1;
         MediaController c = controllerFromCard(ctx);
         if (c == null) c = pickController(ctx);
         if (c != null) {
             MediaMetadata md = c.getMetadata();
             if (md != null) {
+                String actualKey = c.getPackageName() + "|"
+                        + md.getString(MediaMetadata.METADATA_KEY_TITLE) + "|"
+                        + md.getString(MediaMetadata.METADATA_KEY_ARTIST) + "|"
+                        + md.getString(MediaMetadata.METADATA_KEY_ALBUM);
+                if (expectedKey != null && !sameTrack(expectedKey, actualKey)) return null;
                 Bitmap b = bestSessionArt(md);
                 if (b != null) {
                     if (sessionBits != null) sessionBits[0] = 1;
@@ -5210,6 +5221,7 @@ public class Main extends XposedModule {
             }
         }
         if (!allowCard) return null;
+        if (expectedKey != null && !sameTrack(expectedKey, sCardKey)) return null;
         return cardThumbnail();
     }
 
@@ -9269,6 +9281,21 @@ public class Main extends XposedModule {
         updateCoverCardPlayback(c == null ? null : c.getPlaybackState());
         MiniPlayerRuntime.refresh();
         onMediaUpdate();
+    }
+
+    /** Read the position before the transport command can reset it to zero. */
+    static boolean shouldAnimatePrevious() {
+        try {
+            MediaController c = sWatched;
+            if (c == null) return false;
+            PlaybackState state = c.getPlaybackState();
+            return state != null && PreviousArtworkPolicy.shouldAnimate(state.getPosition(),
+                    state.getLastPositionUpdateTime(), state.getPlaybackSpeed(),
+                    state.getState() == PlaybackState.STATE_PLAYING,
+                    android.os.SystemClock.elapsedRealtime());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static final Runnable sRecheckPlayback = new Runnable() {

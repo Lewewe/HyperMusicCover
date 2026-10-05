@@ -27,10 +27,12 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         final Bitmap art;
         final Bitmap aodBackdrop;
         final int generation;
-        Prepared(Bitmap art, Bitmap aodBackdrop, int generation) {
+        final int pushGeneration;
+        Prepared(Bitmap art, Bitmap aodBackdrop, int generation, int pushGeneration) {
             this.art = art;
             this.aodBackdrop = aodBackdrop;
             this.generation = generation;
+            this.pushGeneration = pushGeneration;
         }
         void recycle() {
             art.recycle();
@@ -252,6 +254,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     static void publish(Bitmap source, boolean temporaryThumbnail) {
         final int generation = ++sGeneration;
+        final int pushGeneration = Main.sPushGen;
         if (source == null || source.isRecycled()) return;
         Bitmap readable = null, art = null, aodBackdrop = null;
         try {
@@ -284,7 +287,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
             } catch (Throwable t) {
                 Xp.log("[MCCard] AOD backdrop preparation failed: " + t);
             }
-            final Prepared p = new Prepared(art, aodBackdrop, generation);
+            final Prepared p = new Prepared(art, aodBackdrop, generation, pushGeneration);
             art = null;
             aodBackdrop = null;
             final Prepared old = sPending;
@@ -382,6 +385,34 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
      * pad went. It blurs itself now, eased with the pad - the same as LyricView.followBouncer.
      */
     private float bouncerP;
+    private boolean previousWaiting;
+    private float previousWaitP;
+    private String previousWaitKey;
+    private float renderedBlur = -1f;
+    private final Runnable previousWaitTimeout = () -> endPreviousWait();
+
+    /** Treat the outgoing artwork while Previous waits for the player to answer. */
+    static void beginPreviousWait() {
+        Main.main().post(() -> {
+            CoverCardLayer v = sView;
+            if (v == null || v.current == null || !Main.coverCardVisible()
+                    || LockLyrics.wantsCompactArtwork()) return;
+            v.previousWaiting = true;
+            v.previousWaitKey = Main.sTrackKey;
+            v.removeCallbacks(v.previousWaitTimeout);
+            v.postDelayed(v.previousWaitTimeout, 4000L);
+            v.start();
+        });
+    }
+
+    private void endPreviousWait() {
+        previousWaiting = false;
+        previousWaitP = 0f;
+        previousWaitKey = null;
+        removeCallbacks(previousWaitTimeout);
+        start();
+        invalidate();
+    }
     private static final float BOUNCER_BLUR_DP = 24f;
     /**
      * Time constant of the ease, in seconds. Short: the level is the pad's own fade already
@@ -396,15 +427,21 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     /** @return whether the blur is still moving, so the frames keep coming until it lands */
     private boolean followBouncer(float dt) {
         float want = bouncerTarget();
-        if (bouncerP == want) return false;
         // The first step of a frame has no dt; it still has to start moving.
         float k = dt <= 0f ? 0.25f : (float) (1.0 - Math.exp(-dt / BOUNCER_TAU));
         bouncerP += (want - bouncerP) * k;
         if (Math.abs(want - bouncerP) < 0.01f) bouncerP = want;
-        float r = bouncerP * BOUNCER_BLUR_DP * getResources().getDisplayMetrics().density;
-        setRenderEffect(r < 0.5f ? null : android.graphics.RenderEffect.createBlurEffect(
-                r, r, android.graphics.Shader.TileMode.DECAL));
-        return bouncerP != want;
+        float waiting = previousWaiting ? 1f : 0f;
+        previousWaitP += (waiting - previousWaitP) * k;
+        if (Math.abs(waiting - previousWaitP) < 0.01f) previousWaitP = waiting;
+        float r = Math.max(bouncerP * BOUNCER_BLUR_DP, previousWaitP * 2f)
+                * getResources().getDisplayMetrics().density;
+        if (Math.abs(r - renderedBlur) > 0.01f) {
+            renderedBlur = r;
+            setRenderEffect(r < 0.5f ? null : android.graphics.RenderEffect.createBlurEffect(
+                    r, r, android.graphics.Shader.TileMode.DECAL));
+        }
+        return bouncerP != want || previousWaitP != waiting;
     }
 
     /**
@@ -442,6 +479,10 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     }
 
     private void hideImmediately() {
+        previousWaiting = false;
+        previousWaitP = 0f;
+        previousWaitKey = null;
+        removeCallbacks(previousWaitTimeout);
         stop();
         opacity = 0f;
         exitWithCard = false;
@@ -531,10 +572,16 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     private void adoptPending() {
         Prepared p = sPending;
-        if (p == null || p == current || p.generation != sGeneration) return;
+        if (p == null || p == current || p.generation != sGeneration
+                || p.pushGeneration != Main.sPushGen) return;
         if (previous != null) previous.recycle();
         previous = current;
         current = p;
+        // The incoming artwork owns its normal quality treatment; the outgoing wait ends here.
+        if (previousWaiting && !Main.sameTrack(previousWaitKey, Main.sTrackKey)) {
+            endPreviousWait();
+            followBouncer(0f);
+        }
         ClockCollapse.refreshArtworkSize();
         changedAt = SystemClock.uptimeMillis();
         start();
@@ -892,6 +939,11 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         canvas.clipPath(clipPath);
         drawArt(canvas, previous, 1f);
         drawArt(canvas, current, fadeFraction());
+        if (previousWaitP > 0f) {
+            paint.setColor(0xFF000000);
+            paint.setAlpha(Math.round(51f * opacity * previousWaitP));
+            canvas.drawRect(square, paint);
+        }
         canvas.restoreToCount(save);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(density);
