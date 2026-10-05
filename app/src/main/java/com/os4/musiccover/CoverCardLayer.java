@@ -408,14 +408,15 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
      */
     private float bouncerP;
     private boolean skipWaiting;
-    private float skipWaitP;
-    private float outgoingWaitP;
+    private boolean skipEffectActive;
+    private boolean skipContracted;
+    private float skipTreatment;
     private final RenderNode currentWaitNode = new RenderNode("Cover skip wait");
     private final RenderNode outgoingWaitNode = new RenderNode("Outgoing cover skip wait");
     private float renderedBlur = -1f;
-    private final Runnable skipWaitTimeout = () -> endSkipWait();
+    private final Runnable skipWaitTimeout = () -> finishSkipEffect();
 
-    /** Treat only the outgoing cover while a transport request waits for new artwork. */
+    /** Arm the treatment for the shrink and rebound of a confirmed transport transition. */
     static void beginSkipWait() {
         beginSkipWait(Main.sTrackKey, Main.sTrackKey);
     }
@@ -428,6 +429,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
                     || !Main.sameTrack(expectedTrackKey, Main.sTrackKey)
                     || !Main.sameTrack(requestedKey, v.current.trackKey)) return;
             v.skipWaiting = true;
+            v.skipEffectActive = true;
+            v.skipContracted = v.scale.value < CardSpring.PLAYING - 0.001f;
             v.removeCallbacks(v.skipWaitTimeout);
             v.postDelayed(v.skipWaitTimeout, 4000L);
             v.start();
@@ -435,10 +438,28 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     }
 
     private void endSkipWait() {
+        // Receiving artwork ends the wait, but the treatment follows the remaining rebound.
         skipWaiting = false;
-        removeCallbacks(skipWaitTimeout);
         start();
         invalidate();
+    }
+
+    private void finishSkipEffect() {
+        skipWaiting = false;
+        skipEffectActive = false;
+        removeCallbacks(skipWaitTimeout);
+        start();
+    }
+
+    private boolean followSkipTreatment(float dt) {
+        if (skipEffectActive) {
+            skipTreatment = CardSpring.shrinkFraction(scale.value);
+            return false;
+        }
+        // Ease out a cancelled or timed-out transition instead of cutting the effect.
+        skipTreatment *= (float) Math.exp(-Math.max(0f, dt) / BOUNCER_TAU);
+        if (skipTreatment < 0.01f) skipTreatment = 0f;
+        return skipTreatment > 0f;
     }
     private static final float BOUNCER_BLUR_DP = 24f;
     /**
@@ -458,9 +479,6 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         float k = dt <= 0f ? 0.25f : (float) (1.0 - Math.exp(-dt / BOUNCER_TAU));
         bouncerP += (want - bouncerP) * k;
         if (Math.abs(want - bouncerP) < 0.01f) bouncerP = want;
-        float waiting = skipWaiting ? 1f : 0f;
-        skipWaitP += (waiting - skipWaitP) * k;
-        if (Math.abs(waiting - skipWaitP) < 0.01f) skipWaitP = waiting;
         float r = bouncerP * BOUNCER_BLUR_DP
                 * getResources().getDisplayMetrics().density;
         if (Math.abs(r - renderedBlur) > 0.01f) {
@@ -468,7 +486,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
             setRenderEffect(r < 0.5f ? null : android.graphics.RenderEffect.createBlurEffect(
                     r, r, android.graphics.Shader.TileMode.DECAL));
         }
-        return bouncerP != want || skipWaitP != waiting;
+        return bouncerP != want;
     }
 
     /**
@@ -507,8 +525,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     private void hideImmediately() {
         skipWaiting = false;
-        skipWaitP = 0f;
-        outgoingWaitP = 0f;
+        skipEffectActive = false;
+        skipTreatment = 0f;
         removeCallbacks(skipWaitTimeout);
         stop();
         opacity = 0f;
@@ -614,12 +632,9 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         current = p;
         // Reveal ready artwork promptly, but fade out the treatment rather than cutting it.
         trackFadeMs = revealReady ? 120L : TRACK_FADE_MS;
-        // Keep the wait treatment on the outgoing image throughout the normal crossfade.
-        // The ready incoming image is never blurred or dimmed by a transport request.
-        outgoingWaitP = skipWaitP;
+        // The treatment follows the cover scale across the artwork swap, not its crossfade.
         if (previous != null && !Main.sameTrack(previous.trackKey, p.trackKey)) {
             endSkipWait();
-            skipWaitP = 0f;
         }
         ClockCollapse.refreshArtworkSize();
         changedAt = SystemClock.uptimeMillis();
@@ -950,6 +965,16 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         // At the response the app's 缩放动画阻尼 sets, so the card keeps time with the clock,
         // the wallpaper and the morph instead of running on a clock of its own.
         else scale.step(scaleTarget, dt, Main.sClockResponse);
+        if (skipEffectActive && scale.value < CardSpring.PLAYING - 0.001f) {
+            skipContracted = true;
+        }
+        // Finish at the first return to full size, so the spring's later bounce cannot reblur.
+        if (skipEffectActive && (phase == ClockCollapse.Phase.AOD
+                || ((!skipWaiting || skipContracted) && playing
+                    && scale.value >= CardSpring.PLAYING - 0.001f))) {
+            finishSkipEffect();
+        }
+        boolean treating = followSkipTreatment(dt);
         boolean placing = followPlace(phase, dt, response, target);
         if (previous != null && (phase == ClockCollapse.Phase.AOD
                 || SystemClock.uptimeMillis() - changedAt > trackFadeMs)) {
@@ -962,7 +987,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         int visibility = opacity > 0f || target > 0f ? VISIBLE : GONE;
         if (getVisibility() != visibility) setVisibility(visibility);
         if (visibility == VISIBLE) invalidate();
-        boolean settling = blurring || Math.abs(target - opacity) > 0.001f
+        boolean settling = blurring || treating || Math.abs(target - opacity) > 0.001f
                 || (phase != ClockCollapse.Phase.AOD && !scale.atRest(scaleTarget))
                 || previous != null || placing || (rise < 1f && opacity > 0f)
                 || (aodSince != 0L && nowNs - aodSince < AOD_SETTLE_NS)
@@ -1000,8 +1025,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         clipPath.reset();
         clipPath.addRoundRect(square, radius, radius, Path.Direction.CW);
         canvas.clipPath(clipPath);
-        drawWaitingArt(canvas, previous, 1f, outgoingWaitP, outgoingWaitNode);
-        drawWaitingArt(canvas, current, fadeFraction(), skipWaitP, currentWaitNode);
+        drawWaitingArt(canvas, previous, 1f, skipTreatment, outgoingWaitNode);
+        drawWaitingArt(canvas, current, fadeFraction(), skipTreatment, currentWaitNode);
         canvas.restoreToCount(save);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(density);
@@ -1236,7 +1261,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     private final Rect artSrc = new Rect();
 
-    /** Isolate the waiting effect so it cannot soften an incoming cover or the backdrop. */
+    /** Keep the scale-driven transition treatment inside the artwork, away from the backdrop. */
     private void drawWaitingArt(Canvas canvas, Prepared p, float fraction,
                                 float treatment, RenderNode node) {
         if (p == null || fraction <= 0f) return;

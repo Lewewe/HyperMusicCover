@@ -66,7 +66,7 @@
     <string name="credits_group_ui">Interface</string>
     <string name="credits_group_lyrics">Lock screen</string>
     <string name="credits_group_tools">Running and shipping</string>
-    <string name="credits_lewewe">Maintains HyperMusicCover-Enhanced: automatic high-resolution artwork refresh; reliable rapid skips and Previous-button handling; YouTube Music song/video cover switching; gentle thumbnail blur and dimming; single-image backgrounds with artwork-derived colors; smoother artwork transitions and left-aligned track details; lyric-aware artwork gestures; adaptive clock sizing for rectangular covers; adjustable pill and shortcut blur with a media-player focus fade; smarter notification-list and stack transitions; AOD artwork restoration and clock placement fixes; and improved English localization while preserving Chinese.</string>
+    <string name="credits_lewewe">Maintains HyperMusicCover-Enhanced, improving artwork, animations, lyrics gestures, notifications, pill blur, AOD, and English localization.</string>
     <string name="credits_hypernavbar">The whole UI scaffolding: theme, floating and liquid-glass navigation bars, background blur, the about page and the locale helper</string>
     <string name="credits_miuix">Every component this interface is built from</string>
     <string name="credits_liquid_glass">The lens, the inner shadow and the vibrancy behind the liquid glass</string>

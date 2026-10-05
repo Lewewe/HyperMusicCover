@@ -11,6 +11,12 @@ final class CardSpring {
     static final float DEFAULT_RESPONSE = (float) (2.0 * Math.PI / 18.0);
     private static final double DAMPING = 0.56;
 
+    /** Normalized contraction; clamp the spring's undershoot and overshoot. */
+    static float shrinkFraction(float scale) {
+        if (!Float.isFinite(scale)) return 0f;
+        return Math.max(0f, Math.min(1f, (PLAYING - scale) / (PLAYING - PAUSED)));
+    }
+
     float value = PLAYING;
     float velocity;
 

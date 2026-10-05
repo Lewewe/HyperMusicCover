@@ -5,6 +5,27 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class CardSpringTest {
+    @Test public void transitionTreatmentTracksTheActualRebound() {
+        CardSpring spring = new CardSpring();
+        spring.snap(CardSpring.PAUSED);
+        float previous = CardSpring.shrinkFraction(spring.value);
+        assertEquals(1f, previous, 0.0001f);
+        for (int i = 0; i < 120 && spring.value < CardSpring.PLAYING; i++) {
+            spring.step(CardSpring.PLAYING, 1f / 120f);
+            float treatment = CardSpring.shrinkFraction(spring.value);
+            assertTrue(treatment <= previous);
+            previous = treatment;
+        }
+        assertEquals(0f, previous, 0.0001f);
+    }
+
+    @Test public void transitionTreatmentDoesNotExceedItsRangeDuringSpringOvershoot() {
+        assertEquals(1f, CardSpring.shrinkFraction(0.85f), 0f);
+        assertEquals(0f, CardSpring.shrinkFraction(1.05f), 0f);
+        assertEquals(0f, CardSpring.shrinkFraction(Float.NaN), 0f);
+        assertEquals(0.5f, CardSpring.shrinkFraction(0.95f), 0.0001f);
+    }
+
     @Test public void playbackHasSmallReboundAndSettles() {
         CardSpring spring = new CardSpring();
         float smallest = spring.value;
