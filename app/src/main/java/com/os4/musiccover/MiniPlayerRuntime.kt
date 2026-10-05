@@ -1631,11 +1631,22 @@ object MiniPlayerRuntime {
         View::class.java.getMethod("setPassWindowBlurEnabled", Boolean::class.javaPrimitiveType)
     }
 
+    private val suppressedPillBackdrops = WeakHashMap<View, Boolean>()
+
+    /** A stretched pill must not blur the player underneath its own focus animation. */
+    internal fun suppressPillBackdrop(view: ImageView, suppress: Boolean) {
+        val container = view.parent as? View ?: return
+        if (suppress) suppressedPillBackdrops[container] = true
+        else suppressedPillBackdrops.remove(container)
+        configuredBackground(view)
+    }
+
     /** Blur the backdrop only; glyphs and shortcut icons remain outside the blurred content. */
     private fun configuredBackground(view: ImageView): Boolean = runCatching {
         val config = JSONObject(configJson(view.context))
         val blur = config.optBoolean(MiniPlayerConfig.BACKGROUND_BLUR)
         val container = view.parent as? View ?: return false
+        val useBlur = blur && suppressedPillBackdrops[container] != true
         val radius = (MiniPlayerConfig.blurRadius(config.optDouble(
             MiniPlayerConfig.BACKGROUND_BLUR_RADIUS, 30.0))
             * view.resources.displayMetrics.density).toInt()
@@ -1645,10 +1656,10 @@ object MiniPlayerRuntime {
                 runCatching { View::class.java.getMethod("clearMiBackgroundBlendColor").invoke(target) }
                 runCatching { View::class.java.getMethod("setMiGlassBlurRadius",
                     Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).invoke(target, 0, 0) }
-                backgroundMode.invoke(target, if (blur && target === container) 1 else 0)
-                backgroundRadius.invoke(target, if (blur && target === container) radius else 0)
-                viewBlurMode.invoke(target, if (blur) 1 else 0)
-                passWindowBlur.invoke(target, blur)
+                backgroundMode.invoke(target, if (useBlur && target === container) 1 else 0)
+                backgroundRadius.invoke(target, if (useBlur && target === container) radius else 0)
+                viewBlurMode.invoke(target, if (useBlur) 1 else 0)
+                passWindowBlur.invoke(target, useBlur)
             }
         }
         view.background = null

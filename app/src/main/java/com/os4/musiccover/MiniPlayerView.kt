@@ -705,6 +705,14 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
      */
     private var layoutOnly = false
 
+    private var backdropBlurSuppressed = false
+
+    fun suppressBackdropBlur(suppress: Boolean) {
+        if (backdropBlurSuppressed == suppress) return
+        backdropBlurSuppressed = suppress
+        MiniPlayerRuntime.suppressPillBackdrop(materialLayer, suppress)
+    }
+
     fun beginMorph(layoutOnly: Boolean = false) {
         if (morphing) return
         this.layoutOnly = layoutOnly
@@ -783,6 +791,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     fun endMorph() {
         if (!morphing) return
         morphing = false
+        suppressBackdropBlur(false)
         // The play button back in its own place, where a row move had carried it (setMorphFrame).
         if (layoutOnly) {
             toggle.translationX = 0f

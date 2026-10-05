@@ -446,6 +446,9 @@ internal class MiniCardMorph(
         // out as it heads for the card, the card's coming in once the pill's glass leaves it.
         // In the card's own pixels, which the stack's transform and the morph's scale s shrink.
         val largeArtwork = Main.miniPlayerLargeArtworkTarget()
+        // Alpha on the material child does not disable the parent's vendor backdrop blur.
+        // Remove that second blur layer while opening either media-player presentation.
+        mini.suppressBackdropBlur(mediaCard && toNative)
         val cardBlurPx = if (mediaCard) 3f * mini.resources.displayMetrics.density else blurPx
         blurCard(cardBlurPx * cardBlurFactor(c, mediaCard, largeArtwork, toNative) / max(s, 0.05f))
         mini.setMorphContentBlur(blurPx * pillBlurFactor(c, mediaCard, largeArtwork, toNative))
