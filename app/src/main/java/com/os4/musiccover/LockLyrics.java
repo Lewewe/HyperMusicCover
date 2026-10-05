@@ -312,8 +312,12 @@ final class LockLyrics {
      * drops the lines, and the song still has them to bring back.
      */
     static boolean hasLyrics() {
-        return sDemo || !sLines.isEmpty() || CACHE.containsKey(sKey)
-                || (sLoading && sHadLyrics);
+        return hasCurrentLyrics() || (sLoading && sHadLyrics);
+    }
+
+    /** A button must not inherit the previous song's availability while a lookup is pending. */
+    static boolean hasCurrentLyrics() {
+        return sDemo || !sLines.isEmpty() || CACHE.containsKey(sKey);
     }
 
     /** Whether the last settled answer - not one still loading - had lines. See hasLyrics(). */
@@ -1203,6 +1207,7 @@ final class LockLyrics {
         // A new song or a switch in the still AOD: nothing is shown until the display is let up.
         if (sStill) drawStill();
         CoverCardLayer.refresh();
+        Main.refreshLyricsButton();
     }
 
     /** The app's switch. The setting: it is written to the state file and the app reads it back. */

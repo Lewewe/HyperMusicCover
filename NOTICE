@@ -73,6 +73,10 @@ part of the whole without being relicensed.
   The Kuwo lyric source and the TTML Hub catalogue client are adapted from
   that project's files licensed under Apache-2.0, Copyright 2026 juren233.
 
+  Miuix (https://github.com/compose-miuix-ui/miuix)
+  The native lyrics button uses an adapted Notes.Regular vector from miuix-icons,
+  Copyright 2025, compose-miuix-ui contributors, licensed under Apache-2.0.
+
   accompanist-lyrics-core (https://github.com/6xingyv/accompanist-lyrics-core)
   The lock screen lyric parser, used unmodified as a dependency.
 

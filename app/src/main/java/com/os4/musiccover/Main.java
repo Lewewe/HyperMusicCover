@@ -7476,7 +7476,7 @@ public class Main extends XposedModule {
                     // Only worth waiting for while something still wants something from the
                     // card: the restyle on the way in, or the artwork tap that is the way back.
                     if (attempt < CARD_RETRIES
-                            && ((sCoverMode && (sMcHideArt || sMcTitleTap))
+                            && ((sCoverMode && (sMcHideArt || sMcTitleTap || LockLyrics.sEnabled))
                                 || wantsArtTap())) {
                         main().postDelayed(new Runnable() {
                             @Override
@@ -7499,9 +7499,9 @@ public class Main extends XposedModule {
                         .getIdentifier("header_title", "id", "com.android.systemui"));
                 sCardArtist = card.findViewById(card.getResources()
                         .getIdentifier("header_artist", "id", "com.android.systemui"));
-                assertMediaCard(card);
-                if (sCoverMode && (sMcHideArt || sMcTitleTap)) guardCard(card);
+                if (sCoverMode && (sMcHideArt || sMcTitleTap || LockLyrics.sEnabled)) guardCard(card);
                 else releaseCardGuard();
+                assertMediaCard(card);
             }
         });
     }
@@ -7584,8 +7584,15 @@ public class Main extends XposedModule {
                 if (art.getAlpha() != a) art.setAlpha(a);
             }
         }
-        alignCardTextLeft(card, (TextView) sCardTitle, hideP);
-        alignCardTextLeft(card, (TextView) sCardArtist, hideP);
+        if (!onKeyguard) LyricsButton.release();
+        boolean lyricsButton = onKeyguard && !sCardForced && sCoverMode
+                && coverMorphCardMode() && !LockLyrics.wantsCompactArtwork()
+                && LockLyrics.sEnabled && LockLyrics.hasCurrentLyrics()
+                && coverMorphEligible() && sCardShowing && card.isShown();
+        float lyricsInset = LyricsButton.update(card, lyricsButton);
+        alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
+        alignCardTextLeft(card, (TextView) sCardArtist, hideP, lyricsInset);
+        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
     }
@@ -7757,9 +7764,9 @@ public class Main extends XposedModule {
     }
 
     /** Move the drawn text into the hidden thumbnail's slot without rewriting OEM constraints. */
-    private static void alignCardTextLeft(View card, TextView text, float progress) {
+    private static void alignCardTextLeft(View card, TextView text, float progress, float lyricsInset) {
         if (text == null) return;
-        if (progress <= 0f) {
+        if (progress <= 0f && lyricsInset <= 0f) {
             if (text.getTranslationX() != 0f) text.setTranslationX(0f);
             return;
         }
@@ -7773,7 +7780,7 @@ public class Main extends XposedModule {
         }
         start = Math.max(card.getPaddingLeft(), start);
         float inkLeft = textLeft + text.getPaddingLeft() + layout.getLineLeft(0);
-        float dx = (start - inkLeft) * progress;
+        float dx = (start - inkLeft) * progress + lyricsInset;
         if (text.getTranslationX() != dx) text.setTranslationX(dx);
     }
 
@@ -8759,6 +8766,7 @@ public class Main extends XposedModule {
         // nothing would ever run the assert that would have done it, and the shade would keep a
         // title that pauses the music.
         applyTitleTap(null, false);
+        LyricsButton.release();
         if (d == null || g == null) return;
         try {
             d.getViewTreeObserver().removeOnPreDrawListener(g);
@@ -9880,6 +9888,17 @@ public class Main extends XposedModule {
     private static boolean moved(float x, float y, float fromX, float fromY) {
         float dx = x - fromX, dy = y - fromY;
         return dx * dx + dy * dy > sTwoSlop * sTwoSlop;
+    }
+
+    static void refreshLyricsButton() {
+        applyMediaCard();
+    }
+
+    static void openLyricsFromButton() {
+        if (!sCoverMode || LockLyrics.wantsCompactArtwork()
+                || !LockLyrics.sEnabled || !LockLyrics.hasCurrentLyrics()) return;
+        onTwoFingerTap();
+        applyMediaCard();
     }
 
     /**
