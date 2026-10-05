@@ -374,6 +374,14 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         }
     }
 
+    static void expandForAod(boolean fromThumbnail) {
+        CoverCardLayer v = sView;
+        if (v == null) return;
+        v.aodExpandPending = fromThumbnail || v.opacity <= 0f;
+        if (v.bigCoverPlace != null) v.lockPlace = v.bigCoverPlace;
+        v.start();
+    }
+
     static void hideNow() {
         CoverCardLayer v = sView;
         if (v == null) return;
@@ -655,6 +663,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     private static final float CARRY_MAX = 0.25f;
     /** The last place the lit lock screen gave it - what the doze keeps. */
     private CoverCardStyle.Rect lockPlace;
+    private CoverCardStyle.Rect bigCoverPlace;
+    private boolean aodExpandPending;
     /**
      * The place of the landed cover look, Phase.ON only - what the big clock's fall and wake
      * keep. Not lockPlace: that one is still written while the clock grows into the doze.
@@ -714,12 +724,20 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
             // Placed live, the big clock's bottom pushes it small and low against the media card.
             goal = restPlace;
         } else if (phase == ClockCollapse.Phase.AOD) {
-            CoverCardStyle.Rect held = lockPlace != null ? lockPlace : placeNow();
+            CoverCardStyle.Rect held = Main.aodArtworkExpanded() && bigCoverPlace != null
+                    ? bigCoverPlace : lockPlace != null ? lockPlace : placeNow();
             goal = held == null ? null : aodPlace(held);
         } else {
             goal = placeNow();
             if (goal != null) lockPlace = goal;
-            if (goal != null && phase == ClockCollapse.Phase.ON) restPlace = goal;
+            if (goal != null && phase == ClockCollapse.Phase.ON) {
+                restPlace = goal;
+                if (!LockLyrics.wantsCompactArtwork() && !Main.aodArtworkExpanded()
+                        && !LockIslands.INSTANCE.notificationArtworkExpanded()
+                        && AodArtworkPolicy.canRememberPose(Main.keyguardLocked() && Main.onKeyguardNow(),
+                                MiniPlayerScene.INSTANCE.getKeyguardGoingAway(), Main.screenOnCached(),
+                                goal.y, goal.side, Float.NaN, getHeight())) bigCoverPlace = goal;
+            }
         }
         if (goal == null) {
             goalX = Float.NaN;
@@ -779,7 +797,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         float clock = ClockCollapse.contentBottomDrawn();
         float media = Main.liveMediaTop();
         float k = ancestorScale();
-        if (Float.isNaN(clock) || Float.isNaN(media) || k <= 0f || media <= clock) {
+        if (!Float.isFinite(clock) || clock < 0f || !Float.isFinite(media)
+                || k <= 0f || media <= clock) {
             aodPlaceNote = "held clock=" + clock + " media=" + media;
             return held;
         }
@@ -843,6 +862,19 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         else if (aodSince == 0L) aodSince = nowNs;
         boolean inAod = Main.coverCardInAod();
         boolean visible = style.mode == CoverCardStyle.CARD && Main.coverCardVisible();
+        if (aodExpandPending && inAod && visible) {
+            aodExpandPending = false;
+            CoverMorphMotion.Box thumbnail = Main.coverMorphThumbnail();
+            if (thumbnail != null) {
+                getLocationOnScreen(tmpLoc);
+                drawX = thumbnail.x - tmpLoc[0];
+                drawY = thumbnail.y - tmpLoc[1];
+                drawSide = Math.max(thumbnail.w, thumbnail.h);
+                goalX = Float.NaN;
+                opacity = 0.01f;
+                rise = 1f;
+            }
+        }
         // Lyrics and the lyricless compact page both keep artwork in the media player.
         boolean compactArtwork = LockLyrics.wantsCompactArtwork();
         // A doze under the OEM's big clock hides the square. Its wake holds the square at the

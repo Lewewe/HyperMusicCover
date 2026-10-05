@@ -1201,6 +1201,7 @@ public class Main extends XposedModule {
                     // unlocked, and the clock there is the shade's.
                     if (keyguardShowing()) {
                         sScreenOn = true;
+                        restoreAwakeArtwork();
                         CoverCardLayer.refresh();
                         sAodGrey = Float.NaN;
                         applyGlassBrightness();
@@ -3018,6 +3019,7 @@ public class Main extends XposedModule {
                 if (!Intent.ACTION_USER_PRESENT.equals(a)) LockLyrics.resumeWatch();
                 if (Intent.ACTION_SCREEN_ON.equals(a)) {
                     sScreenOn = true;
+                    restoreAwakeArtwork();
                     sAodGrey = Float.NaN;
                     applyGlassBrightness();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(a)) {
@@ -6466,6 +6468,9 @@ public class Main extends XposedModule {
     private static void exitCoverMode(boolean animate) {
         CoverCardLayer.leaving();
         sCoverMode = false;
+        sAodArtworkPolicy.clear();
+        sAodArtworkExpanded = false;
+        sAodArtworkFromCompact = false;
         LockLyrics.setNotificationCompact(false);
         applyGlassBrightness();
         LockIslands.INSTANCE.setCoverMode(false);
@@ -6695,6 +6700,7 @@ public class Main extends XposedModule {
     static void noteAwake() {
         if (sScreenOn) return;
         sScreenOn = true;
+        restoreAwakeArtwork();
         sAodGrey = Float.NaN;
         applyGlassBrightness();
         forgetSysReads();
@@ -6733,6 +6739,49 @@ public class Main extends XposedModule {
      * square sat across the digits. It used to be a setting, off by default; with the big clock
      * taken care of there was nothing left for the setting to protect.
      */
+    private static final AodArtworkPolicy sAodArtworkPolicy = new AodArtworkPolicy();
+    private static boolean sAodArtworkExpanded;
+    private static boolean sAodArtworkFromCompact;
+
+    static boolean aodArtworkFromCompact() {
+        return sAodArtworkFromCompact;
+    }
+
+    static boolean aodArtworkExpanded() {
+        return sAodArtworkExpanded;
+    }
+
+    static void rememberNotificationArtwork() {
+        if (!sScreenOn) return;
+        sAodArtworkPolicy.observe(keyguardLocked() && onKeyguardNow(),
+                MiniPlayerScene.INSTANCE.getKeyguardGoingAway(), sCoverMode,
+                LockIslands.INSTANCE.notificationArtworkExpanded(),
+                LockLyrics.userWantsCompactArtwork());
+    }
+
+    static void prepareAodArtwork(boolean heldAod) {
+        if (sAodArtworkExpanded || !AodArtworkPolicy.shouldExpand(sCoverMode,
+                sCoverCardStyle.mode == CoverCardStyle.CARD, heldAod,
+                sAodArtworkPolicy.notificationsExpanded(
+                        LockIslands.INSTANCE.notificationArtworkExpanded()),
+                LockLyrics.userWantsCompactArtwork())) return;
+        boolean compact = LockLyrics.wantsCompactArtwork();
+        sAodArtworkFromCompact = compact;
+        sAodArtworkExpanded = true;
+        CoverMorphLayer.cancel();
+        CoverCardLayer.expandForAod(compact);
+        refreshMediaCardForMorph();
+        LockLyrics.refresh();
+    }
+
+    static void restoreAwakeArtwork() {
+        if (!sAodArtworkExpanded) return;
+        sAodArtworkExpanded = false;
+        sAodArtworkFromCompact = false;
+        refreshMediaCardForMorph();
+        LockLyrics.refresh();
+    }
+
     static boolean coverCardInAod() {
         return sCoverMode && !sScreenOn && ClockCollapse.phase() == ClockCollapse.Phase.AOD
                 && ClockCollapse.aodHeld();
@@ -8566,6 +8615,7 @@ public class Main extends XposedModule {
 
     /** Keep artwork in the media player while a multi-notification list is open. */
     static void notificationListArtwork(boolean open, int count) {
+        rememberNotificationArtwork();
         boolean was = LockLyrics.notificationCompact();
         boolean compact = NotificationArtworkPolicy.compact(was, open, count,
                 sCoverMode && keyguardShowing(), !LockLyrics.wantsCompactArtwork());

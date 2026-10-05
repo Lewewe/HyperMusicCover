@@ -321,7 +321,7 @@ final class LockLyrics {
 
     /** Whether the view belongs in the keyguard right now. */
     static boolean wantsAttached() {
-        return !sNotificationCompact && wanted() && Main.coverModeOn() && hasLyrics();
+        return !Main.aodArtworkExpanded() && !sNotificationCompact && wanted() && Main.coverModeOn() && hasLyrics();
     }
 
     /** The native media player keeps its thumbnail without opening an empty lyric view. */
@@ -330,7 +330,8 @@ final class LockLyrics {
     }
 
     static boolean compactWithoutLyricsOnEntry() {
-        return sNotificationCompact || sArtworkPage.compactWithoutLyrics(sEnabled, hasLyrics());
+        return !Main.aodArtworkExpanded()
+                && (sNotificationCompact || sArtworkPage.compactWithoutLyrics(sEnabled, hasLyrics()));
     }
 
     // Notification expansion is temporary and never changes the chosen artwork page.
@@ -342,6 +343,11 @@ final class LockLyrics {
 
     static void setNotificationCompact(boolean compact) {
         sNotificationCompact = compact;
+    }
+
+    /** The user's page choice, before temporary notification or AOD overrides. */
+    static boolean userWantsCompactArtwork() {
+        return wanted() && hasLyrics() || sArtworkPage.compactWithoutLyrics(sEnabled, hasLyrics());
     }
 
     static boolean wantsCompactArtwork() {

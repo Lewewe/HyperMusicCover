@@ -480,6 +480,7 @@ final class ClockCollapse {
      * and place do not, the spring carries those.
      */
     static void toAod() {
+        Main.prepareAodArtwork(keepInAod());
         sWaking = false;
         // The doze about to start has drawn nothing yet, so it has no pose to be steady against.
         clearAodPend();
@@ -488,6 +489,12 @@ final class ClockCollapse {
         // start the spring from a clock several times the size of the one on screen.
         boolean flying = (sPhase == Phase.ENTER || sPhase == Phase.ON) && Main.sContainer != null;
         if (flying) captureFrom();
+        // A compact page may have restored the native clock; the cover's resting pose is the AOD target.
+        if (flying && Main.aodArtworkExpanded() && !Float.isNaN(sCoverRestTop)) {
+            sFromTop = sCoverRestTop;
+            sFromUnit = sCoverRestUnit;
+            sFromDate = sCoverRestDate;
+        }
         Float held = Main.sHoldY;
         // Kept for a held doze to put back on, one frame later - see sAodHoldY. ONLY when there
         // is one: the screen falling asleep calls this twice (KeyguardService's sleep hook, then
@@ -522,10 +529,20 @@ final class ClockCollapse {
                 if (!Main.clockHeld()) return;
                 // Cover mode without our clock - unlocked, say. Nothing to walk back; watch the
                 // AOD so the wake has a start.
-                sAodHeld = false;
+                sAodHeld = keepInAod() && Main.aodArtworkExpanded()
+                        && !Float.isNaN(sCoverRestTop);
+                if (sAodHeld) {
+                    sFromTop = sCoverRestTop;
+                    sFromUnit = sCoverRestUnit;
+                    sFromDate = sCoverRestDate;
+                    Main.captureAodGlass();
+                    Main.setCardProgressFrom(1f);
+                }
                 sPhase = Phase.AOD;
                 sAodTop = Float.NaN;
+                if (sAodHeld) startAodCoverZoom();
                 install();
+                CoverCardLayer.refresh();
                 Xp.log(TAG + "clock: watching the AOD");
                 return;
             default:
@@ -768,6 +785,7 @@ final class ClockCollapse {
      */
     private static final String[] sPoseLog = new String[8];
     private static int sPoseN;
+    private static float sCoverRestTop = Float.NaN, sCoverRestUnit, sCoverRestDate;
     private static float sPoseTop = Float.NaN, sPoseUnit = Float.NaN, sPoseDate = Float.NaN;
 
     /** NaN counts as equal to NaN: a style with no date must not record a pose every frame. */
@@ -778,6 +796,16 @@ final class ClockCollapse {
 
     private static void notePose(Live m, float top, float unit, float date, float full,
                                  float room) {
+        if (sPhase == Phase.ON && Main.coverModeOn() && !Main.aodArtworkExpanded()
+                && !LockLyrics.wantsCompactArtwork()
+                && !LockIslands.INSTANCE.notificationArtworkExpanded()
+                && AodArtworkPolicy.canRememberPose(Main.keyguardLocked() && Main.onKeyguardNow(),
+                        MiniPlayerScene.INSTANCE.getKeyguardGoingAway(), Main.screenOnCached(),
+                        top, unit, date, Main.sScreenH)) {
+            sCoverRestTop = top;
+            sCoverRestUnit = unit;
+            sCoverRestDate = date;
+        }
         if (samePose(top, sPoseTop) && samePose(unit, sPoseUnit) && samePose(date, sPoseDate)) {
             return;
         }

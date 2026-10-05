@@ -844,6 +844,12 @@ internal object LockIslands {
     /** Keep HyperOS's intermediate pile while the cover owns the media scene. */
     fun keepsCoverStack(): Boolean = Main.coverModeOn() && stackMembers.size > 1
 
+    fun notificationArtworkExpanded(): Boolean {
+        if (stackMembers.size <= 1) return false
+        val state = NumState.state()
+        return spreading || stackOut || state == "STACK" || state == "LIST"
+    }
+
     private val notificationArtworkNavigation = NotificationArtworkPolicy()
     private var previousArtworkScroll: Int? = null
     private var requestedArtworkListAt = 0L
