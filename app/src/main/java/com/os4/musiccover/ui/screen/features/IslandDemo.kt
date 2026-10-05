@@ -1,7 +1,5 @@
 package com.os4.musiccover.ui.screen.features
 
-import com.os4.musiccover.R
-
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.AnimationVector1D
@@ -18,7 +16,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
@@ -43,6 +40,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import com.os4.musiccover.ui.util.isInDarkTheme
+import com.os4.musiccover.R
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -65,16 +63,25 @@ import kotlin.math.sin
  * (MiniPlayerRuntime: CHANGE, APPEAR, SHOW, the card morph's), so what plays here is what the
  * phone does, at its own pace.
  */
-@Composable
-fun IslandDemo(modifier: Modifier = Modifier) {
-    DemoPager(islandPages(), modifier) { page, playing, done -> DemoPage(page, playing, done) }
-}
+/**
+ * The picture's box, the camera fill inside it, and what that leaves empty under the phone. The
+ * pager centres the title under the phone rather than under the box, so it is handed the air.
+ */
+private val PICTURE_H = 236.dp
+private const val PICTURE_FILL = 0.9f
+private val PICTURE_AIR = PICTURE_H * (1f - PICTURE_FILL) / 2f
 
 @Composable
-private fun islandPages() = listOf(
-    DemoText(stringResource(R.string.demo_island_switch_title), stringResource(R.string.demo_island_switch_summary)),
-    DemoText(stringResource(R.string.demo_island_scene_title), stringResource(R.string.demo_island_scene_summary)),
-    DemoText(stringResource(R.string.demo_island_notifications_title), stringResource(R.string.demo_island_notifications_summary)),
+fun IslandDemo(modifier: Modifier = Modifier) {
+    DemoPager(DEMO_PAGES, modifier, pictureAir = PICTURE_AIR) { page, playing, done ->
+        DemoPage(page, playing, done)
+    }
+}
+
+private val DEMO_PAGES = listOf(
+    DemoText(R.string.demo_island_switch_title),
+    DemoText(R.string.demo_island_immersive_title),
+    DemoText(R.string.demo_island_stack_title),
 )
 
 @Composable
@@ -93,7 +100,7 @@ private fun DemoPage(page: Int, playing: Boolean, onDone: () -> Unit) {
         }
         onDone()
     }
-    Canvas(Modifier.fillMaxWidth().height(236.dp).clipToBounds()) {
+    Canvas(Modifier.fillMaxWidth().height(PICTURE_H).clipToBounds()) {
         drawScene(scene, page, pal, measurer, clockSp)
     }
 }
@@ -410,7 +417,7 @@ private class Camera(val s: Float, val o: Offset) {
 }
 
 private fun DrawScope.drawScene(sc: Scene, page: Int, pal: SkeuoPalette, measurer: TextMeasurer, clockSp: TextUnit) {
-    val (camS, camO) = sc.cam.view(size.width, size.height)
+    val (camS, camO) = sc.cam.view(size.width, size.height, fill = PICTURE_FILL)
     val cam = Camera(camS, camO)
     withTransform({
         translate(cam.o.x, cam.o.y)

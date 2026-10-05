@@ -75,7 +75,8 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
         ModuleBridge.setMiniConfig(context, configText)
     }
 
-    PageScaffold(title = stringResource(R.string.islands_page_title), isBlurEnabled = blur, onBack = onBack) {
+    PageScaffold(title = stringResource(R.string.mini_page_title), isBlurEnabled = blur,
+        onBack = onBack) {
         item {
             // What the islands do, played on a drawn phone, before the switches that turn them on.
             Card(Modifier.padding(horizontal = 12.dp).padding(top = 12.dp)) {
@@ -89,12 +90,16 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
             // into a switched-off shortcut's place.
             Card(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
                 Column {
-                    SwitchPreference(title = stringResource(R.string.islands_enable),
-                        summary = if (alive) stringResource(R.string.islands_location_summary) else stringResource(R.string.islands_waiting_summary),
+                    // The one line the switch still carries, and only while the module is away:
+                    // a switch that cannot be moved and does not say why reads as the switch
+                    // being broken. Nothing here describes the feature itself any more.
+                    SwitchPreference(title = stringResource(R.string.mini_enabled),
+                        summary = if (alive) null
+                                  else stringResource(R.string.mini_enabled_waiting),
                         checked = config.optBoolean(MiniPlayerConfig.ENABLED), enabled = alive,
                         onCheckedChange = { push(MiniPlayerConfig.ENABLED, it) })
-                    SwitchPreference(title = stringResource(R.string.islands_adaptive_width),
-                        summary = stringResource(R.string.islands_adaptive_width_summary),
+                    SwitchPreference(title = stringResource(R.string.mini_widen),
+                        summary = stringResource(R.string.mini_widen_summary),
                         checked = config.optBoolean(MiniPlayerConfig.ADAPTIVE_WIDTH),
                         enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
                         onCheckedChange = { push(MiniPlayerConfig.ADAPTIVE_WIDTH, it) })
