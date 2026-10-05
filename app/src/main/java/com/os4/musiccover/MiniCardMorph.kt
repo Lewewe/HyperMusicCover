@@ -57,10 +57,12 @@ internal class MiniCardMorph(
      */
     private var roundness: (() -> Float)? = null,
 ) : Choreographer.FrameCallback {
-    class Landing(val art: View?, val title: View?, val text: View?, val radius: Float, val artRadius: Float) {
+    class Landing(val art: View?, val title: View?, val text: View?, val radius: Float,
+                  val artRadius: Float, val media: Boolean = false) {
         companion object {
             fun mediaCard(header: View) = Landing(Main.miniPairArt(), Main.miniPairTitle(),
-                Main.miniPairArtist(), Main.miniPlayerCardRadius(header), Main.coverMorphThumbnailRadius())
+                Main.miniPairArtist(), Main.miniPlayerCardRadius(header), Main.coverMorphThumbnailRadius(),
+                media = true)
         }
     }
 
@@ -403,6 +405,7 @@ internal class MiniCardMorph(
      */
     private fun measure(): Boolean {
         if (!header.isAttachedToWindow || header.width <= 0 || header.height <= 0) return false
+        focusFades.remove(header)?.cancel()
         cardContent = contentViews(header)
         pieces.forEach { piece ->
             val n = piece.native
@@ -442,8 +445,10 @@ internal class MiniCardMorph(
         // Both ends' whole content in and out of focus, the glass of neither: the pill's going
         // out as it heads for the card, the card's coming in once the pill's glass leaves it.
         // In the card's own pixels, which the stack's transform and the morph's scale s shrink.
-        blurCard(blurPx * (1f - cardFocus(c)) / max(s, 0.05f))
-        mini.setMorphContentBlur(blurPx * pillBlur(c))
+        val largeArtwork = Main.miniPlayerLargeArtworkTarget()
+        val cardBlurPx = if (mediaCard) 3f * mini.resources.displayMetrics.density else blurPx
+        blurCard(cardBlurPx * cardBlurFactor(c, mediaCard, largeArtwork, toNative) / max(s, 0.05f))
+        mini.setMorphContentBlur(blurPx * pillBlurFactor(c, mediaCard, largeArtwork, toNative))
 
         // The mini player's frame is the container itself; its material fades last.
         boxDrawn = box
@@ -566,6 +571,37 @@ internal class MiniCardMorph(
         placedBox = null
         restore()
         listener.onSettled(this, toNative, completed)
+        if (completed && toNative && mediaCard && Main.miniPlayerLargeArtworkTarget()) {
+            fadeMediaFocus()
+        }
+    }
+
+    /** Focus the landed player without blurring the pill while its geometry is changing. */
+    private fun fadeMediaFocus() {
+        focusFades.remove(header)?.cancel()
+        val radius = 3f * mini.resources.displayMetrics.density
+        val animator = android.animation.ValueAnimator.ofFloat(0f, 1f)
+        focusFades[header] = animator
+        animator.duration = 200L
+        animator.interpolator = android.view.animation.LinearInterpolator()
+        animator.addUpdateListener { a ->
+            if (!header.isAttachedToWindow || !Main.miniPlayerLargeArtworkTarget()) {
+                animator.cancel()
+                return@addUpdateListener
+            }
+            val r = radius * mediaFocusFade(a.animatedValue as Float)
+            header.setRenderEffect(if (r < 0.5f) null else
+                android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.DECAL))
+        }
+        animator.addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) {
+                if (focusFades[header] === animator) {
+                    focusFades.remove(header)
+                    header.setRenderEffect(null)
+                }
+            }
+        })
+        animator.start()
     }
 
     // ---------------------------------------------------------------- the ends' content blur
@@ -575,15 +611,17 @@ internal class MiniCardMorph(
 
     /** The card's template: its content views, beside which its glass background is drawn. */
     private var cardContent: List<View> = emptyList()
+    private val mediaCard = landing.media
     /** The radius last written; none yet, so the first is always written. */
     private var cardBlurred = -1f
 
     /**
      * A notification row's content views - NotificationContentView, the template inside it and
-     * nothing of the row's background views, which draw its glass. A media card has none of
-     * them and is not blurred: its glass is inside its own content.
+     * nothing of the row's background views, which draw its glass. A media card uses its
+     * container, with blur enabled only while opening into large artwork.
      */
     private fun contentViews(root: View): List<View> {
+        if (mediaCard) return listOf(root)
         if (!root.javaClass.name.contains("ExpandableNotificationRow")) return emptyList()
         val out = ArrayList<View>()
         fun walk(v: View, depth: Int) {
@@ -880,12 +918,23 @@ internal class MiniCardMorph(
 
         /** Every card content view blurred now, and the morph that blurred it. */
         private val blurOwners = java.util.WeakHashMap<View, MiniCardMorph>()
+        private val focusFades = java.util.WeakHashMap<View, android.animation.ValueAnimator>()
 
         /** The pill's content goes out of focus on its way to the card, all of it by the middle. */
         fun pillBlur(p: Float) = smooth(0f, 0.6f, p)
 
         /** The card's comes into focus as the pill's glass leaves it, sharp once the pill has gone. */
         fun cardFocus(p: Float) = smooth(0.4f, 0.95f, p)
+
+        /** The media player holds a mild blur until its geometry has landed. */
+        fun cardBlurFactor(p: Float, media: Boolean, largeArtwork: Boolean, opening: Boolean) =
+            if (!media) 1f - cardFocus(p) else if (largeArtwork && opening) 1f else 0f
+
+        /** Compact artwork stays sharp through the pill-to-player handoff. */
+        fun pillBlurFactor(p: Float, media: Boolean, largeArtwork: Boolean, opening: Boolean) =
+            if (!media) pillBlur(p) else 0f
+
+        fun mediaFocusFade(p: Float) = 1f - smooth(0f, 1f, p)
 
         /**
          * The mini player's material leaves last and alone. Crossfading the two materials at

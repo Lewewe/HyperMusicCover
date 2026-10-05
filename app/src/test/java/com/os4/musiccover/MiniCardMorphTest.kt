@@ -66,4 +66,24 @@ class MiniCardMorphTest {
             p += 0.01f
         }
     }
+
+    @Test fun compactArtworkNeverReceivesTheOpeningBlur() {
+        for (p in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
+            assertEquals(0f, MiniCardMorph.cardBlurFactor(p, true, false, true), 0f)
+            assertEquals(0f, MiniCardMorph.pillBlurFactor(p, true, false, true), 0f)
+        }
+    }
+
+    @Test fun playerFocusesAfterLandingWhileThePillStaysSharp() {
+        for (p in listOf(0f, 0.4f, 0.7f, 1f)) {
+            assertEquals(1f, MiniCardMorph.cardBlurFactor(p, true, true, true), 0f)
+            assertEquals(0f, MiniCardMorph.pillBlurFactor(p, true, true, true), 0f)
+        }
+        assertTrue(MiniCardMorph.mediaFocusFade(0.25f) > MiniCardMorph.mediaFocusFade(0.75f))
+        assertEquals(1f, MiniCardMorph.mediaFocusFade(0f), 0f)
+        assertEquals(0f, MiniCardMorph.mediaFocusFade(1f), 0f)
+        assertEquals(0f, MiniCardMorph.cardBlurFactor(0.5f, true, true, false), 0f)
+        assertEquals(1f - MiniCardMorph.cardFocus(0.5f),
+            MiniCardMorph.cardBlurFactor(0.5f, false, false, true), 0f)
+    }
 }

@@ -6520,6 +6520,13 @@ public class Main extends XposedModule {
         return sCoverMode || LockHold.exitingFor(LockHold.Owner.COVER);
     }
 
+    /** The opening morph starts before cover mode is switched on; use its intended page. */
+    static boolean miniPlayerLargeArtworkTarget() {
+        if (sCoverMode) return !LockLyrics.wantsCompactArtwork();
+        return sAuto && sCardShowing && !LockLyrics.willAttachOnEntry()
+                && !LockLyrics.compactWithoutLyricsOnEntry();
+    }
+
     static MediaController miniPlayerSession() {
         return sWatched;
     }
