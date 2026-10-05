@@ -6862,13 +6862,16 @@ public class Main extends XposedModule {
                 mediaTop = cardXY[1];
             }
         }
+        // Use the same aspect-aware placement as the card that receives the moving artwork.
+        // A square reservation makes video thumbnails land small and grow again at handoff.
+        float aspect = CoverCardStyle.aspect(art.getWidth(), art.getHeight());
         CoverCardStyle.Rect r = sCoverCardStyle.place(layer.getWidth(), layer.getHeight(),
                 layer.getResources().getDisplayMetrics().density,
                 ClockCollapse.contentBottomFor(layer) - xy[1],
-                ClockCollapse.unzoomY(layer, mediaTop) - xy[1]);
+                ClockCollapse.unzoomY(layer, mediaTop) - xy[1], aspect);
         return r == null ? null : CoverMorphMotion.cardBox(xy[0] + r.x,
                 xy[1] + r.y, r.side, CoverCardLayer.renderedScale(layer),
-                CoverCardStyle.aspect(art.getWidth(), art.getHeight()));
+                aspect);
     }
 
     /** Keep the shared media card at its real state while the moving copy owns its pixels. */

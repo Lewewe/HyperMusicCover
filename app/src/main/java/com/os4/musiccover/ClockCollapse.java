@@ -617,6 +617,13 @@ final class ClockCollapse {
         sAodDate = sFromDate;
         if (Main.sCoverCardStyle.mode != CoverCardStyle.CARD || !Main.coverModeOn()
                 || LockLyrics.wantsCompactArtwork()) return;
+        android.graphics.Bitmap art = CoverCardLayer.currentArt();
+        if (art != null && !art.isRecycled()) {
+            float aspect = CoverCardStyle.aspect(art.getWidth(), art.getHeight());
+            // Rectangular artwork already using the native clock needs no additional AOD zoom.
+            if (Math.abs(aspect - 1f) > 0.01f
+                    && (sNativeClockSizeTarget || sNativeClockSize >= 0.999f)) return;
+        }
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(1f, 1.50f);
         sAodCoverZoomAnimator = animator;
         animator.setDuration(420L);
