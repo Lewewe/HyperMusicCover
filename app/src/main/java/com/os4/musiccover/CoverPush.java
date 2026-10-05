@@ -81,7 +81,9 @@ final class CoverPush {
     };
 
     static boolean shouldSoftenArtwork(int width, int height) {
-        return width > 0 && height > 0 && Math.min(width, height) < 512;
+        // The card fits artwork by its long edge. A full-size video thumbnail can have a
+        // shorter edge below 512 without needing the temporary blur and dim treatment.
+        return width > 0 && height > 0 && Math.max(width, height) < 512;
     }
 
     private static void clearSoftArtwork() {
