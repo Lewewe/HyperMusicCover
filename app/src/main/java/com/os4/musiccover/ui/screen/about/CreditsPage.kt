@@ -17,7 +17,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 
 /**
- * Who this module borrowed from.
+ * The contributors and projects behind this module.
  *
  * Every project here is one whose code, design or data is in the build - not a list of things
  * that were admired from a distance. The summary says what was taken, because "thanks to X" with
@@ -65,6 +65,11 @@ fun CreditsPageContent(
     )
 
     val lyricCredits = listOf(
+        Credit(
+            "@Lewewe",
+            stringResource(R.string.credits_lewewe),
+            "https://github.com/Lewewe/HyperMusicCover-Enhanced",
+        ),
         Credit(
             "@CialloUM",
             stringResource(R.string.credits_cialloum),

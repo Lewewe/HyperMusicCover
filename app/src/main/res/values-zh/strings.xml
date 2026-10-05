@@ -66,6 +66,7 @@
     <string name="credits_group_ui">界面</string>
     <string name="credits_group_lyrics">锁屏</string>
     <string name="credits_group_tools">运行与分发</string>
+    <string name="credits_lewewe">维护 HyperMusicCover-Enhanced：自动刷新高清封面；修复快速切歌与上一首操作；支持 YouTube Music 歌曲与视频封面切换；为临时低清封面添加轻微模糊与压暗；以单张封面和提取的色彩构建背景；优化封面动画并将歌曲信息左对齐；根据歌词状态调整封面手势；为矩形封面适配时钟大小；为胶囊和快捷按钮添加可调背景模糊及播放器清晰渐变；优化通知列表与堆叠状态间的切换；修复息屏封面恢复与时钟位置；完善英文翻译并保留中文。</string>
     <string name="credits_hypernavbar">整套界面骨架：主题、悬浮导航栏、液态玻璃、背景模糊、关于页和多语言</string>
     <string name="credits_miuix">这个界面用到的全部组件</string>
     <string name="credits_liquid_glass">液态玻璃的透镜、内阴影和鲜艳度</string>
