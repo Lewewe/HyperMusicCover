@@ -8,6 +8,14 @@ final class PreviousArtworkPolicy {
         return direction > 0 || (direction < 0 && previousChangesTrack);
     }
 
+    static boolean hasPreviousItem(long activeId, long[] queueIds) {
+        if (activeId < 0L || queueIds == null) return false;
+        for (int i = 0; i < queueIds.length; i++) {
+            if (queueIds[i] == activeId) return i > 0;
+        }
+        return false;
+    }
+
     static boolean shouldAnimate(long position, long updatedAt, float speed,
                                  boolean playing, long now) {
         if (position < 0L) return false;

@@ -9371,6 +9371,22 @@ public class Main extends XposedModule {
         }
     }
 
+    /** Queue item IDs are identifiers, not indexes; an absent predecessor needs confirmation. */
+    static boolean hasPreviousQueueItem() {
+        try {
+            MediaController c = sWatched;
+            if (c == null) return false;
+            PlaybackState state = c.getPlaybackState();
+            List<android.media.session.MediaSession.QueueItem> queue = c.getQueue();
+            if (state == null || queue == null) return false;
+            long[] ids = new long[queue.size()];
+            for (int i = 0; i < ids.length; i++) ids[i] = queue.get(i).getQueueId();
+            return PreviousArtworkPolicy.hasPreviousItem(state.getActiveQueueItemId(), ids);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private static final Runnable sRecheckPlayback = new Runnable() {
         @Override
         public void run() {
@@ -9505,6 +9521,7 @@ public class Main extends XposedModule {
             return;
         }
         sTrackKey = key;
+        CoverPush.confirmPreviousTrack(key);
         long ctNow = android.os.SystemClock.uptimeMillis();
         // Still waiting on the artwork for the previous one means this press lands on top of it:
         // same burst, and the clock keeps running from where it started.

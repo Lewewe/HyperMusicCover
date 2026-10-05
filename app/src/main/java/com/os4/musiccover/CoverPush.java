@@ -1274,6 +1274,7 @@ final class CoverPush {
     /** When a skip was last asked for, and which way. See the TransportControls hook. */
     private static volatile long sSkipAt;
     private static volatile int sSkipDir;
+    private static volatile String sDeferredPreviousKey;
 
     /**
      * Someone asked the player to change track. Runs on whatever thread made the call, so it does
@@ -1285,8 +1286,24 @@ final class CoverPush {
         if (!Main.sCoverMode || !Main.screenOn()) return;
         // Keep artwork on the confirmed track for every player. Queues can lag, shuffle,
         // or interpret Previous as a restart, so a transport request never predicts artwork.
-        if (PreviousArtworkPolicy.shouldAnimateSkip(dir,
-                dir < 0 && Main.shouldAnimatePrevious())) CoverCardLayer.beginSkipWait();
+        sDeferredPreviousKey = null;
+        boolean previousChangesTrack = dir < 0 && Main.shouldAnimatePrevious();
+        if (!PreviousArtworkPolicy.shouldAnimateSkip(dir, previousChangesTrack)) return;
+        if (dir < 0 && !Main.hasPreviousQueueItem()) {
+            // A first item may restart, do nothing, or wrap. Wait for actual track identity.
+            sDeferredPreviousKey = Main.sTrackKey;
+            return;
+        }
+        CoverCardLayer.beginSkipWait();
+    }
+
+    static void confirmPreviousTrack(String key) {
+        String outgoing = sDeferredPreviousKey;
+        if (outgoing == null || Main.sameTrack(outgoing, key)) return;
+        sDeferredPreviousKey = null;
+        if (sSkipDir < 0 && android.os.SystemClock.uptimeMillis() - sSkipAt < 4000L) {
+            CoverCardLayer.beginSkipWait(outgoing, key);
+        }
     }
 
     /** What the wallpaper currently shows, coarsely, so a stale source can be recognised. */

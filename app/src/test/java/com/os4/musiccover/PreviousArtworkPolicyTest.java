@@ -4,6 +4,25 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class PreviousArtworkPolicyTest {
+    @Test public void firstQueueItemCannotStartAnUnconfirmedPreviousEffect() {
+        long[] queue = {427L, 120L, 980L};
+        assertFalse(PreviousArtworkPolicy.hasPreviousItem(427L, queue));
+        assertTrue(PreviousArtworkPolicy.hasPreviousItem(120L, queue));
+        assertTrue(PreviousArtworkPolicy.hasPreviousItem(980L, queue));
+    }
+
+    @Test public void missingQueueOrUnknownActiveItemRequiresConfirmation() {
+        assertFalse(PreviousArtworkPolicy.hasPreviousItem(42L, null));
+        assertFalse(PreviousArtworkPolicy.hasPreviousItem(42L, new long[0]));
+        assertFalse(PreviousArtworkPolicy.hasPreviousItem(42L, new long[]{10L, 20L}));
+        assertFalse(PreviousArtworkPolicy.hasPreviousItem(-1L, new long[]{10L, -1L}));
+    }
+
+    @Test public void queueIdZeroIsAValidFirstItem() {
+        assertFalse(PreviousArtworkPolicy.hasPreviousItem(0L, new long[]{0L, 1L}));
+        assertTrue(PreviousArtworkPolicy.hasPreviousItem(1L, new long[]{0L, 1L}));
+    }
+
     @Test public void nextWaitsButPreviousRestartDoesNot() {
         assertTrue(PreviousArtworkPolicy.shouldAnimateSkip(1, false));
         assertTrue(PreviousArtworkPolicy.shouldAnimateSkip(-1, true));

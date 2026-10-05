@@ -417,12 +417,15 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     /** Treat only the outgoing cover while a transport request waits for new artwork. */
     static void beginSkipWait() {
-        final String requestedKey = Main.sTrackKey;
+        beginSkipWait(Main.sTrackKey, Main.sTrackKey);
+    }
+
+    static void beginSkipWait(String requestedKey, String expectedTrackKey) {
         Main.main().post(() -> {
             CoverCardLayer v = sView;
             if (v == null || v.current == null || !Main.coverCardVisible()
                     || LockLyrics.wantsCompactArtwork()
-                    || !Main.sameTrack(requestedKey, Main.sTrackKey)
+                    || !Main.sameTrack(expectedTrackKey, Main.sTrackKey)
                     || !Main.sameTrack(requestedKey, v.current.trackKey)) return;
             v.skipWaiting = true;
             v.removeCallbacks(v.skipWaitTimeout);
