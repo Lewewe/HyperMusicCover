@@ -14,4 +14,18 @@ final class ArtworkTrackIdentity {
         }
         return title;
     }
+    static boolean sameArtists(String pkg, String a, String b) {
+        if (!"com.spotify.music".equals(pkg)) return false;
+        java.util.Set<String> first = artists(a);
+        return !first.isEmpty() && first.equals(artists(b));
+    }
+
+    private static java.util.Set<String> artists(String value) {
+        java.util.Set<String> result = new java.util.HashSet<>();
+        for (String artist : value.split(",")) {
+            String name = artist.trim();
+            if (!name.isEmpty()) result.add(name);
+        }
+        return result;
+    }
 }

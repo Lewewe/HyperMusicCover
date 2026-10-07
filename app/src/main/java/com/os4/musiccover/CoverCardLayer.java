@@ -596,6 +596,9 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
                 .append(Main.screenHeight()).append(']');
         return "aodPlace=[" + v.aodPlaceNote + "] view.playing=" + v.playing
                 + " scale=" + v.scale.value
+                + " skip=" + v.skipEffectActive + "/" + v.skipWaiting
+                + " treatment=" + v.skipTreatment
+                + " thumbnail=" + (v.current != null && v.current.temporaryThumbnail)
                 + " ticking=" + v.ticking + " opacity=" + v.opacity
                 + " attached=" + v.isAttachedToWindow()
                 + " fade=" + v.getTransitionAlpha() + " chain=" + chain;

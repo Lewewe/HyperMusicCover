@@ -23,4 +23,9 @@ public class ArtworkTrackIdentityTest {
     @Test public void songNamesCanContainDashes() {
         assertEquals("Song - Live", ArtworkTrackIdentity.title("com.salt.music", "Line", "Artist - Song - Live"));
     }
+    @Test public void spotifyArtistReorderingDoesNotChangeArtworkIdentity() {
+        assertTrue(ArtworkTrackIdentity.sameArtists("com.spotify.music", "Synthion, HYPERNIGHT", "HYPERNIGHT, Synthion"));
+        assertFalse(ArtworkTrackIdentity.sameArtists("com.spotify.music", "Synthion", "Other"));
+        assertFalse(ArtworkTrackIdentity.sameArtists("other.player", "A, B", "B, A"));
+    }
 }

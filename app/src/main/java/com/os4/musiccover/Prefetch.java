@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaDescription;
+import android.media.MediaMetadata;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
@@ -169,6 +170,89 @@ final class Prefetch {
                 }
             }
         });
+    }
+
+    private static final java.util.Map<String, String> CURRENT_READS = new java.util.HashMap<>();
+
+    static boolean currentArtworkPending(String key) {
+        synchronized (CACHE) {
+            for (String track : CURRENT_READS.values()) {
+                if (Main.sameTrack(track, key)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Resolve the current song's URI independently of queue predictions. */
+    static Bitmap currentArtwork(MediaMetadata metadata, String pkg) {
+        String spotifyUrl = "com.spotify.music".equals(pkg)
+                ? metadata.getString("com.spotify.music.extra.ART_HTTPS_URI") : null;
+        String[] fields = spotifyUrl != null && !spotifyUrl.isEmpty()
+                ? new String[]{"com.spotify.music.extra.ART_HTTPS_URI"}
+                : new String[]{
+                MediaMetadata.METADATA_KEY_ALBUM_ART_URI,
+                MediaMetadata.METADATA_KEY_ART_URI,
+                MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI,
+                "com.spotify.music".equals(pkg) ? "com.spotify.music.extra.ART_HTTPS_URI" : null
+        };
+        Bitmap best = null;
+        for (String field : fields) {
+            if (field == null) continue;
+            String value = metadata.getString(field);
+            if (value == null || value.isEmpty()) continue;
+            Uri uri = Uri.parse(value);
+            Bitmap art;
+            synchronized (CACHE) { art = CACHE.get(value); }
+            if (art == null || art.isRecycled()) {
+                String scheme = uri.getScheme();
+                if ("content".equals(scheme) || "https".equals(scheme) || "http".equals(scheme)) {
+                    String track = pkg + "|" + metadata.getString(MediaMetadata.METADATA_KEY_TITLE);
+                    boolean requested;
+                    synchronized (CACHE) {
+                        requested = !CURRENT_READS.containsKey(value);
+                        CURRENT_READS.put(value, track);
+                    }
+                    if (requested) {
+                        Item item = new Item(-1, metadata.getString(MediaMetadata.METADATA_KEY_TITLE),
+                                uri, null, null);
+                        // Decode on the background prefetch thread and ahead of queued neighbours.
+                        work().postAtFrontOfQueue(() -> {
+                            try { fetch(item); trim(); }
+                            finally {
+                                String waiting;
+                                synchronized (CACHE) { waiting = CURRENT_READS.remove(value); }
+                                Bitmap loaded;
+                                synchronized (CACHE) { loaded = CACHE.get(value); }
+                                if (loaded != null && !loaded.isRecycled()
+                                        && Main.sameTrack(waiting, Main.sTrackKey)) {
+                                    CoverPush.refreshArtworkQuality();
+                                }
+                            }
+                        });
+                    }
+                    // A broken local provider must not block another available artwork URI.
+                    continue;
+                }
+            }
+            if (art != null && !art.isRecycled()
+                    && (best == null || CoverPush.isArtworkUpgrade(best.getWidth(), best.getHeight(),
+                            art.getWidth(), art.getHeight()))) best = art;
+            if (best != null && !CoverPush.shouldSoftenArtwork(best.getWidth(), best.getHeight())) {
+                break;
+            }
+        }
+        return best;
+    }
+
+    static boolean isSpotifyArtwork(Bitmap art, String key) {
+        if (art == null || !"com.spotify.music".equals(Main.artworkTrackPackage(key))) return false;
+        synchronized (CACHE) {
+            for (java.util.Map.Entry<String, Bitmap> entry : CACHE.entrySet()) {
+                if (entry.getKey().startsWith("https://image-cdn.spotifycdn.com/")
+                        && entry.getValue() == art) return true;
+            }
+        }
+        return false;
     }
 
     /**

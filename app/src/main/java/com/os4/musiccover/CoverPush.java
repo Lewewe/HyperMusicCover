@@ -1297,7 +1297,11 @@ final class CoverPush {
         // Previous can restart the current song; do not predict its artwork.
         sDeferredPreviousKey = null;
         boolean previousChangesTrack = dir < 0 && Main.shouldAnimatePrevious();
-        if (!PreviousArtworkPolicy.shouldAnimateSkip(dir, previousChangesTrack)) return;
+        if (!PreviousArtworkPolicy.shouldAnimateSkip(dir, previousChangesTrack)) {
+            if (dir < 0) Main.noteArtworkSeek();
+            return;
+        }
+        Main.clearArtworkSeek();
         if (dir < 0 && !Main.hasPreviousQueueItem()) {
             // A first item may restart, do nothing, or wrap. Wait for actual track identity.
             sDeferredPreviousKey = Main.sTrackKey;
@@ -1311,6 +1315,7 @@ final class CoverPush {
     private static void pushPredictedArtwork() {
         Context ctx = Main.sAppCtx;
         if (ctx == null) return;
+        if (!ArtworkPredictionPolicy.canSpeculate(Main.artworkTrackPackage(Main.sTrackKey))) return;
         Bitmap art = Prefetch.take(1);
         if (art == null) return;
         String predicted = Prefetch.predictedKey();
@@ -1356,11 +1361,19 @@ final class CoverPush {
         String predicted = sPredictedArtworkKey;
         boolean matched = Prefetch.wasPredicted(Main.artworkTrackTitle(key));
         sPredictedArtworkKey = null;
-        if (!matched || predicted == null || !Main.sameTrack(predicted, key)
-                || sPredictedArtworkGen != Main.sPushGen || !Main.sameTrack(sArtKey, predicted)) return false;
-        int gen = Main.sPushGen;
-        sArtKey = key;
+        int gen = sPredictedRequestGen;
+        if (!ArtworkPredictionPolicy.canConfirm(gen, Main.sPushGen, matched,
+                predicted != null && Main.sameTrack(predicted, key))) return false;
+        // Metadata can confirm the song while its predicted bitmap is still being composed.
+        // Keep that generation alive; the worker below runs after the pending publication.
         Main.worker().post(() -> {
+            if (gen != Main.sPushGen || !Main.sameTrack(key, Main.sTrackKey)) return;
+            if (sPredictedArtworkGen != gen || !Main.sameTrack(sArtKey, key)) {
+                // A failed prediction must still allow the ordinary artwork source to answer.
+                pushArtAsync(true, true);
+                return;
+            }
+            sArtKey = key;
             upgradeArtwork(Main.sAppCtx, gen, key);
             startArtworkQualityWatch(Main.sAppCtx, gen, key);
         });
@@ -1451,9 +1464,15 @@ final class CoverPush {
                 && (width > oldWidth || height > oldHeight);
     }
 
+    private static volatile int sMissingArtworkGen = -1;
+
     private static final Runnable sQualityRefresh = new Runnable() {
         @Override
         public void run() {
+            if (Main.sCoverMode && sMissingArtworkGen == Main.sPushGen) {
+                tryPushArt(Main.sAppCtx, ART_TRIES - 1, true, Main.sPushGen);
+                return;
+            }
             upgradeArtwork(
                     Main.sAppCtx,
                     Main.sPushGen,
@@ -1503,7 +1522,8 @@ final class CoverPush {
 
             int[] pixels = ArtworkChangePolicy.isYouTube(key) ? artworkPixels(art) : null;
             boolean replacement = ArtworkChangePolicy.changed(key, sArtW, sArtH, sArtPixels,
-                    art.getWidth(), art.getHeight(), pixels);
+                    art.getWidth(), art.getHeight(), pixels)
+                    || (Prefetch.isSpotifyArtwork(art, key) && artPrint(art) != sArtPrint);
             if (!replacement && !isArtworkUpgrade(
                     sArtW, sArtH,
                     art.getWidth(), art.getHeight())) {
@@ -1671,6 +1691,9 @@ final class CoverPush {
                         && Main.sameTrack(sArtKey, Main.sTrackKey)
                         && ArtworkChangePolicy.changed(Main.sTrackKey, sArtW, sArtH, sArtPixels,
                             art.getWidth(), art.getHeight(), artworkPixels(art));
+                boolean awaitingUri = art != null
+                        && shouldSoftenArtwork(art.getWidth(), art.getHeight())
+                        && Prefetch.currentArtworkPending(key);
                 boolean stale = fresh && !presentationChanged
                         && art != null
                         && sArtPrint != 0
@@ -1688,7 +1711,7 @@ final class CoverPush {
                 boolean worse = fresh && art != null && sArtPrint != 0 && !stale
                         && !presentationChanged && sArtLong > 0 && Main.sameTrack(sArtKey, Main.sTrackKey)
                         && Math.max(art.getWidth(), art.getHeight()) < sArtLong;
-                if ((art == null || stale || worse) && !last) {
+                if ((art == null || stale || worse || awaitingUri) && !last) {
                     // 0 is "a session was there and carried no bitmap", which more tries will not
                     // change. -1 is "there was nothing to ask", which more tries might. Once the
                     // card is in it stays in, so this is worth looking at on any attempt - the
@@ -1698,7 +1721,7 @@ final class CoverPush {
                         Xp.log(Main.TAG + "session carries no bitmap at all, reading the card from here");
                     }
                     Xp.log(Main.TAG + "art " + (art == null ? "not ready"
-                                    : stale ? "still the old one" : "smaller than the one up")
+                                    : awaitingUri ? "waiting for current URI" : stale ? "still the old one" : "smaller than the one up")
                             + ", retrying (" + (attempt + 2) + "/" + ART_TRIES + ")");
                     tryPushArt(ctx, attempt + 1, fresh, gen, allowCard || bare);
                     return;
@@ -1723,6 +1746,8 @@ final class CoverPush {
                 // wallpaper showing what it already showed, and recording 0 here would claim it
                 // was empty and disarm the stale-art check on the next track change.
                 if (!currentPush(gen, key)) return;
+                // A later metadata/URI callback must be able to publish the first image too.
+                sMissingArtworkGen = art == null ? gen : -1;
                 if (art != null) {
                     sArtPrint = print;
                     sArtPixels = artworkPixels(art);

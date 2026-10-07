@@ -1166,11 +1166,16 @@ public class Main extends XposedModule {
             Class<?> tc = Xp.findClass("android.media.session.MediaController$TransportControls",
                     cl);
             Xp.hookAll(tc, "skipToNext", chain -> {
+                clearArtworkSeek();
                 CoverPush.noteSkip(1);
                 return chain.proceed();
             });
             Xp.hookAll(tc, "skipToPrevious", chain -> {
                 CoverPush.noteSkip(-1);
+                return chain.proceed();
+            });
+            Xp.hookAll(tc, "seekTo", chain -> {
+                noteArtworkSeek();
                 return chain.proceed();
             });
             Xp.log(TAG + "transport controls hooked");
@@ -5201,11 +5206,12 @@ public class Main extends XposedModule {
         MediaController c = controllerFromCard(ctx);
         if (c == null) c = pickController(ctx);
         if (c != null) {
-            MediaMetadata md = sessionMetadata(c);
+            MediaMetadata md = "com.spotify.music".equals(c.getPackageName())
+                    ? c.getMetadata() : sessionMetadata(c);
             if (md != null) {
                 String actualKey = metadataTrackKey(c, md);
                 if (expectedKey != null && !sameTrack(expectedKey, actualKey)) return null;
-                Bitmap b = bestSessionArt(md);
+                Bitmap b = bestSessionArt(md, c.getPackageName());
                 if (b != null) {
                     if (sessionBits != null) sessionBits[0] = 1;
                     Xp.log(TAG + "album art from " + c.getPackageName()
@@ -5246,6 +5252,23 @@ public class Main extends XposedModule {
         return best;
     }
 
+    private static Bitmap bestSessionArt(MediaMetadata md, String pkg) {
+        Bitmap best = bestSessionArt(md);
+        // Native view updates keep their original bitmap; URI work only serves the art worker.
+        if (Looper.myLooper() == Looper.getMainLooper()) return best;
+        boolean spotify = "com.spotify.music".equals(pkg);
+        if (!spotify && best != null
+                && !CoverPush.shouldSoftenArtwork(best.getWidth(), best.getHeight())) return best;
+        Bitmap fromUri = Prefetch.currentArtwork(md, pkg);
+        // The session may temporarily publish a large generic disc instead of the album.
+        if (spotify && fromUri != null) return fromUri;
+        if (fromUri != null && (best == null || CoverPush.isArtworkUpgrade(
+                best.getWidth(), best.getHeight(), fromUri.getWidth(), fromUri.getHeight()))) {
+            return fromUri;
+        }
+        return best;
+    }
+
     static Bitmap sessionArtForTrack(Context ctx, String key) {
         return sessionArtForTrack(ctx, key, false);
     }
@@ -5255,13 +5278,14 @@ public class Main extends XposedModule {
         if (controller == null) controller = pickController(ctx);
         if (controller == null) return null;
 
-        MediaMetadata md = fresh ? controller.getMetadata() : sessionMetadata(controller);
+        MediaMetadata md = fresh || "com.spotify.music".equals(controller.getPackageName())
+                ? controller.getMetadata() : sessionMetadata(controller);
         if (md == null) return null;
         String actualKey = metadataTrackKey(controller, md);
 
         if (!sameTrack(key, actualKey)) return null;
 
-        return bestSessionArt(md);
+        return bestSessionArt(md, controller.getPackageName());
     }
 
     /**
@@ -9391,6 +9415,7 @@ public class Main extends XposedModule {
 
                     @Override
                     public void onPlaybackStateChanged(PlaybackState state) {
+                        if (sWatched == null || !watched.getSessionToken().equals(sWatched.getSessionToken())) return;
                         LockLyrics.onPlaybackState(state);
                         updateCoverCardPlayback(state);
                         MiniPlayerRuntime.refresh();
@@ -9456,6 +9481,19 @@ public class Main extends XposedModule {
         }
     };
 
+    private static volatile String sArtworkSeekKey;
+    private static volatile long sArtworkSeekUntil;
+
+    static void noteArtworkSeek() {
+        sArtworkSeekKey = sTrackKey;
+        sArtworkSeekUntil = android.os.SystemClock.uptimeMillis() + 4000L;
+    }
+
+    static void clearArtworkSeek() {
+        sArtworkSeekKey = null;
+        sArtworkSeekUntil = 0L;
+    }
+
     private static void updateCoverCardPlayback(PlaybackState state) {
         int s = state == null ? PlaybackState.STATE_NONE : state.getState();
         // A skip passes through SKIPPING/BUFFERING/CONNECTING on its way to the next track. The
@@ -9469,6 +9507,12 @@ public class Main extends XposedModule {
                 || s == PlaybackState.STATE_SKIPPING_TO_QUEUE_ITEM;
         main().removeCallbacks(sRecheckPlayback);
         if (passing) main().postDelayed(sRecheckPlayback, 400L);
+        // Seeking can buffer without changing the song. Preserve the current spring target.
+        String actualKey = sWatched == null ? "" : trackKey(sWatched);
+        boolean seeking = ArtworkSeekPolicy.suppressTransient(passing,
+                android.os.SystemClock.uptimeMillis(), sArtworkSeekUntil,
+                sameTrack(sArtworkSeekKey, actualKey));
+        if (seeking) return;
         boolean playing = s == PlaybackState.STATE_PLAYING;
         if (sCoverCardPlaying == playing) return;
         sCoverCardPlaying = playing;
@@ -9525,7 +9569,8 @@ public class Main extends XposedModule {
         if (ta.isEmpty() || tb.isEmpty()) return false;
         if (!ta.equals(tb)) return TrackName.sameSong(pa, ta, tb);
         String aa = keyField(a, 2), ab = keyField(b, 2);
-        return aa.equals(ab) || aa.startsWith(ab) || ab.startsWith(aa);
+        return aa.equals(ab) || aa.startsWith(ab) || ab.startsWith(aa)
+                || ArtworkTrackIdentity.sameArtists(pa, aa, ab);
     }
 
     static String artworkTrackTitle(String key) { return keyField(key, 1); }
