@@ -3,9 +3,26 @@ package com.os4.musiccover;
 /** Restore only notification-constrained big artwork, never a user-selected compact page. */
 final class AodArtworkPolicy {
     private boolean notificationsBeforeUnlock;
+    private boolean wakePending;
+
+    void beginWake(boolean expanded, boolean fromCompact, boolean notificationCompact) {
+        wakePending = expanded && fromCompact && notificationCompact;
+    }
+
+    boolean wakePending() {
+        return wakePending;
+    }
+
+    /** Consume once, after native wake layout settles, while the AOD's full artwork stays visible. */
+    boolean finishWake(boolean settled) {
+        if (!wakePending || !settled) return false;
+        wakePending = false;
+        return true;
+    }
 
     void clear() {
         notificationsBeforeUnlock = false;
+        wakePending = false;
     }
 
     void observe(boolean locked, boolean goingAway, boolean coverActive,

@@ -4,6 +4,35 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class AodArtworkPolicyTest {
+    @Test public void notificationCompactWakeWaitsForNativeLayoutAndReconcilesOnce() {
+        AodArtworkPolicy policy = new AodArtworkPolicy();
+        policy.beginWake(true, true, true);
+        assertTrue(policy.wakePending());
+        for (int frame = 0; frame < 20; frame++) assertFalse(policy.finishWake(false));
+        assertTrue(policy.wakePending());
+        assertTrue(policy.finishWake(true));
+        assertFalse(policy.wakePending());
+        assertFalse(policy.finishWake(true));
+    }
+
+    @Test public void fullArtworkAndManualCompactPagesDoNotAcquireAWakeReconcile() {
+        AodArtworkPolicy policy = new AodArtworkPolicy();
+        policy.beginWake(false, true, true);
+        assertFalse(policy.wakePending());
+        policy.beginWake(true, false, true);
+        assertFalse(policy.wakePending());
+        policy.beginWake(true, true, false);
+        assertFalse(policy.wakePending());
+    }
+
+    @Test public void leavingCoverCancelsPendingNotificationWake() {
+        AodArtworkPolicy policy = new AodArtworkPolicy();
+        policy.beginWake(true, true, true);
+        policy.clear();
+        assertFalse(policy.wakePending());
+        assertFalse(policy.finishWake(true));
+    }
+
     @Test public void unlockAnimationCannotReplaceTheRestingClockPose() {
         assertTrue(AodArtworkPolicy.canRememberPose(true, false, true, 200f, 300f, 120f, 2656f));
         assertFalse(AodArtworkPolicy.canRememberPose(true, true, true, -479f, 41f, -588f, 2656f));

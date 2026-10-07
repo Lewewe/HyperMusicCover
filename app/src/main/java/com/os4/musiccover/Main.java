@@ -6801,10 +6801,23 @@ public class Main extends XposedModule {
 
     static void restoreAwakeArtwork() {
         if (!sAodArtworkExpanded) return;
+        if (sAodArtworkPolicy.wakePending()) return;
+        if (sCoverMode && keyguardShowing()) {
+            sAodArtworkPolicy.beginWake(true, sAodArtworkFromCompact, LockLyrics.notificationCompact());
+            if (sAodArtworkPolicy.wakePending()) {
+                // Keep the artwork already expanded in AOD while native notification layout wakes.
+                LockIslands.INSTANCE.reconcileNotificationArtworkAfterAod();
+                return;
+            }
+        }
         sAodArtworkExpanded = false;
         sAodArtworkFromCompact = false;
         refreshMediaCardForMorph();
         LockLyrics.refresh();
+    }
+
+    static boolean notificationArtworkWakePending() {
+        return sAodArtworkPolicy.wakePending();
     }
 
     static boolean coverCardInAod() {
@@ -8690,7 +8703,27 @@ public class Main extends XposedModule {
 
     /** Keep artwork in the media player while a multi-notification list is open. */
     static void notificationListArtwork(boolean open, int count) {
+        notificationListArtwork(open, count, true);
+    }
+
+    static void notificationListArtwork(boolean open, int count, boolean settled) {
         rememberNotificationArtwork();
+        if (sAodArtworkPolicy.wakePending()) {
+            if (!sScreenOn || !sAodArtworkPolicy.finishWake(settled)) return;
+            boolean compact = NotificationArtworkPolicy.compact(LockLyrics.notificationCompact(),
+                    open, count, sCoverMode && keyguardShowing(), !LockLyrics.wantsCompactArtwork());
+            // The visible source is full artwork, even when the old logical flag still says compact.
+            if (compact && sCoverMode && keyguardShowing()) {
+                if (!CoverMorphLayer.active()) sMorphKey = sCardKey;
+                CoverMorphLayer.beginNotificationCompact(false);
+            }
+            LockLyrics.setNotificationCompact(compact);
+            sAodArtworkExpanded = false;
+            sAodArtworkFromCompact = false;
+            refreshMediaCardForMorph();
+            LockLyrics.refresh();
+            return;
+        }
         boolean was = LockLyrics.notificationCompact();
         boolean compact = NotificationArtworkPolicy.compact(was, open, count,
                 sCoverMode && keyguardShowing(), !LockLyrics.wantsCompactArtwork());

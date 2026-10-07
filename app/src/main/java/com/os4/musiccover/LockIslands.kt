@@ -943,6 +943,18 @@ internal object LockIslands {
         }
     }
 
+    /** Reconcile a wake without replaying the thumbnail-to-cover morph completed in AOD. */
+    fun reconcileNotificationArtworkAfterAod() {
+        notificationArtworkNavigation.reset()
+        requestedArtworkListAt = 0L
+        artworkGestureDirection.reset()
+        artworkGestureDirection.clearTouch()
+        notificationArtworkTouching = false
+        previousArtworkScroll = NumState.position()
+        artworkMotionUntil = android.os.SystemClock.uptimeMillis() + 200L
+        updateNotificationArtwork()
+    }
+
     private fun beginNotificationListArtwork() {
         if (!keepsCoverStack()) return
         requestedArtworkListAt = android.os.SystemClock.uptimeMillis()
@@ -1003,10 +1015,12 @@ internal object LockIslands {
                 notificationArtworkState = state
                 val busy = NumState.busy()
                 val list = notificationArtworkNavigation.listOpen(open, state, busy, towardList)
-                Main.notificationListArtwork(list, stackMembers.size)
                 val moving = notificationArtworkTouching || busy || now < artworkMotionUntil
+                val settled = !moving && ClockCollapse.phase() != ClockCollapse.Phase.ENTER
+                Main.notificationListArtwork(list, stackMembers.size, settled)
                 if (NotificationArtworkPolicy.shouldPoll(state == "LIST", moving,
-                        requestedArtworkListAt != 0L) && tracksNotificationArtwork()) {
+                        requestedArtworkListAt != 0L || Main.notificationArtworkWakePending())
+                        && tracksNotificationArtwork()) {
                     queueNotificationArtwork(if (moving) 32L else 128L)
                 }
                 // A settled pile stops here, retaining its last position for the next gesture.
