@@ -289,6 +289,7 @@ private fun CoverGroup(
                 title = stringResource(R.string.cover_bias),
                 value = module.bias,
                 valueRange = 0f..1f,
+                detent = 0.34f,
                 enabled = enabled,
                 onValueChange = {
                     onChange(module.copy(bias = it))
@@ -315,6 +316,7 @@ private fun ClockGroup(
             value = (if (module.clockSize > 0f) module.clockSize else DEFAULT_CLOCK_SIZE)
                 .coerceIn(CLOCK_SIZE_MIN, 1f),
             valueRange = CLOCK_SIZE_MIN..1f,
+            detent = DEFAULT_CLOCK_SIZE,
             enabled = enabled,
             label = { "${(it * 100f).roundToInt()}%" },
             onValueChange = {
@@ -591,11 +593,7 @@ private fun CardGroup(
  * pages adjust module settings the same way, and a second slider that looked almost the same was
  * the first thing a reviewer noticed.
  *
- * [detent] is a single value on the track that ticks as it is passed - the app's only one, and it
- * exists because a slider whose default is one number among many is otherwise impossible to find
- * again by hand. It is miuix's own key point rather than a comparison of this frame's value
- * against the last, so the tick is the library's and behaves the way every other miuix slider's
- * does.
+ * [detent] marks the module default with a dot and uses miuix's key point haptic feedback.
  */
 @Composable
 internal fun ValueSlider(
@@ -636,6 +634,7 @@ internal fun ValueSlider(
             hapticEffect = if (detent != null) SliderDefaults.SliderHapticEffect.Step
                            else SliderDefaults.DefaultHapticEffect,
             keyPoints = detent?.let { listOf(it) },
+            showKeyPoints = detent != null,
             // The library's magnet would pull the value onto the key point from 2% of the range
             // away, which is a snap rather than a tick, and it would take the values just either
             // side of the detent out of what this slider can be set to. Off, deliberately: the
