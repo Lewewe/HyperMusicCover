@@ -53,6 +53,7 @@ internal object NumState {
         LockIslands.systemHiddenForProbe().let { if (it.isEmpty()) "" else "sysHidden=[$it] " } +
         "default=${runCatching { defaultFlow()?.let { Xp.callMethod(it, "getValue") } }.getOrNull()} " +
         "log=" + synchronized(log) { log.joinToString(" ; ") } +
+        " || artwork=[${LockIslands.notificationArtworkSampling()}]" +
         " || frames=" + framesText()
 
     fun install(classLoader: ClassLoader) {
@@ -87,26 +88,28 @@ internal object NumState {
                     .getOrNull() ?: target
             }
         }.onFailure { Xp.log("MCNum: hands-up unhookable: $it") }
-        // Native scrolling does not always cross enter/exitNumState (STACK <-> LIST).
+        // Wake on actual native scrolling, including STACK <-> LIST without number-state callbacks.
         runCatching {
             val stack = Xp.findClass("com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout", classLoader)
             for (name in listOf("setOwnScrollY", "setOverScrolledPixels")) {
                 runCatching {
                     Xp.hookAll(stack, name) { chain ->
-                        val result = chain.proceed()
                         val value = (chain.args.firstOrNull() as? Number)?.toFloat()
                         val target = chain.thisObject
-                        if (value != null && target != null) {
-                            val channel = if (name == "setOwnScrollY") 0
-                                else if (chain.args.getOrNull(1) == true) 1 else 2
-                            val state = artworkScrollStates.getOrPut(target) { ArtworkScrollState() }
-                            if (state.changed(channel, value)) LockIslands.notificationArtworkMotion()
-                        }
+                        val channel = if (name == "setOwnScrollY") 0
+                            else if (chain.args.getOrNull(1) == true) 1 else 2
+                        val changed = value != null && target != null &&
+                            artworkScrollStates.getOrPut(target) { ArtworkScrollState() }.changed(channel, value)
+                        val tracking = changed && LockIslands.tracksNotificationArtwork()
+                        val before = if (tracking) position() else null
+                        val result = chain.proceed()
+                        if (tracking && position() != before) LockIslands.notificationArtworkMotion(before)
                         result
                     }
-                }.onFailure { Xp.log("MCNum: $name scroll hook unavailable: $it") }
+                }.onFailure { Xp.log("MCNum: $name artwork hook unavailable: $it") }
             }
-        }.onFailure { Xp.log("MCNum: artwork scroll hooks unavailable: $it") }
+
+        }.onFailure { Xp.log("MCNum: artwork motion hooks unavailable: $it") }
     }
 
     fun addListener(l: (Boolean) -> Unit) { listeners.addIfAbsent(l) }

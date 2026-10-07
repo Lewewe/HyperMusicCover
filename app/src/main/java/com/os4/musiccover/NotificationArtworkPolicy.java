@@ -2,8 +2,19 @@ package com.os4.musiccover;
 
 /** A temporary thumbnail override, independent of the user's cover/lyrics preference. */
 final class NotificationArtworkPolicy {
+    /** Preserve the 32 ms motion cadence; callbacks must not turn it into per-setter sampling. */
+    static long wakeDelay(boolean pending, long due, long now) {
+        if (!pending) return 0L;
+        return due - now > 32L ? 32L : -1L;
+    }
+
     static boolean shouldPoll(boolean listOpen, boolean moving, boolean requestPending) {
         return listOpen || moving || requestPending;
+    }
+
+    static boolean needsMotionGeometry(Integer position, Integer previous) {
+        return position != null && previous != null
+                && Math.abs((long) position - previous) > 2L;
     }
 
     private boolean fullList;

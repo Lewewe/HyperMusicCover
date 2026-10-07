@@ -469,7 +469,8 @@ internal object LockIslands {
             updateNotificationArtwork()
         } else if (cover) {
             main.removeCallbacks(notificationArtworkUpdate)
-            artworkUpdateGate.complete(false)
+            notificationArtworkQueued = false
+            notificationArtworkTouching = false
             artworkMotionUntil = 0L
             requestedArtworkListAt = 0L
             previousArtworkScroll = null
@@ -856,16 +857,85 @@ internal object LockIslands {
     }
 
     private val notificationArtworkNavigation = NotificationArtworkPolicy()
+    private val artworkGestureDirection = ArtworkGestureDirection()
     private var previousArtworkScroll: Int? = null
     private var requestedArtworkListAt = 0L
     private var artworkMotionUntil = 0L
-    private val artworkUpdateGate = ArtworkUpdateGate()
+    private var notificationArtworkQueued = false
+    private var notificationArtworkDue = 0L
+    private var notificationArtworkTouching = false
+    private var notificationArtworkRunning = false
+    private var notificationArtworkSamples = 0L
+    private var notificationArtworkState: String? = null
 
-    /** Scroll callbacks wake the detector; a settled STACK or NUMBER needs no timer. */
-    fun notificationArtworkMotion() {
-        if (!Main.coverModeOn() || !Main.keyguardLocked() || !Main.screenOnCached()) return
-        artworkMotionUntil = android.os.SystemClock.uptimeMillis() + 200L
-        updateNotificationArtwork()
+    /** Read-only counters let the probe verify that an idle pile has no polling timer. */
+    fun notificationArtworkSampling(): String = "samples=$notificationArtworkSamples" +
+            " queued=$notificationArtworkQueued running=$notificationArtworkRunning touching=$notificationArtworkTouching state=$notificationArtworkState"
+
+    private var artworkPerfOn = false
+    private var artworkPerfSamples = 0L
+    private var artworkPerfGeometry = 0L
+    private var artworkPerfWallNs = 0L
+    private var artworkPerfCpuNs = 0L
+    private var artworkPerfMaxNs = 0L
+    private var artworkPerfStarted = 0L
+
+    /** Timing is enabled only during an explicit probe, with no per-frame logging. */
+    fun notificationArtworkPerf(reset: Boolean, finish: Boolean): String {
+        if (reset) {
+            artworkPerfSamples = 0L
+            artworkPerfGeometry = 0L
+            artworkPerfWallNs = 0L
+            artworkPerfCpuNs = 0L
+            artworkPerfMaxNs = 0L
+            artworkPerfStarted = android.os.SystemClock.uptimeMillis()
+            artworkPerfOn = true
+        }
+        val result = org.json.JSONObject()
+            .put("elapsedMs", android.os.SystemClock.uptimeMillis() - artworkPerfStarted)
+            .put("samples", artworkPerfSamples).put("geometryQueries", artworkPerfGeometry)
+            .put("wallNs", artworkPerfWallNs).put("cpuNs", artworkPerfCpuNs)
+            .put("maxWallNs", artworkPerfMaxNs).put("queued", notificationArtworkQueued)
+            .put("touching", notificationArtworkTouching).put("state", notificationArtworkState)
+            .put("eligible", tracksNotificationArtwork()).toString()
+        if (finish) artworkPerfOn = false
+        return result
+    }
+
+    fun tracksNotificationArtwork(): Boolean = keepsCoverStack()
+            && Main.keyguardLocked() && Main.screenOnCached()
+
+    /** Capture the idle baseline before the native setter moves it; never discard it at rest. */
+    fun notificationArtworkMotion(before: Int?) {
+        if (!tracksNotificationArtwork()) return
+        if (!notificationArtworkQueued && !notificationArtworkRunning) {
+            artworkGestureDirection.reset()
+            if (before != null) previousArtworkScroll = before
+        }
+        val now = android.os.SystemClock.uptimeMillis()
+        artworkMotionUntil = now + 200L
+        if (notificationArtworkRunning) return
+        val delay = NotificationArtworkPolicy.wakeDelay(notificationArtworkQueued, notificationArtworkDue, now)
+        if (delay >= 0L) queueNotificationArtwork(delay)
+    }
+
+    /** Observe the whole shade window so a gesture starting on the media card is included. */
+    fun notificationArtworkTouch(event: android.view.MotionEvent) {
+        val action = event.actionMasked
+        if (action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL) {
+            notificationArtworkTouching = false
+            notificationArtworkMotion(null)
+            return
+        }
+        if (!tracksNotificationArtwork()) {
+            notificationArtworkTouching = false
+            return
+        }
+        if (action == android.view.MotionEvent.ACTION_DOWN) {
+            artworkGestureDirection.reset()
+            notificationArtworkMotion(NumState.position())
+            notificationArtworkTouching = true
+        }
     }
 
     private fun beginNotificationListArtwork() {
@@ -877,57 +947,85 @@ internal object LockIslands {
 
     private val notificationArtworkUpdate = object : Runnable {
         override fun run() {
-            // Keep the slot occupied while native getters can invoke hooks reentrantly.
+            notificationArtworkQueued = false
             if (!Main.coverModeOn() || !Main.keyguardLocked() || !Main.screenOnCached()) {
                 previousArtworkScroll = null
-                artworkUpdateGate.complete(false)
+                notificationArtworkTouching = false
                 return
             }
-            if (stackMembers.size <= 1) {
-                notificationArtworkNavigation.reset()
-                requestedArtworkListAt = 0L
-                previousArtworkScroll = null
-                Main.notificationListArtwork(false, stackMembers.size)
-                artworkUpdateGate.complete(false)
-                return
-            }
-            val open = spreading || stackOut
-            val state = NumState.state()
-            val busy = NumState.busy()
-            val position = NumState.position()
-            val previous = previousArtworkScroll
-            previousArtworkScroll = position
-            // Native strategy queries have side effects and log heavily; settled states need none.
-            val towardList = if (state != "LIST" && position != null && previous != null
-                    && position != previous) {
-                val listY = NumState.listScroll()
-                val numberY = NumState.scrollTo("NUMBER")
-                listY != null && numberY != null
-                    && (position - previous) * (if (listY >= numberY) 1 else -1) > 2
-            } else false
-            if (requestedArtworkListAt != 0L
-                && android.os.SystemClock.uptimeMillis() - requestedArtworkListAt > 1200L) {
-                requestedArtworkListAt = 0L
-                notificationArtworkNavigation.expireRequest()
-            }
-            val list = notificationArtworkNavigation.listOpen(open, state, busy, towardList)
-            Main.notificationListArtwork(list, stackMembers.size)
-            val moving = busy || android.os.SystemClock.uptimeMillis() < artworkMotionUntil
-            if (NotificationArtworkPolicy.shouldPoll(state == "LIST", moving,
-                    requestedArtworkListAt != 0L)) {
-                artworkUpdateGate.complete(true)
-                main.postDelayed(this, if (moving) 32L else 128L)
-            } else {
-                previousArtworkScroll = null
-                artworkUpdateGate.complete(false)
+            notificationArtworkRunning = true
+            notificationArtworkSamples++
+            val perf = artworkPerfOn
+            val wallStart = if (perf) System.nanoTime() else 0L
+            val cpuStart = if (perf) android.os.Debug.threadCpuTimeNanos() else 0L
+            try {
+                if (stackMembers.size <= 1) {
+                    notificationArtworkNavigation.reset()
+                    requestedArtworkListAt = 0L
+                    Main.notificationListArtwork(false, stackMembers.size)
+                    return
+                }
+                val open = spreading || stackOut
+                val position = NumState.position()
+                val previous = previousArtworkScroll
+                // Accumulate sub-threshold steps instead of losing a slow drag one pixel at a time.
+                if (previous == null || NotificationArtworkPolicy.needsMotionGeometry(position, previous)) {
+                    previousArtworkScroll = position
+                }
+                // Native strategy geometry is needed only for a meaningful scroll delta.
+                val towardList = if (NotificationArtworkPolicy.needsMotionGeometry(position, previous)) {
+                    var direction = artworkGestureDirection.forMembers(stackMembers.size)
+                    if (direction == 0) {
+                        if (perf) artworkPerfGeometry++
+                        val listY = NumState.listScroll()
+                        val numberY = NumState.scrollTo("NUMBER")
+                        artworkGestureDirection.remember(listY, numberY, stackMembers.size)
+                        direction = artworkGestureDirection.forMembers(stackMembers.size)
+                    }
+                    position != null && previous != null
+                        && (position.toLong() - previous.toLong()) * direction > 2
+                } else false
+                val now = android.os.SystemClock.uptimeMillis()
+                if (requestedArtworkListAt != 0L && now - requestedArtworkListAt > 1200L) {
+                    requestedArtworkListAt = 0L
+                    notificationArtworkNavigation.expireRequest()
+                }
+                // Read state after native strategy queries, which can update native state.
+                val state = NumState.state()
+                notificationArtworkState = state
+                val busy = NumState.busy()
+                val list = notificationArtworkNavigation.listOpen(open, state, busy, towardList)
+                Main.notificationListArtwork(list, stackMembers.size)
+                val moving = notificationArtworkTouching || busy || now < artworkMotionUntil
+                if (NotificationArtworkPolicy.shouldPoll(state == "LIST", moving,
+                        requestedArtworkListAt != 0L) && tracksNotificationArtwork()) {
+                    queueNotificationArtwork(if (moving) 32L else 128L)
+                }
+                // A settled pile stops here, retaining its last position for the next gesture.
+            } finally {
+                if (perf) {
+                    val wall = System.nanoTime() - wallStart
+                    artworkPerfSamples++
+                    artworkPerfWallNs += wall
+                    artworkPerfCpuNs += android.os.Debug.threadCpuTimeNanos() - cpuStart
+                    artworkPerfMaxNs = maxOf(artworkPerfMaxNs, wall)
+                }
+                notificationArtworkRunning = false
             }
         }
     }
 
     private fun updateNotificationArtwork() {
-        // Coalesce filter runs and stack callbacks, then read the latest settled count.
-        if (!artworkUpdateGate.request()) return
-        main.post(notificationArtworkUpdate)
+        // Coalesce reentrant native callbacks; a real motion callback advances a pending sample.
+        if (notificationArtworkRunning) return
+        queueNotificationArtwork(0L)
+    }
+
+    private fun queueNotificationArtwork(delay: Long) {
+        main.removeCallbacks(notificationArtworkUpdate)
+        notificationArtworkQueued = true
+        notificationArtworkDue = android.os.SystemClock.uptimeMillis() + delay
+        main.postDelayed(notificationArtworkUpdate, delay)
     }
 
     /** The islands put together from the last run: the focus ones and the stack island. */

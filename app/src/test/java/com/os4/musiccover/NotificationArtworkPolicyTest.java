@@ -4,13 +4,59 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class NotificationArtworkPolicyTest {
-    @Test public void settledPileAndPillStopPolling() {
+    @Test public void motionCallbacksKeepTheSampleCadenceAndWakeAnIdleDetectorImmediately() {
+        assertEquals(0L, NotificationArtworkPolicy.wakeDelay(false, 0L, 100L));
+        assertEquals(32L, NotificationArtworkPolicy.wakeDelay(true, 228L, 100L));
+        for (long now = 100L; now <= 132L; now += 8L) {
+            assertEquals(-1L, NotificationArtworkPolicy.wakeDelay(true, 132L, now));
+        }
+    }
+
+    @Test public void slowDragAccumulatesUntilItCanStartTheListMorph() {
+        NotificationArtworkPolicy navigation = new NotificationArtworkPolicy();
+        assertFalse(navigation.listOpen(true, "STACK", false));
+        int previous = 395;
+        boolean opening = false;
+        for (int position = 396; position <= 400; position++) {
+            boolean moved = NotificationArtworkPolicy.needsMotionGeometry(position, previous);
+            if (moved) previous = position;
+            opening = navigation.listOpen(true, "STACK", true, moved);
+        }
+        assertTrue(opening);
+        assertTrue(navigation.listOpen(true, "LIST", false));
+        assertFalse(navigation.listOpen(true, "STACK", false));
+    }
+
+    @Test public void settledPileAndNumberStopPollingUntilACallbackWakesThem() {
         assertFalse(NotificationArtworkPolicy.shouldPoll(false, false, false));
-        assertTrue(NotificationArtworkPolicy.shouldPoll(true, false, false));
         assertTrue(NotificationArtworkPolicy.shouldPoll(false, true, false));
+        assertTrue(NotificationArtworkPolicy.shouldPoll(true, false, false));
         assertTrue(NotificationArtworkPolicy.shouldPoll(false, false, true));
-        // Folding stops the timer as soon as motion and the pending request finish.
         assertFalse(NotificationArtworkPolicy.shouldPoll(false, false, false));
+    }
+
+    @Test public void idleSamplesSkipGeometryButFirstDragStillStartsTheMorph() {
+        NotificationArtworkPolicy navigation = new NotificationArtworkPolicy();
+        assertFalse(navigation.listOpen(true, "STACK", false));
+        for (int i = 0; i < 100; i++) {
+            assertFalse(NotificationArtworkPolicy.needsMotionGeometry(395, 395));
+            assertFalse(navigation.listOpen(true, "STACK", false));
+        }
+        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(414, 395));
+        assertTrue(navigation.listOpen(true, "STACK", true, true));
+        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(414, 414));
+        assertTrue(navigation.listOpen(true, "LIST", true, false));
+        assertFalse(navigation.listOpen(true, "STACK", false));
+    }
+
+    @Test public void geometryFilterRetainsBothDirectionsAndRejectsInsignificantMotion() {
+        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(null, 395));
+        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(395, null));
+        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(397, 395));
+        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(393, 395));
+        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(398, 395));
+        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(392, 395));
+        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(Integer.MAX_VALUE, Integer.MIN_VALUE));
     }
 
     @Test public void openingPileTowardListStartsMorphBeforeNativeListSettles() {
