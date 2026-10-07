@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.zip.CRC32;
 
@@ -45,6 +46,20 @@ final class LyricTranslationLogic {
         }
     }
 
+    static boolean hasJapaneseScript(String text) {
+        if (text == null) return false;
+        for (int i = 0; i < text.length();) {
+            int cp = text.codePointAt(i);
+            Character.UnicodeScript script = Character.UnicodeScript.of(cp);
+            if (script == Character.UnicodeScript.HIRAGANA
+                    || script == Character.UnicodeScript.KATAKANA
+                    || script == Character.UnicodeScript.HAN) {
+                return true;
+            }
+            i += Character.charCount(cp);
+        }
+        return false;
+    }
     private static final String MARKER_PREFIX = "[[MCID:";
     private static final String MARKER_SUFFIX = "]]";
 
@@ -53,10 +68,18 @@ final class LyricTranslationLogic {
         ArrayList<Entry> out = new ArrayList<>(lines.size());
         for (int i = 0; i < lines.size(); i++) {
             LyricLine line = lines.get(i);
-            if (line == null || line.text == null || line.translation != null) continue;
+            if (line == null || line.text == null) continue;
             String text = line.text.trim();
-            if (text.isEmpty()) continue;
-            out.add(new Entry(i, idOf(i, line), text));
+            if (!text.isEmpty()) out.add(new Entry(i, idOf(i, line), text));
+        }
+        return out;
+    }
+
+    static List<Entry> entriesForTranslation(List<LyricLine> lines, String source,
+                                              String target) {
+        ArrayList<Entry> out = new ArrayList<>();
+        for (Entry entry : entriesOf(lines)) {
+            if (hasJapaneseScript(entry.text)) out.add(entry);
         }
         return out;
     }
@@ -96,6 +119,10 @@ final class LyricTranslationLogic {
     }
 
     static Map<String, String> parseLibreResponse(String body) {
+        return parseLibreResponse(body, Collections.<Entry>emptyList());
+    }
+
+    static Map<String, String> parseLibreResponse(String body, List<Entry> entries) {
         if (body == null || body.trim().isEmpty()) return Collections.emptyMap();
         try {
             JSONObject obj = new JSONObject(body);
@@ -103,18 +130,43 @@ final class LyricTranslationLogic {
             Object translated = obj.get("translatedText");
             LinkedHashMap<String, String> out = new LinkedHashMap<>();
             if (translated instanceof String) {
-                out.putAll(parseMarkedTranslation((String) translated));
+                String text = (String) translated;
+                out.putAll(parseMarkedTranslation(text));
+                if (out.isEmpty()) out.putAll(parseOrderedTranslation(text, entries));
             } else if (translated instanceof JSONArray) {
                 JSONArray arr = (JSONArray) translated;
                 for (int i = 0; i < arr.length(); i++) {
                     Object one = arr.get(i);
-                    if (one instanceof String) out.putAll(parseMarkedTranslation((String) one));
+                    if (!(one instanceof String)) continue;
+                    String text = (String) one;
+                    Map<String, String> marked = parseMarkedTranslation(text);
+                    if (!marked.isEmpty()) {
+                        out.putAll(marked);
+                    } else if (i < entries.size() && !text.trim().isEmpty()) {
+                        out.put(entries.get(i).id, text.trim());
+                    }
                 }
             }
             return out;
         } catch (Throwable ignored) {
             return Collections.emptyMap();
         }
+    }
+
+    private static Map<String, String> parseOrderedTranslation(String text, List<Entry> entries) {
+        if (text == null || entries == null || entries.isEmpty()) return Collections.emptyMap();
+        String[] lines = text.split("\\r?\\n", -1);
+        if (entries.size() == 1) {
+            return lines.length == 0 || lines[0].trim().isEmpty()
+                    ? Collections.<String, String>emptyMap()
+                    : Collections.singletonMap(entries.get(0).id, text.trim());
+        }
+        if (lines.length != entries.size()) return Collections.emptyMap();
+        LinkedHashMap<String, String> out = new LinkedHashMap<>();
+        for (int i = 0; i < lines.length; i++) {
+            if (!lines[i].trim().isEmpty()) out.put(entries.get(i).id, lines[i].trim());
+        }
+        return out;
     }
 
     /** Official array APIs return one result per input, in the same order; reject count drift. */
@@ -180,18 +232,16 @@ final class LyricTranslationLogic {
         boolean changed = false;
         for (int i = 0; i < base.size(); i++) {
             LyricLine line = base.get(i);
-            if (line == null || line.translation != null) {
+            if (line == null) {
                 out.add(line);
                 continue;
             }
             String translated = translatedById.get(idOf(i, line));
-            if (translated == null || translated.trim().isEmpty()) {
-                out.add(line);
-                continue;
-            }
-            changed = true;
-            LyricLine copy = new LyricLine(line.text, translated, line.start, line.end, line.opposite,
-                    line.sylStart, line.sylEnd, line.charEnd);
+            String secondary = translated == null || translated.trim().isEmpty()
+                    ? null : translated;
+            if (!java.util.Objects.equals(line.translation, secondary)) changed = true;
+            LyricLine copy = new LyricLine(line.text, secondary, line.roma, line.start, line.end,
+                    line.opposite, line.sylStart, line.sylEnd, line.charEnd);
             copy.bg = line.bg;
             out.add(copy);
         }
@@ -202,7 +252,7 @@ final class LyricTranslationLogic {
                            List<LyricLine> lines) {
         String ep = normalizeEndpoint(endpoint);
         String source = normLang(sourceLang, "auto");
-        String target = normLang(targetLang, "en");
+        String target = normLang(targetLang, Locale.getDefault().getLanguage());
         return safe(trackKey) + "|" + ep + "|" + source + "|" + target + "|" + linesHash(lines);
     }
 
@@ -215,7 +265,8 @@ final class LyricTranslationLogic {
 
     static String normLang(String lang, String fallback) {
         String l = lang == null ? "" : lang.trim().toLowerCase(java.util.Locale.ROOT);
-        return l.isEmpty() ? fallback : l;
+        if (l.isEmpty() || "auto".equals(l)) return fallback;
+        return l;
     }
 
     static long linesHash(List<LyricLine> lines) {

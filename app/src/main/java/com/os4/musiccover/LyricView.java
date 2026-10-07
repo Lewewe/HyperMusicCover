@@ -1444,7 +1444,7 @@ final class LyricView extends View {
         if (!LockLyrics.sHdr || focus < 0 || show == 0f || !LockLyrics.playing()) return false;
         for (int i = Math.max(0, focus - 1); i <= focus; i++) {
             LyricLine l = lines.get(i);
-            if (!l.hasWords() || emph[i] <= 0f) continue;
+            if (!l.hasDisplayWords() || emph[i] <= 0f) continue;
             for (int k = 0; k < l.sylStart.length; k++) {
                 int s = l.sylStart[k], end = l.sylEnd[k];
                 if (end - s >= GLOW_MIN_MS && ms >= s - HDR_ARM_MS && ms < end + GLOW_TAIL_MS) {
@@ -1460,7 +1460,7 @@ final class LyricView extends View {
         if (!LockLyrics.playing() || focus < 0 || show == 0f) return false;
         for (int i = Math.max(0, focus - 1); i <= focus; i++) {
             LyricLine l = lines.get(i);
-            if (l.hasWords() && emph[i] > 0f && ms >= l.start
+            if (l.hasDisplayWords() && emph[i] > 0f && ms >= l.start
                     && ms < l.end + Math.max(LIFT_MIN_MS, GLOW_TAIL_MS)) {
                 return true;
             }
@@ -1640,7 +1640,8 @@ final class LyricView extends View {
                 b.dotsTop[i] = Float.NaN;
             }
             Layout.Alignment align = alignFor(l.opposite, alignOn);
-            b.main[i] = StaticLayout.Builder.obtain(l.text, 0, l.text.length(), p, w)
+            String displayText = l.displayText();
+            b.main[i] = StaticLayout.Builder.obtain(displayText, 0, displayText.length(), p, w)
                     .setAlignment(align)
                     .setIncludePad(false)
                     .setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED)
@@ -1648,7 +1649,7 @@ final class LyricView extends View {
             float h = b.main[i].getHeight();
             // The characters' places too, which the first draw of a word-timed line used to
             // measure one getPrimaryHorizontal at a time on the UI thread.
-            if (l.hasWords()) b.charX[i] = charXOf(b.main[i], l);
+            if (l.hasDisplayWords()) b.charX[i] = charXOf(b.main[i], l);
             if (l.bg != null) {
                 b.bgLay[i] = StaticLayout.Builder.obtain(l.bg.text, 0, l.bg.text.length(), bp, w)
                         .setAlignment(align)
@@ -2071,7 +2072,7 @@ final class LyricView extends View {
         // Retained lines stay readable, but finished word lifts/glows need no per-word rendering.
         boolean settledWords = retained(i) && i < focus
                 && (long) ms >= (long) l.end + Math.max(LIFT_MIN_MS, GLOW_TAIL_MS);
-        boolean words = l.hasWords() && e > 0f && !still && !settledWords;
+        boolean words = l.hasDisplayWords() && e > 0f && !still && !settledWords;
         int save = canvas.save();
         canvas.translate(x, y);
         canvas.scale(sc, sc, pivotX, 0f);
@@ -2105,7 +2106,7 @@ final class LyricView extends View {
             float t = hi > lo ? clamp01((r - lo) / (hi - lo)) : 0f;
             // A word-timed line that is not the focus is all unsung colour; a line-timed one is
             // lit while it is sung.
-            float w = l.hasWords() && !still && !settledWords ? 0f : lit[i];
+            float w = l.hasDisplayWords() && !still && !settledWords ? 0f : lit[i];
             float base = a * (INACTIVE + (1f - INACTIVE) * w);
             if (t < 1f) drawBlurLevel(canvas, i, lo, base * (1f - t), hi, w);
             if (t > 0f) drawBlurLevel(canvas, i, hi, base * t, lo, w);
@@ -2270,7 +2271,8 @@ final class LyricView extends View {
             p.clearShadowLayer();
             p.setAlpha(255);
             p.setMaskFilter(mf);
-            StaticLayout lay = StaticLayout.Builder.obtain(l.text, 0, l.text.length(), p, width)
+            String displayText = l.displayText();
+            StaticLayout lay = StaticLayout.Builder.obtain(displayText, 0, displayText.length(), p, width)
                     .setAlignment(align)
                     .setIncludePad(false)
                     .setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED)
@@ -2661,7 +2663,7 @@ final class LyricView extends View {
 
     String describe() {
         int words = 0;
-        for (LyricLine l : lines) if (l.hasWords()) words++;
+        for (LyricLine l : lines) if (l.hasDisplayWords()) words++;
         StringBuilder w = new StringBuilder();
         String[] names = {"rebuild", "band", "show", "focus", "scroll", "snap", "emph", "blur",
                 "words", "anchor"};

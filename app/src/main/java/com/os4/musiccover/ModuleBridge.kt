@@ -131,7 +131,7 @@ object ModuleBridge {
         val lyricTranslateEndpoint: String = "",
         val lyricTranslateApiKey: String = "",
         val lyricTranslateSource: String = "auto",
-        val lyricTranslateTarget: String = "en",
+        val lyricTranslateTarget: String = "auto",
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
         /** Keep fast lyrics together in small groups instead of scrolling on every line. */
@@ -795,7 +795,7 @@ object ModuleBridge {
             lyricTranslateEndpoint = b.getString("lyrictrendpoint") ?: "",
             lyricTranslateApiKey = b.getString("lyrictrkey") ?: "",
             lyricTranslateSource = b.getString("lyrictrsource") ?: "auto",
-            lyricTranslateTarget = b.getString("lyrictrtarget") ?: "en",
+            lyricTranslateTarget = b.getString("lyrictrtarget") ?: "auto",
             lyricsRoma = b.getBoolean("lyricroma", false),
             lyricsGroups = b.getBoolean("lyricgroups", false),
             lyricsAlign = b.getInt("lyricalign", 0),

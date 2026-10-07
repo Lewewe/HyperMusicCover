@@ -57,20 +57,22 @@ class LibreTranslateLyricTranslator implements LyricTranslator {
             return;
         }
         final String source = LyricTranslationLogic.normLang(cfg.sourceLanguage, "auto");
-        final String target = LyricTranslationLogic.normLang(cfg.targetLanguage, "en");
-        final String cacheKey = LyricTranslationLogic.cacheKey(cfg.provider + "|" + trackKey, endpoint, source, target,
-                lines);
+        final String target = LyricTranslationLogic.normLang(cfg.targetLanguage,
+                java.util.Locale.getDefault().getLanguage());
+        final List<LyricTranslationLogic.Entry> entries =
+                LyricTranslationLogic.entriesForTranslation(lines, source, target);
+        if (entries.isEmpty()) {
+            cb.onFailed("no Japanese lines");
+            return;
+        }
+        final String cacheKey = LyricTranslationLogic.cacheKey("v3|" + cfg.provider + "|" + trackKey,
+                endpoint, source, target, lines);
         Map<String, String> hit;
         synchronized (CACHE) {
             hit = CACHE.get(cacheKey);
         }
         if (hit != null && !hit.isEmpty()) {
             cb.onTranslated(cacheKey, LyricTranslationLogic.merge(lines, hit), true);
-            return;
-        }
-        final List<LyricTranslationLogic.Entry> entries = LyricTranslationLogic.entriesOf(lines);
-        if (entries.isEmpty()) {
-            cb.onFailed("no translatable lines");
             return;
         }
         final List<LyricTranslationLogic.Batch> batches =
@@ -102,7 +104,7 @@ class LibreTranslateLyricTranslator implements LyricTranslator {
         if (body == null) return java.util.Collections.emptyMap();
         Http.Raw reply = Http.request(urlOf(cfg.requestEndpoint()), TAG, body,
                 "Content-Type", "application/json", "Accept", "application/json");
-        return reply.ok() ? LyricTranslationLogic.parseLibreResponse(reply.text())
+        return reply.ok() ? LyricTranslationLogic.parseLibreResponse(reply.text(), batch.entries)
                 : java.util.Collections.<String, String>emptyMap();
     }
 

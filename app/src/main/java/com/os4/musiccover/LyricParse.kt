@@ -233,8 +233,35 @@ object LyricParse {
      */
     internal fun romaOf(roma: String?, text: String): String? {
         val r = roma?.trim()?.replace(Regex("\\s+"), " ")
+            ?.let { joinSpacedRomaji(it) }
         if (r.isNullOrEmpty() || letters(r) == letters(text)) return null
         return r
+    }
+
+    /**
+     * Some synced lyric sources put a space between every Romaji mora rather than between words:
+     * "do n do n su ki ni na ru yo ri mo". Keep ordinary word-spaced Romaji untouched, but
+     * group the unmistakably short mora pairs while leaving common particles as boundaries.
+     */
+    private fun joinSpacedRomaji(value: String): String {
+        val tokens = value.split(' ').filter { it.isNotEmpty() }
+        if (tokens.size < 4 || tokens.any { it.length > 2 || !it.all(Char::isLetter) }) {
+            return value
+        }
+        val particles = setOf("wa", "ga", "o", "wo", "ni", "de", "to", "mo", "e")
+        val out = ArrayList<String>()
+        var i = 0
+        while (i < tokens.size) {
+            val token = tokens[i]
+            if (particles.contains(token.lowercase()) || i + 1 >= tokens.size) {
+                out.add(token)
+                i++
+            } else {
+                out.add(token + tokens[i + 1])
+                i += 2
+            }
+        }
+        return out.joinToString(" ")
     }
 
     private fun letters(s: String): String =

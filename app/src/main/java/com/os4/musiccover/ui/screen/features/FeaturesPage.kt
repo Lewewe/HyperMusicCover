@@ -520,52 +520,61 @@ private fun LyricsGroup(
                 )
             },
         )
-        if (module.lyricOnlineMode > 0) {
-            val providers = listOf(
-                TranslationProvider.CUSTOM,
-                TranslationProvider.GOOGLE,
-                TranslationProvider.DEEPL_FREE,
-                TranslationProvider.DEEPL_PRO,
-            )
-            WindowDropdownPreference(
-                title = stringResource(R.string.lyrics_online_backend),
-                summary = stringResource(R.string.lyrics_online_provider_summary),
-                items = listOf(
-                    stringResource(R.string.lyrics_online_provider_custom),
-                    stringResource(R.string.lyrics_online_provider_google),
-                    stringResource(R.string.lyrics_online_provider_deepl_free),
-                    stringResource(R.string.lyrics_online_provider_deepl_pro),
-                ),
-                selectedIndex = providers.indexOf(module.lyricTranslateProvider).coerceAtLeast(0),
-                enabled = enabled,
-                onSelectedIndexChange = { index ->
-                    val provider = providers[index]
-                    if (provider != module.lyricTranslateProvider) {
-                        val updated = module.copy(
-                            lyricTranslateProvider = provider,
-                            lyricTranslateApiKey = "",
-                        )
-                        onChange(updated)
-                        ModuleBridge.setLyricTranslateConfig(
-                            context, updated.lyricTranslateEndpoint, "",
-                            updated.lyricTranslateSource, updated.lyricTranslateTarget,
-                            updated.lyricOnlineMode, provider,
-                        )
-                    }
-                },
-            )
-            ArrowPreference(
-                title = stringResource(R.string.lyrics_online_credentials),
-                summary = stringResource(
-                    if ((module.lyricTranslateProvider == TranslationProvider.CUSTOM &&
-                            module.lyricTranslateEndpoint.isBlank()) ||
-                        (module.lyricTranslateProvider != TranslationProvider.CUSTOM &&
-                            module.lyricTranslateApiKey.isBlank())) R.string.lyrics_online_backend_unset
-                    else R.string.lyrics_online_credentials_ready,
-                ),
-                enabled = enabled,
-                onClick = { showTranslationCredentials = true },
-            )
+        val providers = listOf(
+            TranslationProvider.CUSTOM,
+            TranslationProvider.GOOGLE,
+            TranslationProvider.DEEPL_FREE,
+            TranslationProvider.DEEPL_PRO,
+        )
+        WindowDropdownPreference(
+            title = stringResource(R.string.lyrics_online_backend),
+            summary = stringResource(R.string.lyrics_online_provider_summary),
+            items = listOf(
+                stringResource(R.string.lyrics_online_provider_custom),
+                stringResource(R.string.lyrics_online_provider_google),
+                stringResource(R.string.lyrics_online_provider_deepl_free),
+                stringResource(R.string.lyrics_online_provider_deepl_pro),
+            ),
+            selectedIndex = providers.indexOf(module.lyricTranslateProvider).coerceAtLeast(0),
+            enabled = enabled,
+            onSelectedIndexChange = { index ->
+                val provider = providers[index]
+                if (provider != module.lyricTranslateProvider) {
+                    val updated = module.copy(
+                        lyricTranslateProvider = provider,
+                        lyricTranslateApiKey = "",
+                    )
+                    onChange(updated)
+                    ModuleBridge.setLyricTranslateConfig(
+                        context, updated.lyricTranslateEndpoint, "",
+                        updated.lyricTranslateSource, updated.lyricTranslateTarget,
+                        updated.lyricOnlineMode, provider,
+                    )
+                }
+            },
+        )
+        ArrowPreference(
+            title = stringResource(R.string.lyrics_online_credentials),
+            summary = stringResource(
+                if ((module.lyricTranslateProvider == TranslationProvider.CUSTOM &&
+                        module.lyricTranslateEndpoint.isBlank()) ||
+                    (module.lyricTranslateProvider != TranslationProvider.CUSTOM &&
+                        module.lyricTranslateApiKey.isBlank())) R.string.lyrics_online_backend_unset
+                else R.string.lyrics_online_credentials_ready,
+            ),
+            enabled = enabled,
+            onClick = { showTranslationCredentials = true },
+        )
+        if (showTranslationCredentials) {
+            TranslationCredentialsDialog(module, { showTranslationCredentials = false }) {
+                onChange(it)
+                ModuleBridge.setLyricTranslateConfig(
+                    context, it.lyricTranslateEndpoint, it.lyricTranslateApiKey,
+                    it.lyricTranslateSource, it.lyricTranslateTarget, it.lyricOnlineMode,
+                    it.lyricTranslateProvider,
+                )
+                showTranslationCredentials = false
+            }
         }
         SwitchPreference(
             title = stringResource(R.string.lyrics_roma),

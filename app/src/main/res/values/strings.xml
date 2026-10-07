@@ -236,7 +236,7 @@
     <string name="lyrics_online_api_key_hint">API key</string>
     <string name="lyrics_online_source_hint">Source language (auto)</string>
     <string name="lyrics_online_provider_summary">Choose a service, then configure your own credentials</string>
-    <string name="lyrics_online_target_hint">Target language (en)</string>
+    <string name="lyrics_online_target_hint">Target language (auto = phone language)</string>
     <string name="lyrics_online_privacy_note">Uses your own service and credentials. Keys stay on-device.</string>
     <string name="lyrics_online_provider_custom">Custom · LibreTranslate</string>
     <string name="lyrics_online_provider_google">Google Cloud Translation</string>

@@ -107,7 +107,7 @@ final class LockLyrics {
     static volatile String sTranslateEndpoint = "";
     static volatile String sTranslateApiKey = "";
     static volatile String sTranslateSourceLang = "auto";
-    static volatile String sTranslateTargetLang = "en";
+    static volatile String sTranslateTargetLang = "auto";
     private static volatile int sTranslateRevision;
     /**
      * The fifth: whether a line's romanisation is drawn under it, over the translation. Off by
@@ -126,9 +126,9 @@ final class LockLyrics {
         String ep = endpoint == null ? "" : endpoint.trim();
         String key = apiKey == null ? "" : apiKey.trim();
         String src = sourceLang == null ? "auto" : sourceLang.trim();
-        String dst = targetLang == null ? "en" : targetLang.trim();
+        String dst = targetLang == null ? "auto" : targetLang.trim();
         if (src.isEmpty()) src = "auto";
-        if (dst.isEmpty()) dst = "en";
+        if (dst.isEmpty()) dst = "auto";
         int nextMode = mode <= TR_MODE_OFF ? TR_MODE_OFF : TR_MODE_ORIGINAL_AND_TRANSLATION;
         boolean changed = !backend.equals(sTranslateProvider)
                 || !ep.equals(sTranslateEndpoint) || !key.equals(sTranslateApiKey)

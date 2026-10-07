@@ -94,14 +94,28 @@ public final class LyricLine {
         return sylStart != null;
     }
 
+    boolean hasDisplayWords() {
+        return hasWords() && !usesRomaAsMain();
+    }
+
+    boolean usesRomaAsMain() {
+        return false;
+    }
+
+    String displayText() {
+        return usesRomaAsMain() ? roma : text;
+    }
+
     /**
      * The text drawn under the line for the switches in mode (LockLyrics.below()): the
      * romanisation over the translation, either alone, or null for nothing.
      */
     String under(int mode) {
+        String t = (mode & LockLyrics.BELOW_TRANS) != 0
+                && (translation == null || LyricTranslationLogic.hasJapaneseScript(text))
+                ? translation : null;
         String r = (mode & LockLyrics.BELOW_ROMA) != 0 ? roma : null;
-        String t = (mode & LockLyrics.BELOW_TRANS) != 0 ? translation : null;
-        if (r == null) return t;
-        return t == null ? r : r + "\n" + t;
+        if (t == null) return r;
+        return r == null ? t : t + "\n" + r;
     }
 }
