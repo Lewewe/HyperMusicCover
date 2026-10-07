@@ -29,9 +29,12 @@ import java.util.concurrent.atomic.AtomicInteger
  *             SystemUI the map can be drawn (`op immersive --es id amap-nav --es do arm`)
  *   destroy - the page letting go; SystemUI takes the map down
  *
+ * The same process carries the bus and subway page's half too (AmapTransitShare), which the probe
+ * reports on its own line.
+ *
  * `adb shell am broadcast -a com.os4.musiccover.AMAPPROBE` answers in the main process only.
  * With `--ez ask true` - what a freshly started SystemUI sends - it re-sends the start instead,
- * if a page is up.
+ * if a page is up. `--es transit raw|begin|stop|demo|end` drives AmapTransitShare (see its probe).
  * The class names here are 高德's own and unobfuscated: the AJX bridge finds modules by name, so
  * they cannot be minified away.
  */
@@ -60,9 +63,22 @@ internal object AmapImmerse {
     /** A page has called init and not destroy: the map can be drawn. */
     @Volatile private var armed = false
     @Volatile private var appCtx: Context? = null
+    /**
+     * 高德's own class loader, the one `handle` is given. The module's own loader cannot see 高德's
+     * classes (`Class.forName("com.autonavi.common.model.GeoPoint", false, <module's>)` answers
+     * "no class"), so anything reaching for one of them uses this.
+     */
+    @Volatile private var appLoader: ClassLoader? = null
+
+    /** 高德's application, once it has one: what AmapTransitShare tells SystemUI through. */
+    fun context(): Context? = appCtx
+
+    /** 高德's class loader, for the few places that reach for one of its own classes. */
+    fun loader(): ClassLoader? = appLoader
 
     @JvmStatic
     fun handle(cl: ClassLoader) {
+        appLoader = cl
         try {
             val instr = Xp.findClass("android.app.Instrumentation", cl)
             Xp.hookAll(instr, "callApplicationOnCreate") { chain ->
@@ -119,6 +135,8 @@ internal object AmapImmerse {
         } catch (t: Throwable) {
             Xp.log(TAG + "immerse module hooks failed: " + t)
         }
+        // The bus and subway trip's half: 高德's trip channels, read the way SceneService would.
+        AmapTransitShare.handle(cl)
         try {
             // The service's sendPreviewCommandToAjx: the one static (boolean) method on it.
             val svc = Xp.findClass(SERVICE, cl)
@@ -166,9 +184,40 @@ internal object AmapImmerse {
         class Probe : ProbeGuard.Receiver() {
             override fun onReceive(c: Context, i: Intent) {
                 if (!ProbeGuard.admit(this, i)) return
+                i.getStringExtra("transit")?.let {
+                    // A payload rides in base64: its JSON holds Chinese and colons, which `am
+                    // broadcast` reads as a URI and cuts apart on the way.
+                    val b64 = i.getStringExtra("json")
+                    val json = if (b64.isNullOrEmpty()) ""
+                    else runCatching {
+                        String(android.util.Base64.decode(b64, android.util.Base64.DEFAULT),
+                            Charsets.UTF_8)
+                    }.getOrDefault("")
+                    resultData = AmapTransitShare.probe(it, json)
+                    return
+                }
                 if (i.getBooleanExtra("ask", false)) {
                     Xp.log(TAG + "SystemUI asked, armed=" + armed)
                     if (armed) tell(true)
+                    AmapTransitShare.resend()
+                    return
+                }
+                // Everything at once, for one paste: the ride's own payloads, how often 高德
+                // pushed them, and the probe's state in one answer.
+                if (i.getBooleanExtra("full", false)) {
+                    resultData = AmapTransitShare.Ledger.eventsDump() + "\n" +
+                        AmapTransitShare.Ledger.dump() + "\n" +
+                        AmapTransitShare.describe()
+                    return
+                }
+                // The whole ledger, for a ride's worth of payloads at once.
+                if (i.getBooleanExtra("max", false)) {
+                    resultData = AmapTransitShare.Ledger.dump()
+                    return
+                }
+                // How often 高德 pushed, one line per send.
+                if (i.getBooleanExtra("events", false)) {
+                    resultData = AmapTransitShare.Ledger.eventsDump()
                     return
                 }
                 val sb = StringBuilder()
@@ -181,6 +230,7 @@ internal object AmapImmerse {
                         .append("ms ago")
                 }
                 sb.append("\nconfig=").append(lastConfig)
+                sb.append('\n').append(AmapTransitShare.describe())
                 sb.append('\n').append(Xp.tail(TAG, 40))
                 resultData = sb.toString()
             }

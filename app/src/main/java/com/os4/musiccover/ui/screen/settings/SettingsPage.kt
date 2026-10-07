@@ -24,15 +24,15 @@ import com.os4.musiccover.LocaleHelper
 import com.os4.musiccover.R
 import com.os4.musiccover.SettingsBackup
 import com.os4.musiccover.ThemeActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.os4.musiccover.ui.util.PageScaffold
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 @Composable
 fun SettingsPageView(
@@ -68,17 +68,19 @@ fun SettingsPageView(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            try {
-                val stream = context.contentResolver.openInputStream(it)
-                val reader = BufferedReader(InputStreamReader(stream))
-                val json = reader.readText()
-                reader.close()
-                stream?.close()
-                SettingsBackup.import(context, json)
-                Toast.makeText(context, R.string.import_success, Toast.LENGTH_SHORT).show()
-                activity?.recreate()
-            } catch (_: Exception) {
-                Toast.makeText(context, R.string.import_failed, Toast.LENGTH_SHORT).show()
+            scope.launch {
+                try {
+                    val json = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(it)?.bufferedReader()?.use { reader ->
+                            reader.readText()
+                        } ?: throw IllegalStateException("could not open import stream")
+                    }
+                    SettingsBackup.import(context, json)
+                    Toast.makeText(context, R.string.import_success, Toast.LENGTH_SHORT).show()
+                    activity?.recreate()
+                } catch (_: Exception) {
+                    Toast.makeText(context, R.string.import_failed, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

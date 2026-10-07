@@ -113,6 +113,9 @@
              rather than the features page imitating both. -->
         <activity
             android:name=".CoverActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ExtrasActivity"
             android:exported="false"
             android:label="@string/features_cover_title"
             android:theme="@style/Theme.HyperMusicCover" />
@@ -155,7 +158,7 @@
         -->
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription"
-            android:value="HyperMusicCover-Enhanced by Lewewe - smoother lock screen music artwork and lyrics for HyperOS 4. Based on HyperMusicCover by zyl6932." />
+            android:value="HyperMusicCover by zyl6932 - album art as the HyperOS lock screen wallpaper, with the clock collapsed" />
         <meta-data android:name="xposedminversion" android:value="102" />
         <meta-data android:name="xposedscope" android:resource="@array/xposedscope" />
 
