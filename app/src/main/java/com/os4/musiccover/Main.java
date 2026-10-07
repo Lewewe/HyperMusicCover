@@ -907,6 +907,7 @@ public class Main extends XposedModule {
     public void onPackageLoaded(PackageLoadedParam param) {
         Xp.attach(this);
         String pkg = param.getPackageName();
+        PlaybackPcmCapture.install(pkg);
         if ("com.miui.miwallpaper".equals(pkg)) {
             WallpaperProbe.handle(param);
             return;
@@ -923,9 +924,8 @@ public class Main extends XposedModule {
             HyperTweaks.plugin(param.getDefaultClassLoader());
             return;
         }
-        // The one player we hook. Its lyric never reaches the session on its own, so it is
-        // fetched and published from inside the app - see AppleLyrics. Nothing else about the
-        // module runs in this process.
+        // Apple's lyric never reaches the session on its own, so it is fetched and published
+        // from inside the player. The optional PCM hooks above are independent of this route.
         if (AppleLyrics.PKG.equals(pkg)) {
             AppleLyrics.handle(param.getDefaultClassLoader());
             return;
@@ -950,6 +950,9 @@ public class Main extends XposedModule {
         PassBlurScaleFix.install();
         // The mini player hangs off the shortcut row, not the clock container.
         MiniPlayerRuntime.install(cl);
+        // 高德's ride card is a focus notification of its own only once the cloud list that
+        // decides who may have one answers for it (AmapFocus).
+        AmapFocus.install(cl);
         PaletteThrottle.INSTANCE.install(cl);
         // Draw lasting lock screen status beside the date, clear of the pill.
         DateStatus.INSTANCE.install(cl);
@@ -1936,6 +1939,22 @@ public class Main extends XposedModule {
                     // the key did not exist before this setting did, and the lyrics are supposed
                     // to look the way they always have on a file that predates it.
                     + "\nlyrictrans=" + (LockLyrics.sTrans ? 1 : 0)
+                    + "\nlyrictrmode=" + LockLyrics.sOnlineTranslateMode
+                    + "\nlyrictrprovider=" + LockLyrics.sTranslateProvider
+                    + "\nlyrictrendpoint=" + LockLyrics.sTranslateEndpoint
+                    + "\nlyrictrkey=" + LockLyrics.sTranslateApiKey
+                    + "\nspicylyricskey=" + LockLyrics.sSpicyLyricsApiKey
+                    + "\nlyrictrsource=" + LockLyrics.sTranslateSourceLang
+                    + "\nlyrictrtarget=" + LockLyrics.sTranslateTargetLang
+                    + "\nlyricalive=" + LockLyrics.sAliveFx
+                    + "\nlyricaudio=" + (LockLyrics.sAudioReactive ? 1 : 0)
+                    + "\nspicylyrics=" + (LockLyrics.sSpicyLyricsEnabled ? 1 : 0)
+                    + "\nproviderqq=" + (LockLyrics.sProviderQq ? 1 : 0)
+                    + "\nprovidernetease=" + (LockLyrics.sProviderNetease ? 1 : 0)
+                    + "\nproviderkuwo=" + (LockLyrics.sProviderKuwo ? 1 : 0)
+                    + "\nproviderkugou=" + (LockLyrics.sProviderKugou ? 1 : 0)
+                    + "\nproviderlrclib=" + (LockLyrics.sProviderLrcLib ? 1 : 0)
+                    + "\nprovidervariants=" + (LockLyrics.sProviderVariants ? 1 : 0)
                     // Off when absent, which is what every file from before it had.
                     + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
                     + "\nlyricgroups=" + (LockLyrics.sRapidGroups ? 1 : 0)
@@ -2048,6 +2067,27 @@ public class Main extends XposedModule {
                         else if ("lyrichidden".equals(k)) LockLyrics.sTapHidden = "1".equals(v);
                         else if ("lyrichdr".equals(k)) LockLyrics.sHdr = "1".equals(v);
                         else if ("lyrictrans".equals(k)) LockLyrics.sTrans = "1".equals(v);
+                        else if ("lyrictrmode".equals(k)) LockLyrics.setTranslateMode(Integer.parseInt(v));
+                        else if ("lyrictrmode".equals(k)) LockLyrics.sOnlineTranslateMode =
+                                "1".equals(v) ? LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION : LockLyrics.TR_MODE_OFF;
+                        else if ("lyrictrprovider".equals(k)) LockLyrics.sTranslateProvider =
+                                TranslationProvider.normalize(v);
+                        else if ("lyrictrendpoint".equals(k)) LockLyrics.sTranslateEndpoint = v;
+                        else if ("lyrictrkey".equals(k)) LockLyrics.sTranslateApiKey = v;
+                        else if ("spicylyricskey".equals(k)) LockLyrics.sSpicyLyricsApiKey = v;
+                        else if ("lyrictrsource".equals(k)) LockLyrics.sTranslateSourceLang =
+                                v.isEmpty() ? "auto" : v;
+                        else if ("lyrictrtarget".equals(k)) LockLyrics.sTranslateTargetLang =
+                                v.isEmpty() ? "en" : v;
+                        else if ("lyricalive".equals(k)) LockLyrics.setAliveFx(Integer.parseInt(v));
+                        else if ("lyricaudio".equals(k)) LockLyrics.setAudioReactive("1".equals(v));
+                        else if ("spicylyrics".equals(k)) LockLyrics.sSpicyLyricsEnabled = "1".equals(v);
+                        else if ("providerqq".equals(k)) LockLyrics.sProviderQq = "1".equals(v);
+                        else if ("providernetease".equals(k)) LockLyrics.sProviderNetease = "1".equals(v);
+                        else if ("providerkuwo".equals(k)) LockLyrics.sProviderKuwo = "1".equals(v);
+                        else if ("providerkugou".equals(k)) LockLyrics.sProviderKugou = "1".equals(v);
+                        else if ("providerlrclib".equals(k)) LockLyrics.sProviderLrcLib = "1".equals(v);
+                        else if ("providervariants".equals(k)) LockLyrics.sProviderVariants = "1".equals(v);
                         else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
                         else if ("lyricgroups".equals(k)) LockLyrics.sRapidGroups = "1".equals(v);
                         // Clamped in the setter; absent or unreadable means left, see saveState.
@@ -2119,7 +2159,9 @@ public class Main extends XposedModule {
                 if (!ProbeGuard.admit(this, i)) return;
                 String op = i.getStringExtra("op");
                 if (op == null) op = "info";
-                Xp.log(TAG + "recv op=" + op + " extras=" + i.getExtras());
+                Xp.log(TAG + "recv op=" + op + ("lyrictrcfg".equals(op)
+                        || "spicylyricscfg".equals(op)
+                        ? " extras=[credentials redacted]" : " extras=" + i.getExtras()));
                 // An op answering later, through goAsync: the receipt is its to send.
                 boolean async = false;
                 try {
@@ -2182,6 +2224,11 @@ public class Main extends XposedModule {
                         recolorClock();
                     } else if ("gdata".equals(op)) {
                         pokeGlassData(i.getIntExtra("idx", -1), i.getFloatExtra("v", 0f));
+                    } else if ("transit".equals(op)) {
+                        // 高德's bus and subway navigation, from AmapTransitShare in its process -
+                        // or by hand: --es json '<intentEntity>', --ez demo true, --es do end.
+                        setResultData(AmapTransitScene.INSTANCE.command(i.getStringExtra("json"),
+                                i.getStringExtra("do"), i.getBooleanExtra("demo", false)));
                     } else if ("immersive".equals(op) || "navmap".equals(op)) {
                         // The immersive pages: --es id <scene> --es do state|open|close|arm|disarm.
                         // navmap is 高德's old spelling (start / stop), kept for a 高德 process
@@ -2353,11 +2400,39 @@ public class Main extends XposedModule {
                         // it; refresh only has to start the frames that let it.
                         LockLyrics.refresh();
                         saveState();
+                    } else if ("lyrictrcfg".equals(op)) {
+                        if (LockLyrics.setTranslateConfig(
+                                i.hasExtra("provider") ? i.getStringExtra("provider")
+                                        : TranslationProvider.CUSTOM,
+                                i.getStringExtra("endpoint"),
+                                i.getStringExtra("apikey"),
+                                i.getStringExtra("source"),
+                                i.getStringExtra("target"),
+                                i.getIntExtra("mode", LockLyrics.sOnlineTranslateMode))) {
+                            Xp.log(TAG + "online lyric translation config changed");
+                            LockLyrics.translationConfigChanged();
+                            saveState();
+                        }
+                    } else if ("spicylyricscfg".equals(op)) {
+                        if (i.hasExtra("apikey")) {
+                            String key = i.getStringExtra("apikey");
+                            LockLyrics.sSpicyLyricsApiKey = key == null ? "" : key.trim();
+                        }
+                        if (i.hasExtra("on")) LockLyrics.sSpicyLyricsEnabled = i.getBooleanExtra("on", true);
+                        Xp.log(TAG + "Spicy Lyrics settings updated");
+                        saveState();
+                     } else if ("lyricproviders".equals(op)) {
+                        LockLyrics.sProviderQq = i.getBooleanExtra("qq", true);
+                        LockLyrics.sProviderNetease = i.getBooleanExtra("netease", true);
+                        LockLyrics.sProviderKuwo = i.getBooleanExtra("kuwo", true);
+                        LockLyrics.sProviderKugou = i.getBooleanExtra("kugou", true);
+                        LockLyrics.sProviderLrcLib = i.getBooleanExtra("lrclib", true);
+                        LockLyrics.sProviderVariants = i.getBooleanExtra("variants", true);
+                        saveState();
                     } else if ("lyricroma".equals(op)) {
                         LockLyrics.sRoma = i.getBooleanExtra("on", !LockLyrics.sRoma);
                         Xp.log(TAG + "lyrics romanisations: " + LockLyrics.sRoma);
                         LockLyrics.refresh();
-                        saveState();
                     } else if ("lyricgroups".equals(op)) {
                         LockLyrics.sRapidGroups = i.getBooleanExtra("on", !LockLyrics.sRapidGroups);
                         LockLyrics.refresh();
@@ -2377,6 +2452,17 @@ public class Main extends XposedModule {
                             LockLyrics.refresh();
                             saveStateSoon();
                         }
+                    } else if ("lyricalive".equals(op)) {
+                        if (LockLyrics.setAliveFx(i.getIntExtra("v", LockLyrics.sAliveFx))) {
+                            Xp.log(TAG + "lyrics alive effects: " + LockLyrics.sAliveFx);
+                            LockLyrics.refresh();
+                            saveStateSoon();
+                        }
+                    } else if ("lyricaudio".equals(op)) {
+                        if (LockLyrics.setAudioReactive(i.getBooleanExtra("on", !LockLyrics.sAudioReactive))) {
+                            saveState();
+                        }
+                        setResultData("lyricaudio=" + LockLyrics.sAudioReactive);
                     } else if ("lyricinfo".equals(op)) {
                         // The playing session's metadata, every string key, with lyricInfo written
                         // out whole - to see how a player marks who sings which line.
@@ -2456,6 +2542,10 @@ public class Main extends XposedModule {
                         // Also as the broadcast's result, which `am broadcast` prints: on a
                         // phone whose LSPosed log drops INFO lines this is the only way to read it.
                         setResultData(st);
+                    } else if ("lyricdump".equals(op)) {
+                        int from = Math.max(0, i.getIntExtra("from", 0));
+                        int count = Math.max(1, Math.min(20, i.getIntExtra("count", 10)));
+                        setResultData(LockLyrics.dumpLines(from, count));
                     } else if ("lyricraw".equals(op)) {
                         // The session's lyricInfo exactly as it was published, to a file.
                         // metadump truncates every value at 160 characters, which is enough to
@@ -2833,6 +2923,22 @@ public class Main extends XposedModule {
                         out.putBoolean("lyrickeep", LockLyrics.sKeepOn);
                         out.putBoolean("lyrichdr", LockLyrics.sHdr);
                         out.putBoolean("lyrictrans", LockLyrics.sTrans);
+                        out.putInt("lyrictrmode", LockLyrics.sOnlineTranslateMode);
+                        out.putString("lyrictrprovider", LockLyrics.sTranslateProvider);
+                        out.putString("lyrictrendpoint", LockLyrics.sTranslateEndpoint);
+                        out.putString("lyrictrkey", LockLyrics.sTranslateApiKey);
+                        out.putString("spicylyricskey", LockLyrics.sSpicyLyricsApiKey);
+                        out.putString("lyrictrsource", LockLyrics.sTranslateSourceLang);
+                        out.putString("lyrictrtarget", LockLyrics.sTranslateTargetLang);
+                        out.putInt("lyricalive", LockLyrics.sAliveFx);
+                        out.putBoolean("lyricaudio", LockLyrics.sAudioReactive);
+                        out.putBoolean("spicylyrics", LockLyrics.sSpicyLyricsEnabled);
+                        out.putBoolean("providerqq", LockLyrics.sProviderQq);
+                        out.putBoolean("providernetease", LockLyrics.sProviderNetease);
+                        out.putBoolean("providerkuwo", LockLyrics.sProviderKuwo);
+                        out.putBoolean("providerkugou", LockLyrics.sProviderKugou);
+                        out.putBoolean("providerlrclib", LockLyrics.sProviderLrcLib);
+                        out.putBoolean("providervariants", LockLyrics.sProviderVariants);
                         out.putBoolean("lyricroma", LockLyrics.sRoma);
                         out.putBoolean("lyricgroups", LockLyrics.sRapidGroups);
                         out.putInt("lyricalign", LockLyrics.sAlign);

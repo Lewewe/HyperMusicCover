@@ -1,6 +1,11 @@
 package com.os4.musiccover.ui.screen.features
 
 import android.content.Intent
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,10 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import com.os4.musiccover.CoverActivity
+import com.os4.musiccover.TranslationProvider
 import com.os4.musiccover.ModuleBridge
 import com.os4.musiccover.R
 import com.os4.musiccover.ShadeActivity
 import com.os4.musiccover.MiniPlayerActivity
+import com.os4.musiccover.ExtrasActivity
 import com.os4.musiccover.ui.util.PageScaffold
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -35,6 +42,8 @@ import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -122,6 +131,15 @@ private fun FeatureList(
                         title = stringResource(R.string.features_shade_title),
                         summary = stringResource(R.string.features_shade_summary),
                         onClick = { onOpen(ShadeActivity::class.java) },
+                    )
+                }
+                Card(
+                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
+                ) {
+                    ArrowPreference(
+                        title = stringResource(R.string.extras_section),
+                        summary = stringResource(R.string.extras_summary),
+                        onClick = { onOpen(ExtrasActivity::class.java) },
                     )
                 }
             }
@@ -251,9 +269,36 @@ internal fun CoverPageView(
                         ClockGroup(enabled, module) { module = it }
                     }
                     1 -> CardGroup(enabled, module) { module = it }
-                    else -> LyricsGroup(enabled, module) { module = it }
+                    2 -> LyricsGroup(enabled, module) { module = it }
                 }
             }
+
+        }
+    }
+}
+
+@Composable
+internal fun ExtrasPageView(
+    isBlurEnabled: Boolean,
+    refreshKey: Int,
+    extraBottomPadding: Dp = 0.dp,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    var module by remember { mutableStateOf(ModuleBridge.State()) }
+    LaunchedEffect(refreshKey) { module = ModuleBridge.queryAlive(context) }
+    PageScaffold(
+        title = stringResource(R.string.extras_section),
+        isBlurEnabled = isBlurEnabled,
+        extraBottomPadding = extraBottomPadding,
+        onBack = onBack,
+    ) {
+        item {
+            ExtrasGroup(
+                enabled = module.alive,
+                module = module,
+                onChange = { module = it },
+            )
         }
     }
 }
@@ -289,7 +334,6 @@ private fun CoverGroup(
                 title = stringResource(R.string.cover_bias),
                 value = module.bias,
                 valueRange = 0f..1f,
-                detent = 0.34f,
                 enabled = enabled,
                 onValueChange = {
                     onChange(module.copy(bias = it))
@@ -316,7 +360,6 @@ private fun ClockGroup(
             value = (if (module.clockSize > 0f) module.clockSize else DEFAULT_CLOCK_SIZE)
                 .coerceIn(CLOCK_SIZE_MIN, 1f),
             valueRange = CLOCK_SIZE_MIN..1f,
-            detent = DEFAULT_CLOCK_SIZE,
             enabled = enabled,
             label = { "${(it * 100f).roundToInt()}%" },
             onValueChange = {
@@ -530,6 +573,343 @@ private fun LyricsGroup(
             },
         )
     }
+
+}
+
+@Composable
+private fun OnlineTranslationControls(
+    enabled: Boolean,
+    module: ModuleBridge.State,
+    onChange: (ModuleBridge.State) -> Unit,
+) {
+    val context = LocalContext.current
+    var showCredentials by remember { mutableStateOf(false) }
+    SmallTitle(text = stringResource(R.string.extras_online_translation))
+    Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        val modes = listOf(
+            stringResource(R.string.lyrics_online_mode_off),
+            stringResource(R.string.lyrics_online_mode_dual),
+        )
+        WindowDropdownPreference(
+            title = stringResource(R.string.lyrics_online_mode),
+            summary = stringResource(R.string.lyrics_online_mode_summary),
+            items = modes,
+            selectedIndex = if (module.lyricOnlineMode <= 0) 0 else 1,
+            enabled = enabled,
+            onSelectedIndexChange = {
+                val mode = if (it <= 0) 0 else 1
+                val updated = module.copy(lyricOnlineMode = mode)
+                onChange(updated)
+                ModuleBridge.setLyricTranslateConfig(
+                    context, updated.lyricTranslateEndpoint, updated.lyricTranslateApiKey,
+                    updated.lyricTranslateSource, updated.lyricTranslateTarget, mode,
+                    updated.lyricTranslateProvider,
+                )
+            },
+        )
+        if (module.lyricOnlineMode > 0) {
+            val providers = listOf(
+                TranslationProvider.CUSTOM,
+                TranslationProvider.GOOGLE,
+                TranslationProvider.DEEPL_FREE,
+                TranslationProvider.DEEPL_PRO,
+            )
+            WindowDropdownPreference(
+                title = stringResource(R.string.lyrics_online_backend),
+                summary = stringResource(R.string.lyrics_online_provider_summary),
+                items = listOf(
+                    stringResource(R.string.lyrics_online_provider_custom),
+                    stringResource(R.string.lyrics_online_provider_google),
+                    stringResource(R.string.lyrics_online_provider_deepl_free),
+                    stringResource(R.string.lyrics_online_provider_deepl_pro),
+                ),
+                selectedIndex = providers.indexOf(module.lyricTranslateProvider).coerceAtLeast(0),
+                enabled = enabled,
+                onSelectedIndexChange = { index ->
+                    val provider = providers[index]
+                    if (provider != module.lyricTranslateProvider) {
+                        val updated = module.copy(lyricTranslateProvider = provider,
+                            lyricTranslateApiKey = "")
+                        onChange(updated)
+                        ModuleBridge.setLyricTranslateConfig(
+                            context, updated.lyricTranslateEndpoint, "",
+                            updated.lyricTranslateSource, updated.lyricTranslateTarget,
+                            updated.lyricOnlineMode, provider,
+                        )
+                    }
+                },
+            )
+            ArrowPreference(
+                title = stringResource(R.string.lyrics_online_credentials),
+                summary = stringResource(
+                    if ((module.lyricTranslateProvider == TranslationProvider.CUSTOM &&
+                            module.lyricTranslateEndpoint.isBlank()) ||
+                        (module.lyricTranslateProvider != TranslationProvider.CUSTOM &&
+                            module.lyricTranslateApiKey.isBlank()))
+                        R.string.lyrics_online_backend_unset
+                    else R.string.lyrics_online_credentials_ready,
+                ),
+                enabled = enabled,
+                onClick = { showCredentials = true },
+            )
+        }
+    }
+    if (showCredentials) {
+        TranslationCredentialsDialog(module, onDismiss = {
+            showCredentials = false
+        }) {
+            onChange(it)
+            ModuleBridge.setLyricTranslateConfig(
+                context, it.lyricTranslateEndpoint, it.lyricTranslateApiKey,
+                it.lyricTranslateSource, it.lyricTranslateTarget,
+                it.lyricOnlineMode, it.lyricTranslateProvider,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TranslationCredentialsDialog(
+    state: ModuleBridge.State,
+    onDismiss: () -> Unit,
+    onSave: (ModuleBridge.State) -> Unit,
+) {
+    val provider = state.lyricTranslateProvider
+    val custom = provider == TranslationProvider.CUSTOM
+    var endpoint by remember(provider) { mutableStateOf(state.lyricTranslateEndpoint) }
+    var apiKey by remember(provider) { mutableStateOf(state.lyricTranslateApiKey) }
+    var source by remember(provider) { mutableStateOf(state.lyricTranslateSource) }
+    var target by remember(provider) { mutableStateOf(state.lyricTranslateTarget) }
+    val sourceCode = source.trim().ifEmpty { "auto" }
+    val targetCode = target.trim().ifEmpty { "en" }
+    val languagePattern = Regex("[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?")
+    val valid = (if (custom) TranslationProvider.isValidCustomEndpoint(endpoint)
+        else apiKey.isNotBlank()) && !apiKey.contains('\n') && !apiKey.contains('\r') &&
+        (sourceCode.equals("auto", ignoreCase = true) || languagePattern.matches(sourceCode)) &&
+        languagePattern.matches(targetCode)
+    WindowDialog(
+        show = true,
+        title = stringResource(R.string.lyrics_online_credentials),
+        summary = stringResource(when (provider) {
+            TranslationProvider.GOOGLE -> R.string.lyrics_online_google_note
+            TranslationProvider.DEEPL_FREE -> R.string.lyrics_online_deepl_free_note
+            TranslationProvider.DEEPL_PRO -> R.string.lyrics_online_deepl_pro_note
+            else -> R.string.lyrics_online_custom_note
+        }),
+        onDismissRequest = onDismiss,
+    ) {
+        val dismiss = LocalDismissState.current
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            if (custom) {
+                TextField(
+                    value = endpoint, onValueChange = { endpoint = it }, singleLine = true,
+                    label = stringResource(R.string.lyrics_online_endpoint_hint),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                )
+            }
+            TextField(
+                value = apiKey, onValueChange = { apiKey = it }, singleLine = true,
+                label = stringResource(if (custom) R.string.lyrics_online_api_key_hint
+                    else R.string.lyrics_online_api_key_required),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+            TextField(
+                value = source, onValueChange = { source = it }, singleLine = true,
+                label = stringResource(R.string.lyrics_online_source_hint),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+            TextField(
+                value = target, onValueChange = { target = it }, singleLine = true,
+                label = stringResource(R.string.lyrics_online_target_hint),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+            MiuixText(text = stringResource(R.string.lyrics_online_language_note), fontSize = 13.sp)
+            if (!valid) {
+                MiuixText(text = stringResource(R.string.lyrics_online_invalid_config),
+                    color = MiuixTheme.colorScheme.error, fontSize = 13.sp)
+            }
+            TextButton(
+                text = stringResource(R.string.lyrics_online_save), enabled = valid,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                onClick = {
+                    onSave(state.copy(lyricTranslateEndpoint = endpoint.trim(),
+                        lyricTranslateApiKey = apiKey.trim(), lyricTranslateSource = sourceCode,
+                        lyricTranslateTarget = targetCode))
+                    dismiss?.invoke()
+                },
+            )
+            TextButton(text = stringResource(R.string.lyrics_online_cancel),
+                modifier = Modifier.fillMaxWidth(), onClick = { dismiss?.invoke() })
+        }
+    }
+}
+
+@Composable
+internal fun ExtrasGroup(
+    enabled: Boolean,
+    module: ModuleBridge.State,
+    onChange: (ModuleBridge.State) -> Unit,
+) {
+    val context = LocalContext.current
+    var showKeyDialog by remember { mutableStateOf(false) }
+    Column {
+        OnlineTranslationControls(enabled, module, onChange)
+        if (showKeyDialog && module.spicyLyricsEnabled)  {
+            SpicyLyricsKeyDialog(
+                initialKey = module.spicyLyricsApiKey,
+                onDismiss = { showKeyDialog = false },
+            ) { key ->
+                onChange(module.copy(spicyLyricsApiKey = key))
+                ModuleBridge.setSpicyLyricsApiKey(context, key)
+            }
+        }
+        SmallTitle(text = stringResource(R.string.extras_lyric_effects))
+        Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        val aliveModes = listOf(
+            stringResource(R.string.lyrics_alive_off),
+            stringResource(R.string.lyrics_alive_subtle),
+            stringResource(R.string.lyrics_alive_dramatic),
+            stringResource(R.string.lyrics_alive_eye_candy),
+        )
+        WindowDropdownPreference(
+            title = stringResource(R.string.lyrics_alive),
+            summary = stringResource(
+                when (module.lyricsAliveFx.coerceIn(0, 3)) {
+                    1 -> R.string.lyrics_alive_subtle_summary
+                    2 -> R.string.lyrics_alive_dramatic_summary
+                    3 -> R.string.lyrics_alive_eye_candy_summary
+                    else -> R.string.lyrics_alive_off_summary
+                },
+            ),
+            items = aliveModes,
+            selectedIndex = module.lyricsAliveFx.coerceIn(0, aliveModes.lastIndex),
+            enabled = enabled,
+            onSelectedIndexChange = {
+                onChange(module.copy(lyricsAliveFx = it))
+                ModuleBridge.setLyricsAliveFx(context, it)
+            },
+        )
+        if (module.lyricsAliveFx > 0) {
+            SwitchPreference(
+                title = stringResource(R.string.lyrics_audio),
+                summary = stringResource(R.string.lyrics_audio_summary),
+                checked = module.lyricsAudioReactive,
+                enabled = enabled,
+                onCheckedChange = {
+                    onChange(module.copy(lyricsAudioReactive = it))
+                    ModuleBridge.setLyricsAudioReactive(context, it)
+                },
+            )
+        }
+        }
+        SmallTitle(text = stringResource(R.string.extras_lyric_providers))
+        Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        SwitchPreference(
+            title = stringResource(R.string.extras_spicy_lyrics),
+            summary = stringResource(R.string.extras_spicy_lyrics_summary),
+            checked = module.spicyLyricsEnabled,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(spicyLyricsEnabled = it))
+                ModuleBridge.setSpicyLyrics(context, it)
+            },
+        )
+        if (module.spicyLyricsEnabled) {
+            ArrowPreference(
+                title = stringResource(R.string.extras_spicy_lyrics_key),
+                summary = stringResource(
+                    if (module.spicyLyricsApiKey.isBlank()) R.string.extras_spicy_lyrics_unset
+                    else R.string.extras_spicy_lyrics_ready,
+                ),
+                enabled = enabled,
+                onClick = { showKeyDialog = true },
+            )
+        }
+        SwitchPreference(
+            title = stringResource(R.string.extras_provider_variants),
+            summary = stringResource(R.string.extras_provider_variants_summary),
+            checked = module.providerVariants,
+            enabled = enabled,
+            onCheckedChange = {
+                val updated = module.copy(providerVariants = it)
+                onChange(updated)
+                ModuleBridge.setLyricProviders(context, updated)
+            },
+        )
+        @Composable
+        fun providerPreference(titleId: Int, checked: Boolean, update: (Boolean) -> ModuleBridge.State) {
+            SwitchPreference(
+                title = stringResource(titleId),
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = {
+                    val updated = update(it)
+                    onChange(updated)
+                    ModuleBridge.setLyricProviders(context, updated)
+                },
+            )
+        }
+        providerPreference(R.string.extras_provider_qq, module.providerQq) {
+            module.copy(providerQq = it)
+        }
+        providerPreference(R.string.extras_provider_netease, module.providerNetease) {
+            module.copy(providerNetease = it)
+        }
+        providerPreference(R.string.extras_provider_kuwo, module.providerKuwo) {
+            module.copy(providerKuwo = it)
+        }
+        providerPreference(R.string.extras_provider_kugou, module.providerKugou) {
+            module.copy(providerKugou = it)
+        }
+        providerPreference(R.string.extras_provider_lrclib, module.providerLrcLib) {
+            module.copy(providerLrcLib = it)
+        }
+        }
+    }
+}
+
+@Composable
+private fun SpicyLyricsKeyDialog(
+    initialKey: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var key by remember(initialKey) { mutableStateOf(initialKey) }
+    WindowDialog(
+        show = true,
+        title = stringResource(R.string.extras_spicy_lyrics_key),
+        summary = stringResource(R.string.extras_spicy_lyrics_key_summary),
+        onDismissRequest = onDismiss,
+    ) {
+        val dismiss = LocalDismissState.current
+        Column(Modifier.fillMaxWidth()) {
+            TextField(
+                value = key,
+                onValueChange = { key = it },
+                singleLine = true,
+                label = stringResource(R.string.extras_spicy_lyrics_key_hint),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+            TextButton(
+                text = stringResource(R.string.lyrics_online_save),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    onSave(key.trim())
+                    dismiss?.invoke()
+                },
+            )
+            TextButton(
+                text = stringResource(R.string.lyrics_online_cancel),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { dismiss?.invoke() },
+            )
+        }
+    }
 }
 
 /**
@@ -560,17 +940,6 @@ private fun CardGroup(
             onCheckedChange = {
                 onChange(module.copy(mcTitleTap = it))
                 ModuleBridge.setCardTitleTap(context, it)
-            },
-        )
-        // The progress bar's glow, the island's look on the card's own bar (#49). Not tied to
-        // cover mode either: it is the OEM's card in every mode.
-        SwitchPreference(
-            title = stringResource(R.string.media_bar_glow),
-            checked = module.mediaBarGlow,
-            enabled = enabled,
-            onCheckedChange = {
-                onChange(module.copy(mediaBarGlow = it))
-                ModuleBridge.setMediaBarGlow(context, it)
             },
         )
         // Sits here because that is where it was asked for, but it is not a card setting and does
@@ -623,7 +992,11 @@ private fun CardGroup(
  * pages adjust module settings the same way, and a second slider that looked almost the same was
  * the first thing a reviewer noticed.
  *
- * [detent] marks the module default with a dot and uses miuix's key point haptic feedback.
+ * [detent] is a single value on the track that ticks as it is passed - the app's only one, and it
+ * exists because a slider whose default is one number among many is otherwise impossible to find
+ * again by hand. It is miuix's own key point rather than a comparison of this frame's value
+ * against the last, so the tick is the library's and behaves the way every other miuix slider's
+ * does.
  */
 @Composable
 internal fun ValueSlider(
@@ -664,7 +1037,6 @@ internal fun ValueSlider(
             hapticEffect = if (detent != null) SliderDefaults.SliderHapticEffect.Step
                            else SliderDefaults.DefaultHapticEffect,
             keyPoints = detent?.let { listOf(it) },
-            showKeyPoints = detent != null,
             // The library's magnet would pull the value onto the key point from 2% of the range
             // away, which is a snap rather than a tick, and it would take the values just either
             // side of the detent out of what this slider can be set to. Off, deliberately: the

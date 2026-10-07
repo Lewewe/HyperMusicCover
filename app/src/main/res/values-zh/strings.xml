@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">HyperMusicCover-Enhanced</string>
-    <string name="about_original_source">原始项目</string>
-    <string name="about_original_source_summary">https://github.com/zyl6932/HyperMusicCover</string>
-    <string name="about_source_code_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced</string>
+    <string name="app_name">HyperMusicCover</string>
+    <string name="about_source_code_summary">https://github.com/zyl6932/HyperMusicCover</string>
     <string name="about_telegram">Telegram群组</string>
     <string name="about_telegram_summary">https://t.me/HyperMusicCover</string>
     <string name="about_qq_group">QQ群组</string>
     <string name="about_qq_group_summary">https://qm.qq.com/q/RcLbYXgBy2</string>
     <string name="about_feedback">反馈与建议</string>
-    <string name="about_feedback_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced/issues</string>
+    <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
     <string name="cover_bias">封面纵向位置</string>
     <string name="cover_style">封面展现形式</string>
     <string name="cover_style_full">全屏封面</string>
@@ -68,7 +66,7 @@
     <string name="credits_group_ui">界面</string>
     <string name="credits_group_lyrics">锁屏</string>
     <string name="credits_group_tools">运行与分发</string>
-    <string name="credits_lewewe">维护面向 HyperOS 4 的 Enhanced 分支，改进封面、歌词、状态栏图标、通知手势、息屏显示和播放器自定义。</string>
+    <string name="credits_lewewe">维护 HyperMusicCover-Enhanced，改进封面、动画、歌词手势、通知、胶囊模糊、息屏显示和英文翻译。</string>
     <string name="credits_hypernavbar">整套界面骨架：主题、悬浮导航栏、液态玻璃、背景模糊、关于页和多语言</string>
     <string name="credits_miuix">这个界面用到的全部组件</string>
     <string name="credits_liquid_glass">液态玻璃的透镜、内阴影和鲜艳度</string>
@@ -167,6 +165,7 @@
     <string name="get_update_detail">检查软件更新和新功能</string>
     <string name="update_available">有可用更新：%1$s</string>
     <string name="get_update_directly">直接更新</string>
+    <string name="lyrics_online_provider_summary">选择服务，再配置你自己的凭据</string>
     <string name="get_update_directly_desc">直接从 Github 安装更新</string>
     <string name="updating">正在更新…</string>
     <string name="update_notes_title">更新日志</string>
