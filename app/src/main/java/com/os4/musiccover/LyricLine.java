@@ -8,8 +8,10 @@ package com.os4.musiccover;
  */
 public final class LyricLine {
     final String text;
-    /** Null when the file has none for this line. */
+    /** Null when the file has no native translation or romanisation for this line. */
     final String translation;
+    /** The selected online translation, rendered separately below any native secondary line. */
+    String onlineTranslation;
     /**
      * How the line is said in Latin letters - romaji, jyutping, a Korean romanisation - or null.
      * Kept apart from the translation because it has a switch of its own (LockLyrics.sRoma);
@@ -77,21 +79,40 @@ public final class LyricLine {
     float sungChars(int ms) {
         int n = text.length();
         if (sylStart == null) return ms >= start ? n : 0f;
-        if (ms <= sylStart[0]) return 0f;
         int count = sylStart.length;
+        float progress = 0f;
         for (int k = 0; k < count; k++) {
             int from = k == 0 ? 0 : charEnd[k - 1];
-            if (ms < sylStart[k]) return from;
+            int to = Math.max(from, Math.min(n, charEnd[k]));
+            if (ms < sylStart[k]) continue;
+            if (sylEnd[k] <= sylStart[k]) {
+                if (ms >= sylEnd[k]) progress = Math.max(progress, to);
+                continue;
+            }
             if (ms < sylEnd[k]) {
-                float f = (ms - sylStart[k]) / (float) Math.max(1, sylEnd[k] - sylStart[k]);
-                return from + f * (charEnd[k] - from);
+                float f = (ms - sylStart[k]) / (float) (sylEnd[k] - sylStart[k]);
+                progress = Math.max(progress, from + f * (to - from));
+            } else {
+                progress = Math.max(progress, to);
             }
         }
-        return n;
+        return Math.min(n, progress);
     }
 
     boolean hasWords() {
         return sylStart != null;
+    }
+
+    boolean hasDisplayWords() {
+        return hasWords() && !usesRomaAsMain();
+    }
+
+    boolean usesRomaAsMain() {
+        return false;
+    }
+
+    String displayText() {
+        return usesRomaAsMain() ? roma : text;
     }
 
     /**
@@ -99,9 +120,12 @@ public final class LyricLine {
      * romanisation over the translation, either alone, or null for nothing.
      */
     String under(int mode) {
+        String t = (mode & LockLyrics.BELOW_TRANS) != 0
+                && onlineTranslation == null
+                && (translation == null || LyricTranslationLogic.hasJapaneseScript(text))
+                ? translation : null;
         String r = (mode & LockLyrics.BELOW_ROMA) != 0 ? roma : null;
-        String t = (mode & LockLyrics.BELOW_TRANS) != 0 ? translation : null;
-        if (r == null) return t;
-        return t == null ? r : r + "\n" + t;
+        if (t == null) return r;
+        return r == null ? t : t + "\n" + r;
     }
 }

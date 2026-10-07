@@ -26,9 +26,11 @@ final class RapidLyricGroups {
     private static boolean quick(LyricLine previous, LyricLine next) {
         long interval = (long) next.start - previous.start;
         // Simultaneous/overlapping duet lines and a silent break retain their usual layout.
+        boolean wordTimedSequence = previous.hasWords() && next.hasWords();
+        boolean closeLineSequence = previous.end <= (long) next.start + 150
+                && (long) next.start - previous.end <= 600;
         return interval > 0 && interval <= QUICK_MS && !previous.opposite && !next.opposite
-                && previous.end <= (long) next.start + 150
-                && (long) next.start - previous.end <= 600
+                && (wordTimedSequence || closeLineSequence)
                 && !previous.text.trim().isEmpty() && !next.text.trim().isEmpty();
     }
 
