@@ -38,8 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.os4.musiccover.BuildConfig
 import com.os4.musiccover.R
-import com.os4.musiccover.ui.util.openQqGroup
-import com.os4.musiccover.ui.util.openTelegramGroup
 import com.os4.musiccover.updater.InstallOutcome
 import com.os4.musiccover.updater.UpdateApi
 import com.os4.musiccover.updater.UpdateCheck
@@ -61,11 +59,9 @@ import top.yukonga.miuix.kmp.window.WindowDialog
 
 private const val POLL_MS = 200L
 
-/** Where the links dialog sends people. The QQ pair is the group's number and its share link. */
-private const val RELEASES_PAGE = "https://github.com/zyl6932/HyperMusicCover/releases"
-private const val TELEGRAM_GROUP = "https://t.me/HyperMusicCover"
-private const val QQ_GROUP_UIN = "392493127"
-private const val QQ_GROUP_LINK = "https://qm.qq.com/q/RcLbYXgBy2"
+/** Manual updates and feedback belong to the Enhanced fork. */
+private const val RELEASES_PAGE = "https://github.com/Lewewe/HyperMusicCover-Enhanced/releases"
+private const val FEEDBACK_PAGE = "https://github.com/Lewewe/HyperMusicCover-Enhanced/issues"
 
 /**
  * Every piece of state the updater needs.
@@ -127,7 +123,7 @@ class UpdateController internal constructor(internal val states: UpdateStates) {
         UpdateInstaller.start(
             context,
             target.apkUrl,
-            "HyperMusicCover-${target.versionName}.apk",
+            "HyperMusicCover-Enhanced-v${target.versionName}.apk",
         )
     }
 
@@ -157,7 +153,7 @@ fun rememberUpdateController(isCurrent: () -> Boolean): UpdateController {
     // LocalResources, not context.getString: the latter is not configuration-aware, and lint
     // fails the build on it (LocalContextGetResourceValueCall).
     val resources = LocalResources.current
-    // One question only: may this build update itself at all (not a fork, not a debug build).
+    // Package eligibility is checked here; downloaded APK identity is checked before installation.
     // There is no switch for it - checking for updates is not something this app turns off.
     val allowed = remember { UpdateApi.enabled(context) }
     val states = remember {
@@ -466,7 +462,6 @@ private fun UpdateNotesDialog(
 /** Where to get it by hand, kept as InstallerX Revived has it: links out, and nothing about this build. */
 @Composable
 private fun UpdateLinksDialog(show: Boolean, onDismiss: () -> Unit) {
-    val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     WindowDialog(
         show = show,
@@ -484,20 +479,9 @@ private fun UpdateLinksDialog(show: Boolean, onDismiss: () -> Unit) {
                     },
                 )
                 BasicComponent(
-                    title = stringResource(R.string.about_telegram),
+                    title = stringResource(R.string.about_feedback),
                     onClick = {
-                        if (!context.openTelegramGroup(TELEGRAM_GROUP)) {
-                            uriHandler.openUri(TELEGRAM_GROUP)
-                        }
-                        dismiss?.invoke()
-                    },
-                )
-                BasicComponent(
-                    title = stringResource(R.string.about_qq_group),
-                    onClick = {
-                        if (!context.openQqGroup(QQ_GROUP_UIN)) {
-                            uriHandler.openUri(QQ_GROUP_LINK)
-                        }
+                        uriHandler.openUri(FEEDBACK_PAGE)
                         dismiss?.invoke()
                     },
                 )
