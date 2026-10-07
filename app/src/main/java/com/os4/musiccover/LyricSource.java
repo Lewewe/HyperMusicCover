@@ -807,7 +807,9 @@ final class LyricSource {
                 if (r.lines.isEmpty() && (id != null || q != null)) {
                     race(gen, pkg, ctx, id, dir, q, r);
                 }
-                if (spicyId == null) {
+                if (superseded(gen)) {
+                    Xp.log("[MCLyric] skipping Spicy Lyrics for superseded lookup " + spicyId);
+                } else if (spicyId == null) {
                     Xp.log("[MCLyric] Spicy Lyrics skipped: no Spotify track id in media metadata");
                 } else if (!LockLyrics.sSpicyLyricsEnabled) {
                     Xp.log("[MCLyric] Spicy Lyrics disabled");
@@ -817,7 +819,7 @@ final class LyricSource {
                     try {
                         List<LyricLine> spicy = SpicyLyrics.fetch(
                                 spicyId, LockLyrics.sSpicyLyricsApiKey);
-                        if (words(spicy)) {
+                        if (!superseded(gen) && words(spicy)) {
                             r.lines = spicy;
                             r.source = SRC_SPICY;
                             r.why = spicy.size() + " lines from Spicy Lyrics " + spicyId;

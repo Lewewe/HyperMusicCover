@@ -1153,6 +1153,7 @@ final class LockLyrics {
 
     /** How many times one song may be re-read because the session published something new. */
     private static final int MAX_INFO_TRIES = 3;
+    private static final long LOOKUP_TIMEOUT_MS = 25000L;
     /** The payload the lookup for sKey was started against, so the next one can be recognised. */
     private static String sInfoSeen;
     /** How much of MAX_INFO_TRIES this song has spent. */
@@ -1170,6 +1171,8 @@ final class LockLyrics {
     private static void lookup(final String want, MediaController c, final boolean keepCurrent) {
         final int gen = ++sGen;
         sLoading = true;
+        Main.main().removeCallbacks(LOOKUP_WATCHDOG);
+        Main.main().postDelayed(LOOKUP_WATCHDOG, LOOKUP_TIMEOUT_MS);
         LyricSource.load(c, new LyricSource.Callback() {
             @Override
             public void onLines(List<LyricLine> lines, String why, int source) {
@@ -1177,6 +1180,7 @@ final class LockLyrics {
                     Xp.log(TAG + "lyrics for " + want + " arrived after the track changed");
                     return;
                 }
+                Main.main().removeCallbacks(LOOKUP_WATCHDOG);
                 Parked parked = sParked;
                 if (parked != null && parked.rereading) {
                     // The re-read the parked answer was waiting for. Whatever it found goes up in
@@ -1218,6 +1222,7 @@ final class LockLyrics {
 
     /** Puts a lookup's answer up: the one place lines found for `want` reach the screen. */
     private static void settle(String want, List<LyricLine> lines, String why, int source) {
+        Main.main().removeCallbacks(LOOKUP_WATCHDOG);
         sLoading = false;
         sSource = source;
         // What the LAST lookup found, not what any lookup ever found.
@@ -1249,6 +1254,22 @@ final class LockLyrics {
         // A payload that turned up while this was looking. See rereadIfNewPayload().
         rereadIfNewPayload(want, sController);
     }
+
+    /**
+     * A network lookup is allowed to outlive its result, but never the cover transition.
+     * Individual providers have their own budgets; this is the final guard for a worker or
+     * callback that gets stuck outside those budgets.
+     */
+    private static final Runnable LOOKUP_WATCHDOG = new Runnable() {
+        @Override
+        public void run() {
+            if (!sLoading || sKey.isEmpty() || sDemo) return;
+            sLoading = false;
+            Xp.log(TAG + "lyric lookup watchdog released the cover after "
+                    + LOOKUP_TIMEOUT_MS + "ms");
+            refresh();
+        }
+    };
 
     /*
      * Waiting for the session's lyric instead of swapping to it.
