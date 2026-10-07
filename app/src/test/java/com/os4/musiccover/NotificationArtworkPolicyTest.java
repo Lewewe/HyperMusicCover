@@ -4,28 +4,13 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class NotificationArtworkPolicyTest {
-    @Test public void idleSamplesSkipGeometryButFirstDragStillStartsTheMorph() {
-        NotificationArtworkPolicy navigation = new NotificationArtworkPolicy();
-        assertFalse(navigation.listOpen(true, "STACK", false));
-        for (int i = 0; i < 100; i++) {
-            assertFalse(NotificationArtworkPolicy.needsMotionGeometry(395, 395));
-            assertFalse(navigation.listOpen(true, "STACK", false));
-        }
-        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(414, 395));
-        assertTrue(navigation.listOpen(true, "STACK", true, true));
-        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(414, 414));
-        assertTrue(navigation.listOpen(true, "LIST", true, false));
-        assertFalse(navigation.listOpen(true, "STACK", false));
-    }
-
-    @Test public void geometryFilterRetainsBothDirectionsAndRejectsInsignificantMotion() {
-        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(null, 395));
-        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(395, null));
-        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(397, 395));
-        assertFalse(NotificationArtworkPolicy.needsMotionGeometry(393, 395));
-        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(398, 395));
-        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(392, 395));
-        assertTrue(NotificationArtworkPolicy.needsMotionGeometry(Integer.MAX_VALUE, Integer.MIN_VALUE));
+    @Test public void settledPileAndPillStopPolling() {
+        assertFalse(NotificationArtworkPolicy.shouldPoll(false, false, false));
+        assertTrue(NotificationArtworkPolicy.shouldPoll(true, false, false));
+        assertTrue(NotificationArtworkPolicy.shouldPoll(false, true, false));
+        assertTrue(NotificationArtworkPolicy.shouldPoll(false, false, true));
+        // Folding stops the timer as soon as motion and the pending request finish.
+        assertFalse(NotificationArtworkPolicy.shouldPoll(false, false, false));
     }
 
     @Test public void openingPileTowardListStartsMorphBeforeNativeListSettles() {

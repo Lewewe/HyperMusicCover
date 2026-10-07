@@ -390,7 +390,6 @@ final class ClockCollapse {
 
     /** @param src which route took this entry, for the log - see noteEntry. */
     static void enter(boolean animate, boolean wake, String src) {
-        observeClockGeometry();
         if (!Main.screenOn() && !sWaking) {
             // The AOD shows the full clock; the wake brings it in.
             toAod();
@@ -685,8 +684,6 @@ final class ClockCollapse {
     private static float sCompactTop = Float.NaN;
     private static float sCompactDate = Float.NaN;
     private static android.animation.ValueAnimator sNativeClockSizeAnimator;
-    private static float sArtworkSizeFromUnit = Float.NaN;
-    private static float sArtworkSizeProgress = 1f;
 
     /** Resize the clock independently so the media card stays in its current scene. */
     static void refreshArtworkSize() {
@@ -705,8 +702,6 @@ final class ClockCollapse {
             sNativeClockSizeTarget = nativeSize;
             sArtworkClockScale = sArtworkClockScaleTarget = artworkScale;
             sNativeClockSize = nativeSize ? 1f : 0f;
-            sArtworkSizeFromUnit = Float.NaN;
-            sArtworkSizeProgress = 1f;
             sCompactTop = sCompactDate = Float.NaN;
             return;
         }
@@ -715,9 +710,6 @@ final class ClockCollapse {
         sNativeClockSizeTarget = nativeSize;
         sArtworkClockScaleTarget = artworkScale;
         if (sNativeClockSizeAnimator != null) sNativeClockSizeAnimator.cancel();
-        // Start from the drawn, notification-squeezed clock, not its hidden full-size endpoint.
-        sArtworkSizeFromUnit = sPhase == Phase.ON ? sPoseUnit : Float.NaN;
-        sArtworkSizeProgress = 0f;
         if (nativeSize && Float.isNaN(sCompactTop) && sPhase == Phase.ON) {
             sCompactTop = sPoseTop;
             sCompactDate = sPoseDate;
@@ -730,7 +722,6 @@ final class ClockCollapse {
         animator.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
         animator.addUpdateListener(a -> {
             float progress = (float) a.getAnimatedValue();
-            sArtworkSizeProgress = progress;
             sNativeClockSize = fromCompact + (toCompact - fromCompact) * progress;
             sArtworkClockScale = fromScale + (toScale - fromScale) * progress;
             if (sNativeClockSize == 0f) sCompactTop = sCompactDate = Float.NaN;
@@ -750,7 +741,6 @@ final class ClockCollapse {
 
     /** The keyguard was rebuilt: new views, same phase. */
     static void onAttached() {
-        observeClockGeometry();
         if (sPhase == Phase.OFF) return;
         install();
         if (sPhase == Phase.ON) {
@@ -959,9 +949,6 @@ final class ClockCollapse {
 
     static String describe() {
         return "phase=" + sPhase + (sExitToAod ? "(to AOD)" : "") + (sAodHeld ? "(held)" : "")
-                + " full=" + Main.r1(sFullNatural) + " estimate=" + Main.r1(sFullUnit)
-                + " reference=" + Main.r1(sizeReferenceFor(Float.NaN))
-                + " editor=" + sEditorGeometry
                 + " t=" + Main.r3(sT)
                 + " waking=" + sWaking + " floor=" + Main.r1(sFloor)
                 + " y " + Main.r1(sYFrom) + "->" + Main.r1(sYTo)
@@ -1312,135 +1299,24 @@ final class ClockCollapse {
     private static volatile String sFullStyle;
     /** Until a measurement exists: one estimate per transition, so it cannot move mid-flight. */
     private static float sFullUnit = Float.NaN;
-    private static float sSizeReference = Float.NaN;
-    private static String sSizeReferenceStyle;
-
-    private static String sEditorGeometry;
-    private static android.database.ContentObserver sGeometryObserver;
-    private static final String EDITOR_SETTING = "constant_template_editor_info";
-
-    /** Read editor settings on attach/change only; never parse JSON on the animation path. */
-    private static void observeClockGeometry() {
-        View c = Main.sContainer;
-        if (c == null) return;
-        android.content.ContentResolver resolver = c.getContext().getContentResolver();
-        readClockGeometry(resolver);
-        if (sGeometryObserver != null) return;
-        android.database.ContentObserver observer = new android.database.ContentObserver(Main.main()) {
-            @Override public void onChange(boolean selfChange) {
-                readClockGeometry(resolver);
-            }
-        };
-        try {
-            resolver.registerContentObserver(android.provider.Settings.Secure.getUriFor(EDITOR_SETTING),
-                    false, observer);
-            sGeometryObserver = observer;
-        } catch (Throwable t) {
-            Xp.log(TAG + "clock: editor observer unavailable: " + t);
-        }
-    }
-
-    private static void readClockGeometry(android.content.ContentResolver resolver) {
-        try {
-            String raw = android.provider.Settings.Secure.getString(resolver, EDITOR_SETTING);
-            if (raw == null || raw.isEmpty()) return;
-            org.json.JSONObject lock = new org.json.JSONObject(raw).optJSONObject("lockscreenInfo");
-            org.json.JSONObject info = lock == null ? null : lock.optJSONObject("clockInfo");
-            if (info == null) return;
-            String geometry = ClockSizePolicy.editorKey(info.optString("templateId", ""),
-                    info.optInt("style", -1), info.optDouble("timeHeight", -1),
-                    info.optDouble("timeWidth", -1), info.optInt("fontStyle", -1),
-                    info.optInt("clockWeight", -1), info.optBoolean("isDoubleRow"));
-            if (geometry.equals(sEditorGeometry)) return;
-            boolean changed = sEditorGeometry != null;
-            sEditorGeometry = geometry;
-            sFullUnit = Float.NaN;
-            if (!changed) return;
-            // A smaller editor clock must not grow back to a previous configuration's maximum.
-            sFullNatural = Float.NaN;
-            sFullStyle = null;
-            sFloor = sExactFloor = Float.NaN;
-            sExactKey = null;
-            sDateAnchor = Float.NaN;
-            sDateAnchorView = null;
-            sCompactTop = sCompactDate = Float.NaN;
-            forgetAodPose();
-            Xp.log(TAG + "clock: editor geometry changed; native size baseline cleared");
-            Main.saveState();
-            invalidate();
-        } catch (Throwable t) {
-            Xp.log(TAG + "clock: editor geometry unreadable: " + t);
-        }
-    }
 
     private static String styleKey() {
         View[] roots = Main.clockRoots();
         for (View root : roots) {
             if (root instanceof android.view.ViewGroup && ((android.view.ViewGroup) root).getChildCount() > 0) {
-                android.util.DisplayMetrics dm = root.getResources().getDisplayMetrics();
-                return ClockSizePolicy.measurementKey(
-                        ((android.view.ViewGroup) root).getChildAt(0).getClass().getName(),
-                        sEditorGeometry == null ? "unknown" : sEditorGeometry,
-                        dm.widthPixels, dm.heightPixels, dm.densityDpi);
+                return ((android.view.ViewGroup) root).getChildAt(0).getClass().getName();
             }
         }
         return null;
-    }
-
-    private static String rendererKey() {
-        String key = styleKey();
-        if (key == null) return null;
-        int at = key.indexOf("#geometry-v1/");
-        return at < 0 ? key : key.substring(0, at);
-    }
-
-    /** The module slider keeps its calibration when the OEM editor resizes the native clock. */
-    private static float sizeReferenceFor(float nativeUnit) {
-        String style = rendererKey();
-        return style != null && style.equals(sSizeReferenceStyle) && sSizeReference > 0f
-                ? sSizeReference : nativeUnit;
-    }
-
-    static String sizeReferenceState() {
-        return sSizeReferenceStyle == null || !(sSizeReference > 0f) ? null
-                : sSizeReferenceStyle + "|" + sSizeReference;
-    }
-
-    static void restoreSizeReference(String state) {
-        int at = state.lastIndexOf('|');
-        if (at <= 0) return;
-        try {
-            float unit = Float.parseFloat(state.substring(at + 1));
-            if (!Float.isFinite(unit) || !(unit > 0f)) return;
-            String style = state.substring(0, at);
-            int geometry = style.indexOf("#geometry-v1/");
-            sSizeReferenceStyle = geometry < 0 ? style : style.substring(0, geometry);
-            sSizeReference = unit;
-        } catch (NumberFormatException ignored) {
-        }
-    }
-
-    /** Diagnostic migration for a reference recovered from a pre-fix measurement. */
-    static void restoreCurrentSizeReference(float unit) {
-        String style = rendererKey();
-        if (style == null || !Float.isFinite(unit) || !(unit > 0f)) return;
-        restoreSizeReference(style + "|" + unit);
-        Main.saveState();
-        refresh();
     }
 
     /** Called with the OEM's own lock screen clock, before anything of ours is on it. */
     private static void noteNaturalUnit(float unit) {
         String style = styleKey();
         if (style == null || !(unit > 0f)) return;
-        String renderer = rendererKey();
-        if (!renderer.equals(sSizeReferenceStyle) || !(sSizeReference > 0f)) {
-            sSizeReferenceStyle = renderer;
-            sSizeReference = unit;
-        }
         // The largest seen: an entry can catch the OEM's clock still giving way to a notification,
         // and that is a smaller clock, never a larger one.
-        if (ClockSizePolicy.retainLargest(sFullStyle, style, sFullNatural, unit)) return;
+        if (style.equals(sFullStyle) && unit < sFullNatural + 0.5f) return;
         Xp.log(TAG + "clock: full unit measured " + Main.r1(unit) + " for " + style
                 + " (was " + Main.r1(sFullNatural) + " for " + sFullStyle + ")");
         sFullStyle = style;
@@ -1458,16 +1334,8 @@ final class ClockCollapse {
         int bar = v.lastIndexOf('|');
         if (bar <= 0) return;
         try {
-            String key = v.substring(0, bar);
-            // Legacy measurements calibrate the slider, but cannot restore the native size.
-            if (!key.contains("#geometry-v1/")) {
-                restoreSizeReference(v);
-                return;
-            }
-            float unit = Float.parseFloat(v.substring(bar + 1));
-            if (!Float.isFinite(unit) || !(unit > 0f)) return;
-            sFullNatural = unit;
-            sFullStyle = key;
+            sFullNatural = Float.parseFloat(v.substring(bar + 1));
+            sFullStyle = v.substring(0, bar);
         } catch (NumberFormatException ignored) {
         }
     }
@@ -1475,8 +1343,6 @@ final class ClockCollapse {
     /** How many times the glyphs drawn now must grow to be the full clock, for the app. */
     static float fullRatio(float unitNow) {
         if (!(unitNow > 0f)) return 1f;
-        float reference = sizeReferenceFor(Float.NaN);
-        if (reference > 0f) return reference / unitNow;
         String style = styleKey();
         if (style != null && style.equals(sFullStyle) && !Float.isNaN(sFullNatural)) {
             return sFullNatural / unitNow;
@@ -2146,19 +2012,11 @@ final class ClockCollapse {
         android.os.Trace.beginSection("MC c.full");
         try { full = fullUnitFor(phase, m); } finally { android.os.Trace.endSection(); }
         float size = Main.sClockSize;
-        float reference = sizeReferenceFor(full);
-        float requested = Float.isNaN(size) ? Main.sClockHeightDp * d : size * reference;
-        // The notification list owns the native clock squeeze; never scale it back to its maximum.
-        float nativeUnit = ClockSizePolicy.nativeUnit(full, m.unit, LockLyrics.notificationCompact());
-        float coverUnit = ClockSizePolicy.coverUnit(requested, reference, nativeUnit,
-                sArtworkClockScale, Main.MIN_CLOCK_K, sNativeClockSize);
-        if (phase == Phase.ON && sArtworkSizeProgress < 1f
-                && Float.isFinite(sArtworkSizeFromUnit) && sArtworkSizeFromUnit > 0f) {
-            float destination = ClockSizePolicy.coverUnit(requested, reference, nativeUnit,
-                    sArtworkClockScaleTarget, Main.MIN_CLOCK_K, sNativeClockSizeTarget ? 1f : 0f);
-            coverUnit = ClockSizePolicy.transitionUnit(sArtworkSizeFromUnit, destination,
-                    sArtworkSizeProgress);
-        }
+        float coverUnit = (Float.isNaN(size) ? Main.sClockHeightDp * d : size * full)
+                * sArtworkClockScale;
+        if (coverUnit > full) coverUnit = full;
+        if (coverUnit < Main.MIN_CLOCK_K * full) coverUnit = Main.MIN_CLOCK_K * full;
+        coverUnit += (full - coverUnit) * sNativeClockSize;
         // The date and the clock move as one block.
         float offset = Main.sClockOffsetDp * d;
         float coverDate, coverTop;
