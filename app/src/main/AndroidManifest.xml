@@ -155,7 +155,7 @@
         -->
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription"
-            android:value="HyperMusicCover by zyl6932 - album art as the HyperOS lock screen wallpaper, with the clock collapsed" />
+            android:value="HyperMusicCover-Enhanced by Lewewe - smoother lock screen music artwork and lyrics for HyperOS 4. Based on HyperMusicCover by zyl6932." />
         <meta-data android:name="xposedminversion" android:value="102" />
         <meta-data android:name="xposedscope" android:resource="@array/xposedscope" />
 

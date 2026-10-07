@@ -393,6 +393,7 @@ private fun MainScreen(
                         },
                         isBlurEnabled = isBlurEnabled,
                         isCurrent = isAboutCurrent,
+                        extraBottomPadding = navBarHeight,
                     )
                 }
             }

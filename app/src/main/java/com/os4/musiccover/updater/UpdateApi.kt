@@ -17,22 +17,17 @@ import java.security.MessageDigest
 /**
  * Finding out whether GitHub has a newer release than the one we are running.
  *
- * Only stable releases are considered. The project publishes two lines from the same tag-driven
- * workflow - `vMAJOR.MINOR.PATCH` and `nightly-YYYYMMDD`. The stable line's versionCode is
- * `(major*10000 + minor*100 + patch) * 1000`, and a nightly sits in the thousand above the release
- * it follows, named after it. A nightly is for whoever went and got one, not something to push
- * on everyone, so both the tag shape and the `prerelease` flag are checked.
+ * Only stable releases from the Enhanced fork are considered. The stable line's versionCode is
+ * `(major*10000 + minor*100 + patch) * 1000`. Nightly tags and prereleases are excluded by
+ * checking both the tag shape and the `prerelease` flag.
  *
  * Nothing in here throws. A check that could not be completed and a check that found nothing are
  * the same answer - no update to offer - which is how [com.os4.musiccover.ModuleBridge] already
  * treats a question the module did not answer.
  */
 
-private const val REPO = "zyl6932/HyperMusicCover"
+private const val REPO = "Lewewe/HyperMusicCover-Enhanced"
 private const val RELEASES_LIST = "https://api.github.com/repos/$REPO/releases"
-
-/** The package this app ships as. A fork changes it, and a fork must never self-update. */
-private const val OFFICIAL_APPLICATION_ID = "com.github.zyl6932.HyperMusicCover"
 
 /** `v1.2.3`, and only that: three numeric parts, each within the width the versionCode packs. */
 private val STABLE_TAG = Regex("^v(\\d{1,3})\\.(\\d{1,2})\\.(\\d{1,2})$")
@@ -144,8 +139,8 @@ object UpdateApi {
     /**
      * Is this build allowed to update itself at all?
      *
-     * The package name keeps a fork from being offered the upstream APK, which it could not
-     * install anyway - the signature would not match.
+     * Release checks use the Enhanced repository and the running build's package identity.
+     * Downloaded APKs are checked separately by [isOurs].
      *
      * It used to ask `!BuildConfig.DEBUG` as well, and that was the wrong question twice over.
      * It is the RUNNING build that was being judged, when what matters is whether the APK that
@@ -154,27 +149,25 @@ object UpdateApi {
      * question moved to [isOurs], where the file it is about actually exists.
      */
     fun enabled(context: Context): Boolean =
-        context.packageName == OFFICIAL_APPLICATION_ID
+        context.packageName == BuildConfig.APPLICATION_ID
 
     /**
      * The certificate the project publishes releases under.
      *
      * Compared by SHA-256 of the certificate, not by its subject: a subject is free-form text
      * anybody can put in a self-signed certificate, and this is the one value that cannot be
-     * forged without the private key. Taken from the published `v0.0.5` APK, which is signed
+     * forged without the private key. Taken from the fork's published `v0.1.0` APK, which is signed
      * with this and nothing else.
      */
     private const val RELEASE_CERT_SHA256 =
-        "f5b62166f821734dd854c94a254223b2c49252e3681ee3d31238d1814ad5e6d5"
+        "7ae8ee6fdc1fa0f3375284bab43ce2187dc5d13e7874a178add52ec2287bc6ca"
 
     /**
      * Is [file] an APK this project is willing to install?
      *
-     * EITHER certificate is enough, and that is the point rather than a leniency. The two cannot
-     * both match: a development build is signed with the developer's debug key and a release
-     * never is, so demanding an exact match with the running build is precisely what stopped a
-     * debug install from ever seeing an update. What is being asked here is only "is this ours",
-     * and both of those keys answer yes.
+     * The published certificate and the running build's signer can differ if a future release
+     * uses a dedicated signing key. The accepted identities are the
+     * fork's published certificate and the running build's signer, never upstream's release key.
      *
      * Whether the system will then accept the swap across two different keys is the installer's
      * business and not this app's: a stock device refuses it, and a device with the signature
@@ -193,6 +186,7 @@ object UpdateApi {
                 file.absolutePath,
                 PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
             )
+            ?.takeIf { it.packageName == context.packageName }
             ?.signingInfo?.apkContentsSigners?.firstOrNull()
             ?.toByteArray()?.let(::sha256Hex)
     } catch (_: Exception) {
@@ -253,8 +247,7 @@ object UpdateApi {
      * The changelog is every stable release newer than the running build, so tapping "update
      * available" reads the whole path from here to the newest - not just the newest release's own
      * notes. A release carrying no APK asset still counts for the changelog, but the newest one
-     * must ship an APK: the CI contract guarantees `HyperMusicCover-<tag>.apk`, so its absence
-     * means something is wrong upstream, and a "new version available" notice whose button cannot
+     * must ship an Enhanced APK. A "new version available" notice whose button cannot
      * work is worse than silence.
      */
     private fun toUpdateInfo(releases: List<GithubRelease>): UpdateInfo? {
@@ -288,10 +281,7 @@ object UpdateApi {
         if (release.prerelease) return null
         val match = STABLE_TAG.matchEntire(release.tagName) ?: return null
         val (major, minor, patch) = match.destructured
-        val apk = release.assets.firstOrNull { it.name == "HyperMusicCover-${release.tagName}.apk" }
-            ?: release.assets.firstOrNull {
-                it.name.startsWith("HyperMusicCover-v") && it.name.endsWith(".apk")
-            }
+        val apk = releaseApk(release)
         return Release(
             versionName = release.tagName.removePrefix("v"),
             versionCode = (major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()) * 1000,
@@ -300,6 +290,13 @@ object UpdateApi {
             releaseUrl = release.htmlUrl,
         )
     }
+
+    /** Match the fork's published asset name without selecting an upstream APK by accident. */
+    internal fun releaseApk(release: GithubRelease): GithubAsset? =
+        release.assets.firstOrNull { it.name == "HyperMusicCover-Enhanced-${release.tagName}.apk" }
+            ?: release.assets.firstOrNull {
+                it.name.startsWith("HyperMusicCover-Enhanced-v") && it.name.endsWith(".apk")
+            }
 
     /**
      * Every version's notes stacked newest-first, each under its own `# vX.Y.Z` heading and cut at

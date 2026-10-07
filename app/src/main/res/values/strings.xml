@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">HyperMusicCover</string>
-    <string name="about_source_code_summary">https://github.com/zyl6932/HyperMusicCover</string>
+    <string name="app_name">HyperMusicCover-Enhanced</string>
+    <string name="about_original_source">Original Source</string>
+    <string name="about_original_source_summary">https://github.com/zyl6932/HyperMusicCover</string>
+    <string name="about_source_code_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced</string>
     <string name="about_telegram">Telegram Group</string>
     <string name="about_telegram_summary">https://t.me/HyperMusicCover</string>
     <string name="about_qq_group">QQ Group</string>
     <string name="about_qq_group_summary">https://qm.qq.com/q/RcLbYXgBy2</string>
     <string name="about_feedback">Feedback</string>
-    <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
+    <string name="about_feedback_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced/issues</string>
     <string name="cover_bias">Vertical position</string>
     <string name="cover_style">Cover presentation</string>
     <string name="cover_style_full">Full-screen cover</string>
@@ -66,7 +68,7 @@
     <string name="credits_group_ui">Interface</string>
     <string name="credits_group_lyrics">Lock screen</string>
     <string name="credits_group_tools">Running and shipping</string>
-    <string name="credits_lewewe">Maintains HyperMusicCover-Enhanced, improving artwork, animations, lyrics gestures, notifications, pill blur, AOD, and English localization.</string>
+    <string name="credits_lewewe">Maintains the Enhanced fork for HyperOS 4, improving artwork, lyrics, status icons, notification gestures, AOD, and player customization.</string>
     <string name="credits_hypernavbar">The whole UI scaffolding: theme, floating and liquid-glass navigation bars, background blur, the about page and the locale helper</string>
     <string name="credits_miuix">Every component this interface is built from</string>
     <string name="credits_liquid_glass">The lens, the inner shadow and the vibrancy behind the liquid glass</string>
