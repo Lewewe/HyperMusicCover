@@ -257,15 +257,8 @@ final class LockLyrics {
         boolean changed = sAudioReactive != on;
         sAudioReactive = on;
         LyricView view = sView;
-        // Release capture and clear its last visual sample immediately, even on a repeated off.
-        if (!on) {
-            if (view != null) view.audioReactiveDisabled();
-            else PlaybackPcmCapture.stop(Main.appContext());
-            return changed;
-        }
-        if (!changed) return false;
         if (view != null) view.kick();
-        return true;
+        return changed;
     }
 
     static boolean setAliveFx(int mode) {
@@ -274,8 +267,7 @@ final class LockLyrics {
         sAliveFx = next;
         LyricView view = sView;
         if (!AliveLyricsEffects.enabled(next)) {
-            if (view != null) view.audioReactiveDisabled();
-            else PlaybackPcmCapture.stop(Main.appContext());
+            if (view != null) view.kick();
         } else if (view != null) {
             view.kick();
         }

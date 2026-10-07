@@ -196,13 +196,11 @@
     <string name="lyrics_align_center">Center</string>
     <string name="lyrics_align_right">Right</string>
     <string name="lyrics_alive">Alive lyrics</string>
-    <string name="lyrics_alive_summary">Off uses simple Apple Music-style karaoke: each timed word rises as it is highlighted, then stays raised and white once sung. Subtle and Dramatic add motion and translation effects; Eye-candy adds a timed letter reveal and gentle word glide, and hides later lyric lines until their timing. Timed backing vocals follow their own timing; line-synced lyrics stay line-level. Cover-color and PCM options are available only when an Alive mode is selected. AOD reduces or stops motion.</string>
+    <string name="lyrics_alive_summary">Off uses simple Apple Music-style karaoke: each timed word rises as it is highlighted, then stays raised and white once sung. Subtle and Dramatic add motion and translation effects; Eye-candy adds a timed letter reveal and gentle word glide, and hides later lyric lines until their timing. Timed backing vocals follow their own timing; line-synced lyrics stay line-level. Cover-color is available only when an Alive mode is selected. AOD reduces or stops motion.</string>
     <string name="lyrics_alive_off_summary">Simple timed word highlighting without extra motion or audio effects.</string>
     <string name="lyrics_alive_subtle_summary">Gentle word rise and translation motion with restrained visual effects.</string>
     <string name="lyrics_alive_dramatic_summary">Stronger lyric movement, glow, and translation animation.</string>
     <string name="lyrics_alive_eye_candy_summary">Timed letter reveals, word entrances, and enhanced lyric motion.</string>
-    <string name="lyrics_audio">Playback-reactive PCM effects</string>
-    <string name="lyrics_audio_summary">This toggle controls all PCM-driven lyric effects and stops capture/clears the last sample when off. When enabled, supported Java AudioTrack players provide playback-only PCM; enable their LSPosed scopes and restart them. No microphone, recording, or network audio; native and offload playback are unsupported.</string>
     <string name="lyrics_alive_off">Off</string>
     <string name="lyrics_alive_subtle">Subtle</string>
     <string name="lyrics_alive_dramatic">Dramatic</string>

@@ -792,18 +792,6 @@ internal fun ExtrasGroup(
                 ModuleBridge.setLyricsAliveFx(context, it)
             },
         )
-        if (module.lyricsAliveFx > 0) {
-            SwitchPreference(
-                title = stringResource(R.string.lyrics_audio),
-                summary = stringResource(R.string.lyrics_audio_summary),
-                checked = module.lyricsAudioReactive,
-                enabled = enabled,
-                onCheckedChange = {
-                    onChange(module.copy(lyricsAudioReactive = it))
-                    ModuleBridge.setLyricsAudioReactive(context, it)
-                },
-            )
-        }
         }
         SmallTitle(text = stringResource(R.string.extras_lyric_providers))
         Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {

@@ -3,8 +3,8 @@
 ## Cover-color shimmer
 
 **Cover-color lyrics** is an optional, off-by-default experimental setting. When enabled, lyric
-ink is cover-tinted and the active lead's karaoke fill, completed-syllable flash and PCM-driven
-word halo use the cover color. When disabled, lyric ink and these effects return to white. Cover
+ink is cover-tinted and the active lead's karaoke fill and completed-syllable flash use the cover
+color. When disabled, lyric ink and these effects return to white. Cover
 sampling/color rendering may be inconsistent on some covers or devices, so turn the option off if
 it looks wrong. It stops on pause, screen-off and AOD/still mode.
 
@@ -17,7 +17,7 @@ animation loop is added. The existing karaoke frames drive the effect.
 Alive Lyrics Off uses a simple Apple Music-style karaoke presentation. All word-timed text remains
 visible; as each timed word is sung, its segment fills white and rises as one unit over a short
 transition. Once sung, it stays white and raised. It has no letter-rise wave, breathing, trails,
-translation motion, PCM response or cover tint. HDR held-note highlighting remains available via
+translation motion or cover tint. HDR held-note highlighting remains available via
 its separate HDR setting. Timed lyrics still fill normally; line-synced lyrics remain line-level.
 
 Subtle and Dramatic retain the normal renderer: all word-timed letters remain visible, and the fill
@@ -60,17 +60,6 @@ Ambiguous cases stay inline: nested/multiple/unbalanced groups, wholly parenthet
 recognized stage directions and optional word endings such as `sing(ing)`. If one timed syllable
 contains both lead and echo text, its existing timing is shared by both rows rather than dropped
 or divided, so the lead fill remains intact. Ordinary line-timed lyrics are unchanged.
-
-## Playback-reactive PCM effects
-
-The playback-reactive toggle gates every visual effect derived from captured PCM. Turning it off
-stops capture and clears the last PCM sample/state immediately; lyric-clock effects selected under
-Alive Lyrics remain independent. When enabled, fresh PCM energy gives the currently sung word a
-halo and extra lift, while line-synced lyrics pulse the whole active line more strongly (up to
-5.3%). Lyric timing remains in charge of word selection. Missing/stale samples (including
-unsupported Spotify playback paths) fall back to the lyric-clock pulse; fresh PCM silence settles
-to rest. Pause, hidden lyrics and AOD stop both. See
-[capture, scope and limitations](audio-reactive-lyrics.md).
 
 ## Word timing and catalogue alternatives
 

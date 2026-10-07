@@ -194,13 +194,11 @@
     <string name="lyrics_align_center">居中</string>
     <string name="lyrics_align_right">居右</string>
     <string name="lyrics_alive">歌词动态效果</string>
-    <string name="lyrics_alive_summary">关闭模式采用简洁的 Apple Music 式卡拉 OK：每个定时词语在高亮时整体升起，唱完后保持升起并显示为白色。轻微和增强模式增加动态与翻译效果；Eye-candy 增加按演唱顺序显现的字母和轻柔的整词移动，并在时间到达前隐藏后续歌词行。有时间轴的和声按各自时间播放；仅有整句时间轴的歌词仍按整句显示。只有选择动态效果模式时才显示封面色彩和 PCM 选项。AOD 会减弱或停止动画。</string>
+    <string name="lyrics_alive_summary">关闭模式采用简洁的 Apple Music 式卡拉 OK：每个定时词语在高亮时整体升起，唱完后保持升起并显示为白色。轻微和增强模式增加动态与翻译效果；Eye-candy 增加按演唱顺序显现的字母和轻柔的整词移动，并在时间到达前隐藏后续歌词行。有时间轴的和声按各自时间播放；仅有整句时间轴的歌词仍按整句显示。只有选择动态效果模式时才显示封面色彩。AOD 会减弱或停止动画。</string>
     <string name="lyrics_alive_off_summary">仅使用简单的定时逐词高亮，不添加额外动画或音频效果。</string>
     <string name="lyrics_alive_subtle_summary">柔和的单词上升和翻译动画，视觉效果更克制。</string>
     <string name="lyrics_alive_dramatic_summary">更明显的歌词移动、光效和翻译动画。</string>
     <string name="lyrics_alive_eye_candy_summary">按时间显示字母、单词入场和增强的歌词动画。</string>
-    <string name="lyrics_audio">播放响应效果（PCM）</string>
-    <string name="lyrics_audio_summary">此开关统一控制所有 PCM 驱动的歌词效果；关闭后会停止采集并清除最后的样本。开启后仅从支持的 Java AudioTrack 播放器获取播放 PCM，需在 LSPosed 中启用播放器作用域并重启播放器。不使用麦克风、录音或网络音频；不支持原生或 offload 播放。</string>
     <string name="lyrics_alive_off">关闭</string>
     <string name="lyrics_alive_subtle">轻微</string>
     <string name="lyrics_alive_dramatic">增强</string>

@@ -288,26 +288,6 @@ final class LyricView extends View {
     private long shimmerHi, shimmerColorHi, shimmerGlintHi, shimmerGlintLo;
     private long shimmerColorLo, shimmerLo;
     private int rowLeadIndex = -1;
-    private float pulseScale = 1f;
-    private float pcmLevel, pcmTransient;
-    private boolean audioLeaseRunning;
-    private final Runnable audioChanged = new Runnable() {
-        @Override public void run() {
-            if (audioWanted()) kick();
-            else stopAudio();
-        }
-    };
-    private final Runnable audioHeartbeat = new Runnable() {
-        @Override public void run() {
-            if (!audioWanted()) {
-                stopAudio();
-                return;
-            }
-            PlaybackPcmCapture.setActive(getContext(), LockLyrics.activePlayerPackage(), true);
-            kick();
-            postDelayed(this, 500L);
-        }
-    };
     private final LinearGradient[] grads = new LinearGradient[3];
     private final long[] gradHi = {-1L, -1L, -1L}, gradLo = {-1L, -1L, -1L};
     /** The row being drawn: where its gradient crosses (NaN = no gradient) and its two levels. */
@@ -567,7 +547,6 @@ final class LyricView extends View {
     protected void onDetachedFromWindow() {
         getViewTreeObserver().removeOnPreDrawListener(preDraw);
         removeCallbacks(frame);
-        stopAudio();
         looping = false;
         lastLoopFrame = 0L;
         super.onDetachedFromWindow();
@@ -679,7 +658,6 @@ final class LyricView extends View {
             why |= 4;
         }
         trace(now, gone);
-        changed |= followAudio(dt);
         if (show == 0f && showTo == 0f && !LockLyrics.wantsAttached()) {
             // Faded out with nothing to come back for: leave the keyguard's tree or take the
             // window down, and let the frozen lines and their pictures go if the switch emptied
@@ -1485,7 +1463,7 @@ final class LyricView extends View {
         // Playback effects use vsync frames while the display is active. AOD still mode instead
         // uses its scheduled single-frame checkpoints, including Eye-candy's throttled word steps.
         if (LockLyrics.still()) return false;
-        return wordsLive() || dotsLive() || audioLive() || translationLive(now());
+        return wordsLive() || dotsLive() || translationLive(now());
     }
 
     /** Inside a frame, that frame's vsync time; outside one, the uptime clock it is based on. */
@@ -1590,11 +1568,6 @@ final class LyricView extends View {
                 && show > 0.01f && audioVisible() && !lines.isEmpty();
     }
 
-    private boolean audioWanted() {
-        return pulseWanted() && LockLyrics.sAudioReactive
-                && PlaybackPcmCapture.supports(LockLyrics.activePlayerPackage());
-    }
-
     private boolean audioVisible() {
         View view = this;
         while (view != null) {
@@ -1602,84 +1575,6 @@ final class LyricView extends View {
             view = view.getParent() instanceof View ? (View) view.getParent() : null;
         }
         return true;
-    }
-
-    private void stopAudio() {
-        removeCallbacks(audioHeartbeat);
-        PlaybackPcmCapture.setOnSample(null);
-        audioLeaseRunning = false;
-        pulseScale = 1f;
-        pcmLevel = pcmTransient = 0f;
-        PlaybackPcmCapture.stop(getContext());
-    }
-
-    /** Stop PCM capture and clear its visual state immediately. */
-    void audioReactiveDisabled() {
-        stopAudio();
-        kick();
-    }
-
-    private boolean followAudio(float dt) {
-        float before = pulseScale;
-        float beforeLevel = pcmLevel, beforeTransient = pcmTransient;
-        boolean capture = audioWanted();
-        if (!LockLyrics.sAudioReactive) {
-            if (audioLeaseRunning) stopAudio();
-            pulseScale = 1f;
-            pcmLevel = pcmTransient = 0f;
-            return before != 1f || beforeLevel != 0f || beforeTransient != 0f;
-        }
-        if (!capture && audioLeaseRunning) stopAudio();
-        if (!pulseWanted()) {
-            pulseScale = 1f;
-            pcmLevel = pcmTransient = 0f;
-        } else {
-            if (capture && !audioLeaseRunning) {
-                audioLeaseRunning = true;
-                PlaybackPcmCapture.setOnSample(audioChanged);
-                post(audioHeartbeat);
-            }
-            boolean fresh = capture && PlaybackPcmCapture.hasFreshSample();
-            long sample = fresh ? PlaybackPcmCapture.sample() : 0L;
-            float rms = fresh ? PlaybackAudioState.rms(sample) : 0f;
-            float peak = fresh ? PlaybackAudioState.peak(sample) : 0f;
-            float levelTarget = fresh ? AliveLyricsEffects.audioLevel(rms) : 0f;
-            float transientTarget = fresh ? AliveLyricsEffects.audioTransient(rms, peak) : 0f;
-            pcmLevel = approach(pcmLevel, levelTarget, dt,
-                    levelTarget > pcmLevel ? 0.045f : 0.18f);
-            pcmTransient = approach(pcmTransient, transientTarget, dt,
-                    transientTarget > pcmTransient ? 0.025f : 0.14f);
-
-            float target = 1f;
-            if (focus >= 0 && dotsFor < 0) {
-                if (fresh) {
-                    LyricLine line = lines.get(focus);
-                    if (line.hasWords()) {
-                        // Word timing anchors the effect locally; avoid scaling the entire line.
-                        target = 1f;
-                    } else {
-                        target = AliveLyricsEffects.audioScale(true, true, false,
-                                pcmLevel, pcmTransient);
-                    }
-                } else {
-                    LyricLine line = lines.get(focus);
-                    int mode = AliveLyricsEffects.enabled(LockLyrics.sAliveFx)
-                            ? LockLyrics.sAliveFx : AliveLyricsEffects.SUBTLE;
-                    target = AliveLyricsEffects.breathingScale(mode, true, true, false,
-                            ms, line.start, line.end, line.hasWords() ? line.sungChars(ms) : 0f);
-                }
-            }
-            pulseScale = approach(pulseScale, target, dt, target > pulseScale ? 0.06f : 0.22f);
-            if (Math.abs(target - pulseScale) < 0.00001f) pulseScale = target;
-        }
-        return before != pulseScale || Math.abs(beforeLevel - pcmLevel) > 0.0001f
-                || Math.abs(beforeTransient - pcmTransient) > 0.0001f;
-    }
-
-    private boolean audioLive() {
-        return LockLyrics.sAudioReactive && pulseWanted() && focus >= 0 && dotsFor < 0
-                && (!audioWanted() || !PlaybackPcmCapture.hasFreshSample()
-                || pulseScale > 1.00001f || pcmLevel > 0.001f || pcmTransient > 0.001f);
     }
 
     /** A translation that has started fading in still needs frames until it settles. */
@@ -2517,11 +2412,6 @@ final class LyricView extends View {
         float e = emph[i];
         float sc = scale[i];
         if (simultaneousVisible(i) && simultaneousCount() > 1) sc *= simultaneousScale();
-        if (dotsFor < 0 && i == focus) {
-            if (LockLyrics.playing() && !LockLyrics.still() && !LockLyrics.inHeldAod()) {
-                sc *= pulseScale;
-            }
-        }
         // Pivot on the line's own edge, so a size change does not shift it sideways.
         Layout.Alignment align = alignFor(l.opposite, builtAlign);
         float pivotX = align == Layout.Alignment.ALIGN_CENTER ? lay.getWidth() / 2f
@@ -3018,9 +2908,6 @@ final class LyricView extends View {
         float sungChars = l.sungChars(ms);
         int fx = LockLyrics.sAliveFx;
         boolean aliveEffects = AliveLyricsEffects.enabled(fx);
-        boolean pcmLead = aliveEffects && glowOn && LockLyrics.sAudioReactive && focus >= 0
-                && l == lines.get(focus) && LockLyrics.playing() && !LockLyrics.still()
-                && Main.screenOnCached();
         for (int k = 0; k < count; k++) {
             int from = k == 0 ? 0 : l.charEnd[k - 1];
             int cs = Math.max(from, rs), ce = Math.min(l.charEnd[k], re);
@@ -3032,17 +2919,10 @@ final class LyricView extends View {
                 float wordRise = smoothUnit(clamp01((ms - s) / (float) BASIC_WORD_RISE_MS));
                 lift = glowOn ? liftPx * 1.65f * e * wordRise : 0f;
             } else {
-                // Alive motion is part of the lyric effect, not a side effect of PCM. The
-                // audio-reactive lift below is an optional extra layered on this shared rise.
+                // Alive motion is part of the lyric effect and is layered on this shared rise.
                 lift = liftPx * liftScale * e * letterRise(syllableProgress, end);
             }
             float glow = 0f;
-            // PCM may enhance the syllable currently being sung, but must not revive a
-            // completed syllable during its visual tail. The timing/highlight path remains
-            // authoritative for Spicy lyrics; PCM is only an in-window intensity layer.
-            boolean audioWindow = ms >= s && ms < end;
-            float audioDrive = pcmLead && audioWindow
-                    ? clamp01(pcmLevel + 0.55f * pcmTransient) : 0f;
             float audioLift = 0f;
             boolean syllableStarted = sungChars > cs;
             if (LockLyrics.sHdr && glowOn && syllableStarted
@@ -3057,13 +2937,6 @@ final class LyricView extends View {
             }
             if (glow > 0f) {
                 glow = clamp01(glow * AliveLyricsEffects.glowMultiplier(fx));
-            }
-            float audioGlow = audioDrive > 0.01f
-                    ? clamp01(0.72f * audioDrive + 0.42f * pcmTransient) * e : 0f;
-            if (audioGlow > 0f && glowOn && glow > 0f) {
-                // PCM is an intensity modifier for the existing highlight, not a second glyph
-                // pass. This keeps the normal karaoke character range authoritative.
-                glow = clamp01(glow + audioGlow * (1f - glow));
             }
             float x0 = xs[cs];
             if (glow > 0.01f) {
@@ -3108,7 +2981,8 @@ final class LyricView extends View {
                                  float[] xs, int cs, int ce, int rs, int re, int syllable,
                                  int start, int end, float baseline, float e, boolean lead,
                                  float gain) {
-        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx) && l.hasWords()
+        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx) && LockLyrics.playing()
+                && l.hasWords()
                 && !LockLyrics.still() && !LockLyrics.inHeldAod()) {
             drawKaraokeSyllable(c, l, lay, p, xs, cs, ce, rs, re, syllable, start, end,
                     baseline, e, lead, gain, true);

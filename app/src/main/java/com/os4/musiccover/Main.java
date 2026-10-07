@@ -907,7 +907,6 @@ public class Main extends XposedModule {
     public void onPackageLoaded(PackageLoadedParam param) {
         Xp.attach(this);
         String pkg = param.getPackageName();
-        PlaybackPcmCapture.install(pkg);
         if ("com.miui.miwallpaper".equals(pkg)) {
             WallpaperProbe.handle(param);
             return;
@@ -925,7 +924,7 @@ public class Main extends XposedModule {
             return;
         }
         // Apple's lyric never reaches the session on its own, so it is fetched and published
-        // from inside the player. The optional PCM hooks above are independent of this route.
+        // from inside the player.
         if (AppleLyrics.PKG.equals(pkg)) {
             AppleLyrics.handle(param.getDefaultClassLoader());
             return;
