@@ -1939,7 +1939,7 @@ final class LyricView extends View {
                 }
             }
             String under = l.under(transOn);
-            if (under != null) {
+            if (under != null && b.trans[i] == null && b.onlineTrans[i] == null) {
                 b.trans[i] = StaticLayout.Builder.obtain(under, 0, under.length(), tp, w)
                         .setAlignment(align)
                         .setIncludePad(false)
@@ -2753,10 +2753,10 @@ final class LyricView extends View {
                 c.restoreToCount(save);
                 below += bgGap + bl.getHeight();
             }
+            String nativeSecondary = LockLyrics.sOnlineTranslateMode == LockLyrics.TR_MODE_OFF
+                    ? l.translation : null;
+            String onlineSecondary = l.onlineTranslation;
             if (LockLyrics.sTrans) {
-                String nativeSecondary = LockLyrics.sOnlineTranslateMode == LockLyrics.TR_MODE_OFF
-                        ? l.translation : null;
-                String onlineSecondary = l.onlineTranslation;
                 if (onlineSecondary != null && l.roma != null
                         && (LockLyrics.below() & LockLyrics.BELOW_ROMA) != 0) {
                     onlineSecondary += "\n" + l.roma;
@@ -2796,7 +2796,8 @@ final class LyricView extends View {
                 }
             }
             String under = l.under(LockLyrics.below());
-            if (under != null) {
+            boolean secondaryDrawn = nativeSecondary != null || onlineSecondary != null;
+            if (under != null && !secondaryDrawn) {
                 tp.setAlpha(Math.round(255f * TRANS_ALPHA));
                 tp.setMaskFilter(mf);
                 StaticLayout t = StaticLayout.Builder.obtain(under, 0, under.length(), tp, width)
@@ -2918,10 +2919,6 @@ final class LyricView extends View {
             online.draw(c);
             online.getPaint().setColor(0xFFFFFFFF);
         }
-        c.translate(0f, transTop(i));
-        t.getPaint().setColor(ink(a * TRANS_ALPHA * transReveal(), 0f));
-        t.draw(c);
-        t.getPaint().setColor(0xFFFFFFFF);
         c.restoreToCount(save);
     }
 
