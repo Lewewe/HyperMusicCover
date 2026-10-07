@@ -231,7 +231,6 @@ internal fun CoverPageView(
     val groups = listOf(
         stringResource(R.string.cover_clock_section),
         stringResource(R.string.card_section),
-        stringResource(R.string.lyrics_section),
     )
 
     PageScaffold(
@@ -269,7 +268,6 @@ internal fun CoverPageView(
                         ClockGroup(enabled, module) { module = it }
                     }
                     1 -> CardGroup(enabled, module) { module = it }
-                    2 -> LyricsGroup(enabled, module) { module = it }
                 }
             }
 
@@ -294,11 +292,22 @@ internal fun ExtrasPageView(
         onBack = onBack,
     ) {
         item {
-            ExtrasGroup(
-                enabled = module.alive,
-                module = module,
-                onChange = { module = it },
-            )
+            Column {
+                Card(
+                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
+                ) {
+                    LyricsGroup(
+                        enabled = module.alive,
+                        module = module,
+                        onChange = { module = it },
+                    )
+                }
+                ExtrasGroup(
+                    enabled = module.alive,
+                    module = module,
+                    onChange = { module = it },
+                )
+            }
         }
     }
 }
