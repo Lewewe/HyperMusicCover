@@ -942,6 +942,7 @@ public class Main extends XposedModule {
         // these have anything to do with the clock, and a build that renamed the container must
         // not cost them too.
         HyperTweaks.systemUi(cl);
+        StatusBarArtwork.install(cl);
         // The home screen magnified behind the shade, after the lock screen (PassBlurScaleFix).
         PassBlurScaleFix.install();
         // The mini player hangs off the shortcut row, not the clock container.
@@ -2117,6 +2118,8 @@ public class Main extends XposedModule {
                 try {
                     if ("info".equals(op)) {
                         dumpInfo();
+                    } else if ("statusicons".equals(op)) {
+                        setResultData(StatusBarArtwork.describe());
                     } else if ("anim".equals(op)) {
                         dumpAnimConfigs();
                     } else if ("hold".equals(op) || "release".equals(op)) {
@@ -3037,6 +3040,7 @@ public class Main extends XposedModule {
                 // Every one of these three changes the answer to one of the two cached readings,
                 // so the timer below is not what anyone waits on at the moments that matter.
                 forgetSysReads();
+                StatusBarArtwork.refresh();
                 // The lyric window's heartbeat stops while the phone is unlocked; a screen going
                 // off or on is where the lock screen can be back. See LockLyrics.WATCH.
                 if (!Intent.ACTION_USER_PRESENT.equals(a)) LockLyrics.resumeWatch();
@@ -6355,6 +6359,7 @@ public class Main extends XposedModule {
      */
     private static void enterCoverMode(boolean animate) {
         sCoverMode = true;
+        StatusBarArtwork.refresh();
         // The cover is the media card's alone: the focus notifications stay out of the stack.
         LockIslands.INSTANCE.setCoverMode(true);
         MiniPlayerRuntime.refresh();
@@ -6411,6 +6416,7 @@ public class Main extends XposedModule {
     private static void exitCoverMode(boolean animate) {
         CoverCardLayer.leaving();
         sCoverMode = false;
+        StatusBarArtwork.refresh();
         applyGlassBrightness();
         LockIslands.INSTANCE.setCoverMode(false);
         CoverCardLayer.refresh();
@@ -10405,6 +10411,7 @@ public class Main extends XposedModule {
     }
 
     static void measureCover(Bitmap full) {
+        StatusBarArtwork.measure(full);
         try {
             float d = sAppCtx.getResources().getDisplayMetrics().density;
             float topPx = sBandTopPx, botPx = sBandBotPx;
@@ -10457,6 +10464,7 @@ public class Main extends XposedModule {
      * setter hooks are what make them come out legible.
      */
     static void recolorClock() {
+        StatusBarArtwork.refresh();
         final View v = sContainer;
         if (v == null) return;
         v.post(new Runnable() {
