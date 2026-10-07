@@ -89,7 +89,7 @@ final class LyricTranslationLogic {
     if (sameLanguage(source, target) || likelyLanguage(entries, target)) {
         return Collections.emptyList();
     }
-    
+
     // Only translate lines containing Japanese script
     List<Entry> japaneseOnly = new ArrayList<>();
     for (Entry entry : entries) {
