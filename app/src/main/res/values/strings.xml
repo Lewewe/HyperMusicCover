@@ -140,6 +140,7 @@
     <string name="lyrics_provider_got_it">Got it</string>
     <string name="lyrics_provider_got_it_wait">Got it (%1$d)</string>
     <string name="lyrics_trans">Show translations</string>
+    <string name="lyrics_roma">Show romanisations</string>
     <string name="lyrics_align">Lyric alignment</string>
     <string name="lyrics_align_left">Left</string>
     <string name="lyrics_align_center">Center</string>
@@ -221,4 +222,6 @@
     <string name="demo_cover_aod_title">Kept on the always-on display</string>
     <string name="demo_island_immersive_title">Immersive pages</string>
     <string name="demo_island_stack_title">The stack island</string>
+    <string name="mini_status_at_date">Status beside the date</string>
+    <string name="mini_status_at_date_summary">Move Do Not Disturb and charging status beside the date. Temporary hints stay at the bottom.</string>
 </resources>

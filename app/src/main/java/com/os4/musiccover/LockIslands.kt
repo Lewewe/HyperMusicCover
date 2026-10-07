@@ -572,6 +572,19 @@ internal object LockIslands {
     /** A notification as last read, released or not: what a row collapsing back will show. */
     fun noteFor(key: String): Note? = if (key == STACK_KEY) stackNote else readCache[key]?.second
 
+    /**
+     * The stack island's newest notification, when every notification in it is one app's and
+     * that one opens something: tapped, the island opens it as its row would, rather than
+     * spreading the stack out to show one app's notifications (the user, 2026-10-07). Null for
+     * more than one app, or nothing to open.
+     */
+    fun stackSingleAppLead(): String? {
+        val members = stackFrom
+        val lead = members.firstOrNull() ?: return null
+        if (lead.intent == null || members.any { it.pkg != lead.pkg }) return null
+        return lead.key
+    }
+
     /** [key]'s notifications: the stack island's, or itself. */
     fun membersOf(key: String): List<String> = if (key == STACK_KEY) stackMembers else listOf(key)
 

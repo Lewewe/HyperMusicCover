@@ -57,8 +57,14 @@ object MiniPlayerRuntime {
 
     @JvmStatic fun configJson(context: Context): String = MiniPlayerConfig.fromPreferences(prefs(context))
 
+    /** Whether lasting status belongs beside the date instead of beneath the pill. */
+    @JvmStatic fun statusAtDate(context: Context): Boolean = JSONObject(configJson(context)).let {
+        it.optBoolean(MiniPlayerConfig.ENABLED) && it.optBoolean(MiniPlayerConfig.STATUS_AT_DATE)
+    }
+
     @JvmStatic fun applyConfig(context: Context, raw: String?) {
         MiniPlayerConfig.apply(prefs(context), raw)
+        DateStatus.configChanged()
         materialGeneration++
         lastRoot?.get()?.let { root -> root.post { attach(root, lastShortcutController?.get()) } }
         refresh()
@@ -906,6 +912,7 @@ object MiniPlayerRuntime {
             routedX = ev.rawX
             routedY = ev.rawY
             routedDrag = false
+            routedSwiped = false
             routedMorph = false
             routedPullRefused = false
             // What the last gesture was, in case it never reached its UP or CANCEL here.
@@ -960,6 +967,13 @@ object MiniPlayerRuntime {
             noteTouch("down ${ev.rawX.toInt()},${ev.rawY.toInt()} pill=${pill != null} " +
                 "small=$routedSmall caught=$routedMorph disc=${hit?.second}" +
                 (pillOwner?.smallProbe(ev.rawX, ev.rawY)?.let { " [$it]" } ?: ""))
+        }
+        // A drag on the lock screen itself - the swipe up to the PIN pad - is the lock screen
+        // leaving: the buttons held through the wake are let go so they fade with it.
+        if (routed?.get() == null && action == MotionEvent.ACTION_MOVE && !routedSwiped) {
+            val dx = ev.rawX - routedX
+            val dy = ev.rawY - routedY
+            routedSwiped = live().map { it.letGoOnDrag(dx, dy) }.any { it }
         }
         val target = routed?.get() ?: return false
         routedTracker?.addMovement(ev)
@@ -1087,6 +1101,9 @@ object MiniPlayerRuntime {
     private var routedDrag = false
     private var routedMorph = false
     private var routedTracker: VelocityTracker? = null
+
+    /** This gesture, not the pill's, has been past the slop and told the rows (letGoOnDrag). */
+    private var routedSwiped = false
 
     /** The gesture began on the small island, not the pill. */
     private var routedSmall = false
@@ -1910,7 +1927,8 @@ private class MiniPlayerController(
         // hold wrote a frame ago. Waking, the pill let go on one and took the other: the row
         // dropped to nothing and faded in beside buttons that stayed (filmed 2026-09-26).
         if (MiniPlayerScene.fullScreenAodActive || holdButtons) rowHeldOff = true
-        else if (rowHeldOff && rowFade >= 0.99f) rowHeldOff = false
+        // ...or until the PIN pad is up, which keeps the row's fade down for as long as it is.
+        else if (rowHeldOff && (rowFade >= 0.99f || Main.bouncerShown())) rowHeldOff = false
         followRowFade = rowFade
         // The lock screen's editor button, up after a long press on the clock, is where the row
         // is and under it: the row goes as it comes, on its own fade, and comes back as it goes.
@@ -5946,7 +5964,7 @@ private class MiniPlayerController(
         val key = (if (small) seats.small else seats.big) ?: return
         if (key == x.expanded) return
         if (key == STACK_ISLAND && LockIslands.foldsNatively()) {
-            openSpread("tap during a switch")
+            if (!openSingleApp("tap during a switch")) openSpread("tap during a switch")
             return
         }
         trace("switch tap ${key.takeLast(6)} small=$small")
@@ -6191,6 +6209,47 @@ private class MiniPlayerController(
         override fun canSettle(morph: MiniCardMorph, toNative: Boolean) = true
         override fun artBridged() = false
         override fun onSettled(morph: MiniCardMorph, toNative: Boolean, completed: Boolean) {}
+    }
+
+    /**
+     * The stack island tapped with one app's notifications in it: that app's newest one opened,
+     * as a tap on its own row opens it - the row's click (NotificationClicker), which wakes,
+     * asks the keyguard to go first where it has to, and starts the notification's intent. A
+     * spread out to a list of one app's notifications was a step on the way to the same place.
+     * False when there is more than one app, nothing to open, or no row to click: then it opens.
+     */
+    private fun openSingleApp(why: String): Boolean {
+        val key = LockIslands.stackSingleAppLead() ?: return false
+        val stack = notificationStack() ?: return false
+        var row: View? = null
+        for (i in 0 until stack.childCount) {
+            val child = stack.getChildAt(i)
+            if (!child.javaClass.name.contains("ExpandableNotificationRow")) continue
+            // Its own row, never its group's: the group's click expands the group instead.
+            row = if (rowKey(child) == key) child else childRows(child).firstOrNull { rowKey(it) == key }
+            if (row != null) break
+        }
+        if (row == null || !row.hasOnClickListeners()) {
+            MiniPlayerRuntime.noteTouch("open app ($why): no row for ${key.takeLast(6)}, spread instead")
+            return false
+        }
+        MiniPlayerRuntime.noteTouch("open app ($why): ${key.substringAfter('|').substringBefore('|')}")
+        // The row's own listener (ExpandableNotificationRowInjector$1) only posts the click to a
+        // flow, whose collector dropped it for a row folded away: tapped, nothing happened
+        // (2026-10-07). NotificationClicker, which the flow ends in, is the injector's
+        // clickListener (NotificationRowBinderImpl): called straight, as the flow would.
+        val clicker = runCatching {
+            Xp.getObjectField(Xp.callMethod(row, "getInjector"), "clickListener") as? View.OnClickListener
+        }.getOrNull()
+        // A folded row's performClick can silently drop the event. Keep the list fallback.
+        if (clicker == null) return false
+        return runCatching {
+            clicker.onClick(row)
+            true
+        }.getOrElse {
+            Xp.log("MCMini: notification click failed; opening the list: $it")
+            false
+        }
     }
 
     /**
@@ -6681,7 +6740,7 @@ private class MiniPlayerController(
         // they are. No flight: the rows were never out of the stack for one to land on.
         if (spread != null) return
         if (key == STACK_ISLAND && LockIslands.foldsNatively()) {
-            openSpread("tap")
+            if (!openSingleApp("tap")) openSpread("tap")
             return
         }
         // Pulled down and on its way home still: a tap on its place - its logical place, the
@@ -7954,6 +8013,11 @@ private class MiniPlayerController(
             backSince = 0L
             return
         }
+        // The pad up with the hold still on, put up by something other than a swipe (letGoOnDrag).
+        if (!MiniPlayerScene.aodActive && Main.bouncerShown()) {
+            letGoOfButtons("bouncer")
+            return
+        }
         // The lower of the two chains as the doze left it this frame, before it is put back.
         var natural = 1f
         for (side in 0..1) {
@@ -7976,6 +8040,34 @@ private class MiniPlayerController(
             holdButtons = false
             backSince = 0L
         }
+    }
+
+    /**
+     * The swipe up within the wake's hold: it let go only once the buttons had been back at full
+     * for a while, or two seconds on - and while the swipe faded them it never was, so every
+     * frame it wrote them back to 1 and the pill stayed on the held branch, deaf to the row's
+     * fade. The torch, the camera and the pill stood over the PIN pad on the first swipe after
+     * the wake, and were gone on the next (reported 2026-10-07). A drag past the slop, not the
+     * DOWN: a double tap to wake lands in the wake's fade-in, and letting go there drops the
+     * buttons to it. True once past the slop, whether or not there was a hold.
+     */
+    fun letGoOnDrag(dx: Float, dy: Float): Boolean {
+        if (kotlin.math.hypot(dx, dy) <= ViewConfiguration.get(context).scaledTouchSlop) return false
+        letGoOfButtons("swipe")
+        return true
+    }
+
+    /**
+     * The lock screen is leaving: the buttons are the OEM's again, and the pill follows the row's
+     * fade from this frame rather than waiting for it to come back to full - it will not, until
+     * the pad is put away.
+     */
+    private fun letGoOfButtons(why: String) {
+        if (MiniPlayerScene.aodActive || !holdButtons && !rowHeldOff) return
+        holdButtons = false
+        backSince = 0L
+        rowHeldOff = false
+        MiniPlayerRuntime.noteTouch("buttons let go: $why")
     }
 
     /**

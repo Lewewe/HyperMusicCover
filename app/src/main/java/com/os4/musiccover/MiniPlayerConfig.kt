@@ -36,12 +36,16 @@ object MiniPlayerConfig {
     /** The row takes the room a switched-off torch or camera leaves (MiniPlayerRuntime.pillRest). */
     const val ADAPTIVE_WIDTH = "adaptiveWidth"
 
+    /** Move lasting lock screen status beside the date while islands are enabled. */
+    const val STATUS_AT_DATE = "statusAtDate"
+
     private val defaults = linkedMapOf<String, Any>(
         ENABLED to false,
         WIDTH to 221f,
         HEIGHT_RADIUS to 27f,
         ART_RADIUS to 12f,
         ADAPTIVE_WIDTH to false,
+        STATUS_AT_DATE to true,
         BACKGROUND_BLUR to false,
         BACKGROUND_BLUR_RADIUS to 30f,
         BACKGROUND_BLUR_BRIGHTNESS to 80f,
@@ -71,7 +75,7 @@ object MiniPlayerConfig {
         val input = runCatching { JSONObject(raw.orEmpty()) }.getOrDefault(JSONObject())
         val out = JSONObject()
         defaults.forEach { (key, fallback) ->
-            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH || key == BACKGROUND_BLUR) {
+            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH || key == BACKGROUND_BLUR || key == STATUS_AT_DATE) {
                 runCatching { input.getBoolean(key) }.getOrDefault(fallback)
             } else if (key == BACKGROUND_BLUR_RADIUS) {
                 blurRadius(input.optDouble(key, 30.0))

@@ -74,4 +74,22 @@ class TrackNameTest {
         assertFalse(TrackName.songIn("给我一个理由忘记", "A-Lin"))
         assertFalse(TrackName.songIn("Lingering", "A-Lin"))
     }
+    @Test fun qqTranslatedTitlesKeepRecordingVariants() {
+        assertEquals("生きていたんだよな", TrackName.untranslated("生きていたんだよな (她曾活过啊)"))
+        assertEquals("Song (Live)", TrackName.untranslated("Song (Live)"))
+        assertEquals("歌曲 (粤语版)", TrackName.untranslated("歌曲 (粤语版)"))
+    }
+
+    @Test fun qqSingerAliasesAcceptBothBracketStyles() {
+        assertEquals(listOf("爱缪", "あいみょん"), TrackName.aliased("爱缪 (あいみょん)")!!.toList())
+        assertEquals(listOf("爱缪", "あいみょん"), TrackName.aliased("爱缪（あいみょん）")!!.toList())
+        assertEquals("爱缪", TrackName.unaliased("爱缪 (あいみょん)"))
+        assertTrue(TrackName.aliased("Artist ()") == null)
+    }
+
+    @Test fun qqIdsKeepDifferentRecordingsOutOfTheSameCacheEntry() {
+        val first = NcmLyrics.Query("Song", "Artist", "Album", 0, "123")
+        val other = NcmLyrics.Query("Song", "Artist", "Album", 0, "456")
+        assertFalse(first.key() == other.key())
+    }
 }

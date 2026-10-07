@@ -229,4 +229,7 @@
     <string name="demo_cover_aod_title">息屏保持</string>
     <string name="demo_island_immersive_title">沉浸页面</string>
     <string name="demo_island_stack_title">聚合岛</string>
+    <string name="lyrics_roma">显示罗马音</string>
+    <string name="mini_status_at_date">状态显示在日期后面</string>
+    <string name="mini_status_at_date_summary">勿扰、充电等锁屏底部的常驻状态改到日期后面显示，不被胶囊挡住；指纹等临时提示仍在底部</string>
 </resources>
