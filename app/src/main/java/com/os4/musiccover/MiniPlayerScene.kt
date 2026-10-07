@@ -77,12 +77,14 @@ internal object MiniPlayerScene {
     private fun setEditorActive(active: Boolean) {
         if (editorActive == active) return
         editorActive = active
+        StatusBarArtwork.refresh()
         MiniPlayerRuntime.refresh()
     }
 
     private fun setControlCenterActive(active: Boolean) {
         if (controlCenterActive == active) return
         controlCenterActive = active
+        StatusBarArtwork.refresh()
         MiniPlayerRuntime.refresh()
     }
 
@@ -94,6 +96,7 @@ internal object MiniPlayerScene {
         if (aodActive == active && fullScreenAod == fullScreen && !keyguardExitReset) return
         fullScreenAod = fullScreen
         aodActive = active
+        StatusBarArtwork.refresh()
         if (!active) MiniPlayerRuntime.aodEnded()
         MiniPlayerRuntime.refresh()
     }
@@ -101,6 +104,7 @@ internal object MiniPlayerScene {
     private fun setKeyguardGoingAway(goingAway: Boolean) {
         if (keyguardGoingAway == goingAway) return
         keyguardGoingAway = goingAway
+        StatusBarArtwork.refresh()
         if (goingAway) MiniPlayerRuntime.forgetRestoreScene()
         MiniPlayerRuntime.refresh()
     }
