@@ -208,6 +208,7 @@
     <string name="islands_background_blur">Blur background</string>
     <string name="islands_background_blur_summary">Blur behind the pill and shortcut buttons instead of using a solid color</string>
     <string name="islands_background_blur_radius">Background blur strength</string>
+    <string name="islands_background_blur_brightness">Blur background brightness</string>
 
     <string name="mini_page_title">Lock screen super island</string>
     <string name="mini_enabled">Enable the lock screen super island</string>

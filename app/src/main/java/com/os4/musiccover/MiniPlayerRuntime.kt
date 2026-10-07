@@ -1684,7 +1684,8 @@ object MiniPlayerRuntime {
         }
         view.background = null
         view.setImageDrawable(GradientDrawable().apply {
-            setColor(0x331F2324)
+            setColor(MiniPlayerConfig.blurTint(config.optDouble(
+                MiniPlayerConfig.BACKGROUND_BLUR_BRIGHTNESS, 80.0)))
         })
         watchEdge(view)
         dressedViews.add(view)

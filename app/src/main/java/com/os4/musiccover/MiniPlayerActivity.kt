@@ -115,6 +115,12 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
                             enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
                             label = { "${it.toInt()} dp" },
                             onValueChange = { push(MiniPlayerConfig.BACKGROUND_BLUR_RADIUS, it) })
+                        ValueSlider(title = stringResource(R.string.islands_background_blur_brightness),
+                            value = config.optDouble(MiniPlayerConfig.BACKGROUND_BLUR_BRIGHTNESS, 80.0).toFloat(),
+                            valueRange = 0f..100f,
+                            enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
+                            label = { "${it.toInt()}%" },
+                            onValueChange = { push(MiniPlayerConfig.BACKGROUND_BLUR_BRIGHTNESS, it) })
                     }
                 }
             }
