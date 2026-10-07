@@ -2,6 +2,10 @@ package com.os4.musiccover;
 
 /** A temporary thumbnail override, independent of the user's cover/lyrics preference. */
 final class NotificationArtworkPolicy {
+    static boolean shouldPoll(boolean listOpen, boolean moving, boolean requestPending) {
+        return listOpen || moving || requestPending;
+    }
+
     private boolean fullList;
     private String settledState = "NUMBER";
     private boolean openingRequested;

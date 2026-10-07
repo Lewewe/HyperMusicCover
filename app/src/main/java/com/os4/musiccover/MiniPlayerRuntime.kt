@@ -199,10 +199,19 @@ object MiniPlayerRuntime {
      * The pill's material key: the effect, then the generation after a '#'. The pill builds a
      * new layer only when the effect before the '#' changes (MiniPlayerMaterialState).
      */
+    private var materialConfigRaw: String? = null
+    private var materialConfigInitialized = false
+    private var materialConfigBlur = false
+
     internal val materialStyleKey: String get() {
-        val blur = prefs?.let { JSONObject(MiniPlayerConfig.fromPreferences(it))
-            .optBoolean(MiniPlayerConfig.BACKGROUND_BLUR) } ?: false
-        return "$cardEffect:${if (blur) "blur" else "solid"}#$materialGeneration"
+        val raw = prefs?.getString("config", null)
+        if (!materialConfigInitialized || raw != materialConfigRaw) {
+            materialConfigInitialized = true
+            materialConfigRaw = raw
+            materialConfigBlur = runCatching { JSONObject(raw.orEmpty())
+                .optBoolean(MiniPlayerConfig.BACKGROUND_BLUR) }.getOrDefault(false)
+        }
+        return MiniPlayerMaterialState.styleKey(cardEffect, materialConfigBlur, materialGeneration)
     }
     /** The last recipe's values, for telling a new one from the same one again. */
     private var materialSignature: Any? = null
@@ -572,6 +581,9 @@ object MiniPlayerRuntime {
     /** One frame of the AOD's colours on one view, as the card's listener puts them on its media_bg. */
     private fun dimView(view: ImageView, args: Array<Any?>) {
         if (!view.isAttachedToWindow) return
+        // The custom backdrop owns its tint and rendering mode, including during style resets.
+        // Replaying the OEM AOD glass recipe here can turn its Gaussian blur into a flat fill.
+        if (configuredBackdropViews.containsKey(view)) return
         val ctx = view.context
         val blurOpened = blurOpenedMethod?.let { runCatching { it.invoke(null, ctx) as Boolean }.getOrNull() } ?: true
         runCatching {
@@ -1632,6 +1644,7 @@ object MiniPlayerRuntime {
     }
 
     private val suppressedPillBackdrops = WeakHashMap<View, Boolean>()
+    private val configuredBackdropViews = WeakHashMap<ImageView, Boolean>()
 
     /** A stretched pill must not blur the player underneath its own focus animation. */
     internal fun suppressPillBackdrop(view: ImageView, suppress: Boolean) {
@@ -1645,14 +1658,21 @@ object MiniPlayerRuntime {
     private fun configuredBackground(view: ImageView): Boolean = runCatching {
         val config = JSONObject(configJson(view.context))
         val blur = config.optBoolean(MiniPlayerConfig.BACKGROUND_BLUR)
+        // Disabled means replay the OEM recipe without stripping its glass or blend colors.
+        if (!blur) return false
         val container = view.parent as? View ?: return false
         val useBlur = blur && suppressedPillBackdrops[container] != true
         val radius = (MiniPlayerConfig.blurRadius(config.optDouble(
             MiniPlayerConfig.BACKGROUND_BLUR_RADIUS, 30.0))
             * view.resources.displayMetrics.density).toInt()
         EdgeWatch.ours {
-            // Remove the recorded media card's glass and blend before applying our own material.
+            // Initialize the same cross-window blur source used by the native pill container.
+            Class.forName("miuix.core.util.MiuiBlurUtils", false, loader ?: view.context.classLoader)
+                .getMethod("setMiBlurWinType", View::class.java).invoke(null, container)
+            // Radius alone does not leave Soft Glass: explicitly select the Gaussian material.
             for (target in listOf(container, view)) {
+                View::class.java.getMethod("setMiViewMaterialType", Int::class.javaPrimitiveType)
+                    .invoke(target, 0)
                 runCatching { View::class.java.getMethod("clearMiBackgroundBlendColor").invoke(target) }
                 runCatching { View::class.java.getMethod("setMiGlassBlurRadius",
                     Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).invoke(target, 0, 0) }
@@ -1664,10 +1684,11 @@ object MiniPlayerRuntime {
         }
         view.background = null
         view.setImageDrawable(GradientDrawable().apply {
-            setColor(if (blur) 0x331F2324 else 0x9E1F2324.toInt())
+            setColor(0x331F2324)
         })
         watchEdge(view)
         dressedViews.add(view)
+        configuredBackdropViews[view] = true
         aodDimArgs?.let { EdgeWatch.ours { dimView(view, it) } }
         true
     }.getOrElse {
@@ -1677,6 +1698,17 @@ object MiniPlayerRuntime {
 
     internal fun material(view: ImageView, classLoader: ClassLoader) {
         if (configuredBackground(view)) return
+        // Clear only our previous custom blur before replaying the native recipe.
+        if (configuredBackdropViews.remove(view) == true) runCatching {
+            EdgeWatch.ours {
+                for (target in listOfNotNull(view.parent as? View, view)) {
+                    backgroundMode.invoke(target, 0)
+                    backgroundRadius.invoke(target, 0)
+                    viewBlurMode.invoke(target, 0)
+                    passWindowBlur.invoke(target, false)
+                }
+            }
+        }.onFailure { Xp.log("MCMini: custom backdrop reset failed: $it") }
         val ctx = view.context
         runCatching {
             val res = ctx.resources

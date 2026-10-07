@@ -128,6 +128,7 @@ final class Prefetch {
      * predicted. Read by Main to decide whether the player's own report needs another push.
      */
     private static volatile String sPredicted;
+    private static volatile String sPredictedArtist;
     private static volatile long sPredictedAt;
 
     /** A prediction older than this is not worth matching against - the player never got there. */
@@ -194,13 +195,16 @@ final class Prefetch {
         if (it.icon == null) return null;
         Bitmap b;
         synchronized (CACHE) {
-            b = CACHE.get(it.icon.toString());
+            Bitmap cached = CACHE.get(it.icon.toString());
+            b = cached == null || cached.isRecycled() ? null
+                    : cached.copy(Bitmap.Config.ARGB_8888, false);
         }
-        if (b == null || b.isRecycled()) return null;
+        if (b == null) return null;
         // Moved here and now, so a second press within the burst predicts from the new place
         // rather than from where the player still thinks it is.
         sIndex = want;
         sPredicted = it.title;
+        sPredictedArtist = it.artist;
         sPredictedAt = SystemClock.uptimeMillis();
         Xp.log(TAG + "predicting \"" + it.title + "\" for a skip " + (dir < 0 ? "back" : "on"));
         // The one after this one is now worth having. sIndex has already moved, so this reads
@@ -242,6 +246,7 @@ final class Prefetch {
         // player reports is left to the player rather than predicted from the wrong track.
         sIndex = -1;
         sPredicted = it.title;
+        sPredictedArtist = it.artist;
         sPredictedAt = SystemClock.uptimeMillis();
         Xp.log(TAG + "predicting \"" + it.title + "\" for a skip back, from history");
         return b;
@@ -283,6 +288,12 @@ final class Prefetch {
      * Whether the track the player has now is the one already pushed for. Consumes the
      * prediction either way: it has been answered.
      */
+    static String predictedKey() {
+        String title = sPredicted;
+        return title == null ? null : sPkg + "|" + title + "|"
+                + (sPredictedArtist == null ? "" : sPredictedArtist);
+    }
+
     static boolean wasPredicted(String title) {
         String p = sPredicted;
         long at = sPredictedAt;

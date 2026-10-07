@@ -229,7 +229,7 @@ final class LyricSource {
     /** One metadata string, or null - including when the session has no metadata at all. */
     private static String metaOf(MediaController c, String key) {
         try {
-            MediaMetadata md = c.getMetadata();
+            MediaMetadata md = Main.sessionMetadata(c);
             return md == null ? null : md.getString(key);
         } catch (Throwable t) {
             return null;
@@ -272,7 +272,7 @@ final class LyricSource {
             return null;
         }
         try {
-            MediaMetadata md = c.getMetadata();
+            MediaMetadata md = Main.sessionMetadata(c);
             if (md == null) {
                 return null;
             }
@@ -709,7 +709,7 @@ final class LyricSource {
             return null;
         }
         try {
-            MediaMetadata md = c.getMetadata();
+            MediaMetadata md = Main.sessionMetadata(c);
             if (md == null) {
                 return null;
             }
@@ -1038,7 +1038,7 @@ final class LyricSource {
     private static void lyricon(MediaController c, Rows r) {
         String before = r.why;
         try {
-            MediaMetadata md = c == null ? null : c.getMetadata();
+            MediaMetadata md = Main.sessionMetadata(c);
             String title = md == null ? null : md.getString(MediaMetadata.METADATA_KEY_TITLE);
             String artist = md == null ? null : md.getString(MediaMetadata.METADATA_KEY_ARTIST);
             List<LyricLine> lines = LyriconSource.linesFor(title, artist,

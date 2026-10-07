@@ -437,6 +437,15 @@ public class Main extends XposedModule {
     private static volatile float sGlassEnd = DEFAULT_GLASS_END;
     /** The session we are mirroring, plus the callback that keeps the cover on the right track. */
     private static MediaController sWatched;
+    private static final class SessionMetadata {
+        final android.media.session.MediaSession.Token token;
+        final MediaMetadata metadata;
+        SessionMetadata(MediaController controller, MediaMetadata metadata) {
+            this.token = controller.getSessionToken();
+            this.metadata = metadata;
+        }
+    }
+    private static volatile SessionMetadata sWatchedMetadata;
     private static MediaController.Callback sMediaCb;
 
     /**
@@ -5202,12 +5211,9 @@ public class Main extends XposedModule {
         MediaController c = controllerFromCard(ctx);
         if (c == null) c = pickController(ctx);
         if (c != null) {
-            MediaMetadata md = c.getMetadata();
+            MediaMetadata md = sessionMetadata(c);
             if (md != null) {
-                String actualKey = c.getPackageName() + "|"
-                        + md.getString(MediaMetadata.METADATA_KEY_TITLE) + "|"
-                        + md.getString(MediaMetadata.METADATA_KEY_ARTIST) + "|"
-                        + md.getString(MediaMetadata.METADATA_KEY_ALBUM);
+                String actualKey = metadataTrackKey(c, md);
                 if (expectedKey != null && !sameTrack(expectedKey, actualKey)) return null;
                 Bitmap b = bestSessionArt(md);
                 if (b != null) {
@@ -5251,17 +5257,17 @@ public class Main extends XposedModule {
     }
 
     static Bitmap sessionArtForTrack(Context ctx, String key) {
+        return sessionArtForTrack(ctx, key, false);
+    }
+
+    static Bitmap sessionArtForTrack(Context ctx, String key, boolean fresh) {
         MediaController controller = controllerFromCard(ctx);
         if (controller == null) controller = pickController(ctx);
         if (controller == null) return null;
 
-        MediaMetadata md = controller.getMetadata();
+        MediaMetadata md = fresh ? controller.getMetadata() : sessionMetadata(controller);
         if (md == null) return null;
-
-        String actualKey = controller.getPackageName()
-                + "|" + md.getString(MediaMetadata.METADATA_KEY_TITLE)
-                + "|" + md.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                + "|" + md.getString(MediaMetadata.METADATA_KEY_ALBUM);
+        String actualKey = metadataTrackKey(controller, md);
 
         if (!sameTrack(key, actualKey)) return null;
 
@@ -7989,12 +7995,12 @@ public class Main extends XposedModule {
      * shade, where the OEM's own click is the right one.
      */
     private static boolean wantsArtTap() {
-        return (singleCoverTapEnabled() || LockLyrics.wantsAttached()) && sCardShowing;
+        return singleCoverTapEnabled() && sCardShowing;
     }
 
     private static boolean singleCoverTapEnabled() {
-        // A lyricless track needs a way to fold its artwork even when legacy taps are off.
-        return sTapToggle || LockLyrics.sEnabled && !LockLyrics.hasLyrics();
+        // The user's tap switch also governs lyricless and compact-artwork gestures.
+        return sTapToggle;
     }
 
     /**
@@ -9315,6 +9321,7 @@ public class Main extends XposedModule {
         if (c == null) c = pickController(ctx);
         boolean same = c != null && sWatched != null
                 && c.getSessionToken().equals(sWatched.getSessionToken());
+        if (same) sWatchedMetadata = new SessionMetadata(c, c.getMetadata());
         if (!same) {
             if (sWatched != null && sMediaCb != null) {
                 try {
@@ -9323,11 +9330,15 @@ public class Main extends XposedModule {
                 }
             }
             sWatched = c;
+            sWatchedMetadata = null;
             sMediaCb = null;
             if (c != null) {
+                final MediaController watched = c;
                 sMediaCb = new MediaController.Callback() {
                     @Override
                     public void onMetadataChanged(MediaMetadata md) {
+                        if (sWatched == null || !watched.getSessionToken().equals(sWatched.getSessionToken())) return;
+                        sWatchedMetadata = new SessionMetadata(watched, md);
                         // Every track change re-reads the state rather than trusting that the
                         // last callback of a skip was the one that says where it ended up.
                         MediaController w = sWatched;
@@ -9351,6 +9362,7 @@ public class Main extends XposedModule {
                 };
                 try {
                     c.registerCallback(sMediaCb, main());
+                    sWatchedMetadata = new SessionMetadata(c, c.getMetadata());
                     Xp.log(TAG + "following " + c.getPackageName());
                 } catch (Throwable t) {
                     Xp.log(TAG + "registerCallback failed: " + t);
@@ -9423,13 +9435,24 @@ public class Main extends XposedModule {
     }
 
     /** Identity of what is on screen, so a metadata storm pushes the same artwork only once. */
-    private static String trackKey(MediaController c) {
-        if (c == null) return "";
-        MediaMetadata md = c.getMetadata();
-        if (md == null) return c.getPackageName();
-        return c.getPackageName() + "|" + md.getString(MediaMetadata.METADATA_KEY_TITLE)
+    static MediaMetadata sessionMetadata(MediaController controller) {
+        if (controller == null) return null;
+        SessionMetadata cached = sWatchedMetadata;
+        if (cached != null && controller.getSessionToken().equals(cached.token)) return cached.metadata;
+        return controller.getMetadata();
+    }
+
+    private static String metadataTrackKey(MediaController controller, MediaMetadata md) {
+        if (md == null) return controller.getPackageName();
+        String title = ArtworkTrackIdentity.title(controller.getPackageName(),
+                md.getString(MediaMetadata.METADATA_KEY_TITLE), md.getString(MediaMetadata.METADATA_KEY_ARTIST));
+        return controller.getPackageName() + "|" + title
                 + "|" + md.getString(MediaMetadata.METADATA_KEY_ARTIST)
                 + "|" + md.getString(MediaMetadata.METADATA_KEY_ALBUM);
+    }
+
+    private static String trackKey(MediaController c) {
+        return c == null ? "" : metadataTrackKey(c, sessionMetadata(c));
     }
 
     /**
@@ -9458,6 +9481,9 @@ public class Main extends XposedModule {
         String aa = keyField(a, 2), ab = keyField(b, 2);
         return aa.equals(ab) || aa.startsWith(ab) || ab.startsWith(aa);
     }
+
+    static String artworkTrackTitle(String key) { return keyField(key, 1); }
+    static String artworkTrackPackage(String key) { return keyField(key, 0); }
 
     /** The nth |-separated field of a track key, or "" when the key does not reach that far. */
     private static String keyField(String key, int n) {
@@ -9529,6 +9555,7 @@ public class Main extends XposedModule {
             return;
         }
         sTrackKey = key;
+        boolean predictedArtwork = CoverPush.confirmPrefetchedArtwork(key);
         CoverPush.confirmPreviousTrack(key);
         long ctNow = android.os.SystemClock.uptimeMillis();
         // Still waiting on the artwork for the previous one means this press lands on top of it:
@@ -9550,8 +9577,11 @@ public class Main extends XposedModule {
         // Started here rather than once the cover has settled, so the fetch overlaps the
         // transition instead of following it.
         LockLyrics.onTrack(key, sWatched);
-        // Queue reads still warm lyric lookups. Artwork waits for the confirmed session.
         Prefetch.onTrack(sWatched);
+        if (sCoverMode && predictedArtwork) {
+            sCtArt = android.os.SystemClock.uptimeMillis();
+            return;
+        }
         if (sCoverMode) CoverPush.pushArtAsync(true, true);
         else setCoverEnabled(true, true);
     }
@@ -9891,7 +9921,10 @@ public class Main extends XposedModule {
     }
 
     static void refreshLyricsButton() {
-        applyMediaCard();
+        main().post(() -> {
+            if (sCardGuarded != null) kickCardFrame();
+            else if (sCoverMode) applyMediaCard();
+        });
     }
 
     static void openLyricsFromButton() {

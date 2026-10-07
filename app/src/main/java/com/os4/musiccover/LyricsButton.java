@@ -86,9 +86,9 @@ final class LyricsButton {
         if (!Float.isFinite(titleX) || !Float.isFinite(top) || !Float.isFinite(bottom)) return;
         int left = Math.round(titleX - (SIZE_DP + GAP_DP) * density);
         int y = Math.round((top + bottom - size) / 2f);
-        if (button.getLeft() != left || button.getTop() != y || button.getWidth() != size) {
-            button.layout(left, y, left + size, y + size);
-        }
+        // Let the OEM parent own layout; transforms also keep the click target aligned.
+        button.setTranslationX(left - button.getLeft());
+        button.setTranslationY(y - button.getTop());
         int color = title.getCurrentTextColor();
         if (tint != color) {
             tint = color;

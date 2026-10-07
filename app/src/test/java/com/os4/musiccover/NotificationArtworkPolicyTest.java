@@ -4,6 +4,15 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class NotificationArtworkPolicyTest {
+    @Test public void settledPileAndPillStopPolling() {
+        assertFalse(NotificationArtworkPolicy.shouldPoll(false, false, false));
+        assertTrue(NotificationArtworkPolicy.shouldPoll(true, false, false));
+        assertTrue(NotificationArtworkPolicy.shouldPoll(false, true, false));
+        assertTrue(NotificationArtworkPolicy.shouldPoll(false, false, true));
+        // Folding stops the timer as soon as motion and the pending request finish.
+        assertFalse(NotificationArtworkPolicy.shouldPoll(false, false, false));
+    }
+
     @Test public void openingPileTowardListStartsMorphBeforeNativeListSettles() {
         NotificationArtworkPolicy navigation = new NotificationArtworkPolicy();
         assertFalse(navigation.listOpen(true, "STACK", false));

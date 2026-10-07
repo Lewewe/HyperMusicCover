@@ -1084,7 +1084,7 @@ final class LockLyrics {
         String fallback = cardKey == null ? "" : cardKey;
         if (c == null || fallback.isEmpty()) return fallback;
         try {
-            android.media.MediaMetadata md = c.getMetadata();
+            android.media.MediaMetadata md = Main.sessionMetadata(c);
             if (md == null) return fallback;
             String artist = md.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST);
             String album = md.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM);
@@ -1196,6 +1196,8 @@ final class LockLyrics {
         Main.main().removeCallbacks(WATCH);
     }
 
+    private static int sLyricsButtonState = -1;
+
     /** Anything that may change whether the view should be showing. */
     static void refresh() {
         ClockCollapse.refreshArtworkSize();
@@ -1207,7 +1209,12 @@ final class LockLyrics {
         // A new song or a switch in the still AOD: nothing is shown until the display is let up.
         if (sStill) drawStill();
         CoverCardLayer.refresh();
-        Main.refreshLyricsButton();
+        int buttonState = (sEnabled ? 1 : 0) | (hasCurrentLyrics() ? 2 : 0)
+                | (wantsCompactArtwork() ? 4 : 0);
+        if (buttonState != sLyricsButtonState) {
+            sLyricsButtonState = buttonState;
+            Main.refreshLyricsButton();
+        }
     }
 
     /** The app's switch. The setting: it is written to the state file and the app reads it back. */
@@ -1943,7 +1950,7 @@ final class LockLyrics {
         if (c == null) return "no session";
         StringBuilder sb = new StringBuilder(c.getPackageName());
         try {
-            android.media.MediaMetadata md = c.getMetadata();
+            android.media.MediaMetadata md = Main.sessionMetadata(c);
             if (md == null) return sb.append(" no metadata").toString();
             for (String k : md.keySet()) {
                 CharSequence v = md.getText(k);

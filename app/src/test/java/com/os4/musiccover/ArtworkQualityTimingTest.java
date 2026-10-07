@@ -32,7 +32,9 @@ public class ArtworkQualityTimingTest {
         assertFalse(CoverPush.shouldSoftenArtwork(480, 270));
         assertFalse(CoverPush.shouldSoftenArtwork(270, 480));
         assertTrue(CoverPush.shouldSoftenArtwork(479, 269));
-        assertTrue(CoverPush.shouldSoftenArtwork(480, 480));
+        assertTrue(CoverPush.shouldSoftenArtwork(479, 479));
+        assertFalse(CoverPush.shouldSoftenArtwork(480, 480));
+        assertFalse(CoverPush.shouldSoftenArtwork(500, 500));
         assertFalse(CoverPush.shouldSoftenArtwork(1024, 1024));
     }
 

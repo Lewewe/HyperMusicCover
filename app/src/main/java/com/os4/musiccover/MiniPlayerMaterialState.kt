@@ -20,6 +20,10 @@ internal object MiniPlayerMaterialState {
         else -> value
     }
 
+    /** Custom blur owns its layer; changing the OEM glass style only triggers a redress. */
+    fun styleKey(effect: String, customBlur: Boolean, generation: Int): String =
+        "${if (customBlur) "customBlur" else "$effect:native"}#$generation"
+
     /** Another effect, not only new values for the same one: keys are "effect#generation". */
     fun replacesLayer(previous: String?, next: String): Boolean =
         previous != null && previous.substringBefore('#') != next.substringBefore('#')

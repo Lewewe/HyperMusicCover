@@ -74,6 +74,7 @@ final class CoverPush {
     // the player's bitmap: the fallback below owns a separate software copy.
     private static Bitmap sUnsoftenedArt;
     private static int sSoftArtGen = -1;
+    private static final ArtworkQualityState sAcceptedArtwork = new ArtworkQualityState();
     private static final Runnable sSoftArtFallback = new Runnable() {
         @Override public void run() {
             finishArtworkQualityWatch(Main.sAppCtx, sSoftArtGen, Main.sTrackKey);
@@ -81,11 +82,10 @@ final class CoverPush {
     };
 
     static boolean shouldSoftenArtwork(int width, int height) {
-        // YouTube can finish at 480x270 without publishing a larger video thumbnail.
-        // Use its ready long edge for rectangular art, retaining 512 for square covers.
+        // Players can publish final artwork at 500x500 (Salt) or 480x270 (YouTube).
+        // Requiring 512 for square covers falsely treats their original bitmap as a thumbnail.
         if (width <= 0 || height <= 0) return false;
-        boolean rectangular = Math.abs(width / (float) height - 1f) > 0.01f;
-        return Math.max(width, height) < (rectangular ? 480 : 512);
+        return Math.max(width, height) < 480;
     }
 
     private static void clearSoftArtwork() {
@@ -101,15 +101,20 @@ final class CoverPush {
         pushArtToWallpaper(ctx, on, art, Main.sPushGen, null);
     }
 
-    private static boolean currentPush(int gen, String key) {
-        return gen == Main.sPushGen && (key == null || Main.sameTrack(key, Main.sTrackKey));
+    static boolean currentPush(int gen, String key) {
+        return ArtworkPredictionPolicy.canPublish(gen, Main.sPushGen,
+                key == null || Main.sameTrack(key, Main.sTrackKey),
+                gen == sPredictedRequestGen && Main.sameTrack(key, sPredictedArtworkKey),
+                Main.sameTrack(Main.sTrackKey, sPredictedOutgoingKey));
     }
 
     private static void pushArtToWallpaper(Context ctx, boolean on, Bitmap art,
                                            int gen, String key) {
         if (!currentPush(gen, key)) return;
         clearSoftArtwork();
-        if (!on || art == null || !shouldSoftenArtwork(art.getWidth(), art.getHeight())) {
+        if (!on || art == null || !shouldSoftenArtwork(art.getWidth(), art.getHeight())
+                || sAcceptedArtwork.accepted(key == null ? Main.sTrackKey : key,
+                    artPrint(art), art.getWidth(), art.getHeight())) {
             pushRenderedArtToWallpaper(ctx, on, art, false, gen, key);
             return;
         }
@@ -151,7 +156,8 @@ final class CoverPush {
         sUnsoftenedArt = null;
         sSoftArtGen = -1;
         try {
-            // Some players never publish a larger bitmap. Do not leave them softened forever.
+            // Some players never publish a larger bitmap. Keep its readiness across pill entry.
+            sAcceptedArtwork.accept(key, artPrint(original), original.getWidth(), original.getHeight());
             pushRenderedArtToWallpaper(ctx, true, original, false, gen, key);
         } finally {
             if (!original.isRecycled()) original.recycle();
@@ -1275,17 +1281,20 @@ final class CoverPush {
     private static volatile long sSkipAt;
     private static volatile int sSkipDir;
     private static volatile String sDeferredPreviousKey;
+    private static volatile String sPredictedArtworkKey;
+    private static volatile int sPredictedArtworkGen = -1;
+    private static volatile int sPredictedRequestGen = -1;
+    private static volatile String sPredictedOutgoingKey;
 
     /**
      * Someone asked the player to change track. Runs on whatever thread made the call, so it does
-     * nothing but write the two fields down.
+     * records the request and starts a guarded prediction when cached forward artwork exists.
      */
     static void noteSkip(int dir) {
         sSkipAt = android.os.SystemClock.uptimeMillis();
         sSkipDir = dir;
         if (!Main.sCoverMode || !Main.screenOn()) return;
-        // Keep artwork on the confirmed track for every player. Queues can lag, shuffle,
-        // or interpret Previous as a restart, so a transport request never predicts artwork.
+        // Previous can restart the current song; do not predict its artwork.
         sDeferredPreviousKey = null;
         boolean previousChangesTrack = dir < 0 && Main.shouldAnimatePrevious();
         if (!PreviousArtworkPolicy.shouldAnimateSkip(dir, previousChangesTrack)) return;
@@ -1295,6 +1304,67 @@ final class CoverPush {
             return;
         }
         CoverCardLayer.beginSkipWait();
+        // Previous may restart; only forward skips use the player's prefetched queue artwork.
+        if (dir > 0) pushPredictedArtwork();
+    }
+
+    private static void pushPredictedArtwork() {
+        Context ctx = Main.sAppCtx;
+        if (ctx == null) return;
+        Bitmap art = Prefetch.take(1);
+        if (art == null) return;
+        String predicted = Prefetch.predictedKey();
+        String outgoing = Main.sTrackKey;
+        if (predicted == null || Main.sameTrack(predicted, outgoing)
+                || !Main.artworkTrackPackage(predicted).equals(Main.artworkTrackPackage(outgoing))) {
+            art.recycle();
+            return;
+        }
+        int gen = ++Main.sPushGen;
+        sPredictedArtworkKey = predicted;
+        sPredictedArtworkGen = -1;
+        sPredictedOutgoingKey = outgoing;
+        sPredictedRequestGen = gen;
+        Main.worker().post(() -> {
+            try {
+                if (!Main.sCoverMode || !currentPush(gen, predicted)) return;
+                // The prediction is valid only while its generation and outgoing session agree.
+                // Publication carries the predicted key so queued UI work also survives confirmation.
+                pushArtToWallpaper(ctx, true, art, gen, predicted);
+                if (!currentPush(gen, predicted)) return;
+                sArtPrint = artPrint(art);
+                sArtPixels = artworkPixels(art);
+                sArtW = art.getWidth();
+                sArtH = art.getHeight();
+                sArtLong = Math.max(sArtW, sArtH);
+                sArtKey = predicted;
+                sPredictedArtworkGen = gen;
+                Main.sCtArt = android.os.SystemClock.uptimeMillis();
+            } finally { art.recycle(); }
+        });
+        Main.worker().postDelayed(() -> {
+            // A refused command must not leave a speculative cover on the current song.
+            if (Main.sCoverMode && gen == Main.sPushGen
+                    && Main.sameTrack(outgoing, Main.sTrackKey)) {
+                sPredictedArtworkKey = null;
+                pushArtAsync(true, true);
+            }
+        }, 2000L);
+    }
+
+    static boolean confirmPrefetchedArtwork(String key) {
+        String predicted = sPredictedArtworkKey;
+        boolean matched = Prefetch.wasPredicted(Main.artworkTrackTitle(key));
+        sPredictedArtworkKey = null;
+        if (!matched || predicted == null || !Main.sameTrack(predicted, key)
+                || sPredictedArtworkGen != Main.sPushGen || !Main.sameTrack(sArtKey, predicted)) return false;
+        int gen = Main.sPushGen;
+        sArtKey = key;
+        Main.worker().post(() -> {
+            upgradeArtwork(Main.sAppCtx, gen, key);
+            startArtworkQualityWatch(Main.sAppCtx, gen, key);
+        });
+        return true;
     }
 
     static void confirmPreviousTrack(String key) {
@@ -1392,12 +1462,11 @@ final class CoverPush {
         }
     };
 
-    private static int sMetadataArtChecks;
     private static final Runnable sMetadataArtWatch = new Runnable() {
         @Override public void run() {
             if (!Main.sCoverMode || !ArtworkChangePolicy.isYouTube(Main.sTrackKey)) return;
             upgradeArtwork(Main.sAppCtx, Main.sPushGen, Main.sTrackKey);
-            if (--sMetadataArtChecks > 0) Main.worker().postDelayed(this, 500L);
+
         }
     };
 
@@ -1410,13 +1479,16 @@ final class CoverPush {
         Main.worker().post(() -> {
             Main.worker().removeCallbacks(sMetadataArtWatch);
             if (!ArtworkChangePolicy.isYouTube(Main.sTrackKey)) return;
-            sMetadataArtChecks = QUALITY_CHECKS;
-            // Check the metadata update now; the remaining checks keep the bounded cadence.
+            // The callback already carries the bitmap; do not start a second polling chain.
             Main.worker().post(sMetadataArtWatch);
         });
     }
 
     private static void upgradeArtwork(Context ctx, int gen, String key) {
+        upgradeArtwork(ctx, gen, key, false);
+    }
+
+    private static void upgradeArtwork(Context ctx, int gen, String key, boolean fresh) {
         if (ctx == null
                 || gen != Main.sPushGen
                 || !Main.sCoverMode
@@ -1426,7 +1498,7 @@ final class CoverPush {
         }
 
         try {
-            Bitmap art = Main.sessionArtForTrack(ctx, key);
+            Bitmap art = Main.sessionArtForTrack(ctx, key, fresh);
             if (art == null) return;
 
             int[] pixels = ArtworkChangePolicy.isYouTube(key) ? artworkPixels(art) : null;
@@ -1467,6 +1539,7 @@ final class CoverPush {
     }
 
     private static void startArtworkQualityWatch(Context ctx, int gen, String key) {
+        if (sSoftArtGen != gen || !shouldSoftenArtwork(sArtW, sArtH)) return;
         watchArtworkQuality(ctx, gen, key, QUALITY_CHECKS);
     }
 
@@ -1480,13 +1553,15 @@ final class CoverPush {
             public void run() {
                 if (gen != Main.sPushGen
                         || !Main.sCoverMode
-                        || !Main.sameTrack(key, Main.sTrackKey)) {
+                        || sSoftArtGen != gen
+                        || !Main.sameTrack(key, Main.sTrackKey)
+                        || !shouldSoftenArtwork(sArtW, sArtH)) {
                     return;
                 }
 
-                upgradeArtwork(ctx, gen, key);
+                upgradeArtwork(ctx, gen, key, true);
 
-                if (remaining > 1) {
+                if (remaining > 1 && shouldSoftenArtwork(sArtW, sArtH)) {
                     watchArtworkQuality(ctx, gen, key, remaining - 1);
                 } else {
                     finishArtworkQualityWatch(ctx, gen, key);

@@ -625,7 +625,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     private void adoptPending() {
         Prepared p = sPending;
         if (p == null || p == current || p.generation != sGeneration
-                || p.pushGeneration != Main.sPushGen) return;
+                || !CoverPush.currentPush(p.pushGeneration, p.trackKey)) return;
         boolean revealReady = isReadyRectangularUpgrade(p);
         if (previous != null) previous.recycle();
         previous = current;
