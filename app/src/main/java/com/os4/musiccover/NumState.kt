@@ -22,7 +22,6 @@ internal object NumState {
 
     private val main = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
-    private val artworkScrollStates = java.util.WeakHashMap<Any, ArtworkScrollState>()
 
     /** The islands fold the ordinary notifications this way (LockIslands.setActive turns it on). */
     @Volatile var folding = false
@@ -87,26 +86,6 @@ internal object NumState {
                     .getOrNull() ?: target
             }
         }.onFailure { Xp.log("MCNum: hands-up unhookable: $it") }
-        // Native scrolling does not always cross enter/exitNumState (STACK <-> LIST).
-        runCatching {
-            val stack = Xp.findClass("com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout", classLoader)
-            for (name in listOf("setOwnScrollY", "setOverScrolledPixels")) {
-                runCatching {
-                    Xp.hookAll(stack, name) { chain ->
-                        val result = chain.proceed()
-                        val value = (chain.args.firstOrNull() as? Number)?.toFloat()
-                        val target = chain.thisObject
-                        if (value != null && target != null) {
-                            val channel = if (name == "setOwnScrollY") 0
-                                else if (chain.args.getOrNull(1) == true) 1 else 2
-                            val state = artworkScrollStates.getOrPut(target) { ArtworkScrollState() }
-                            if (state.changed(channel, value)) LockIslands.notificationArtworkMotion()
-                        }
-                        result
-                    }
-                }.onFailure { Xp.log("MCNum: $name scroll hook unavailable: $it") }
-            }
-        }.onFailure { Xp.log("MCNum: artwork scroll hooks unavailable: $it") }
     }
 
     fun addListener(l: (Boolean) -> Unit) { listeners.addIfAbsent(l) }

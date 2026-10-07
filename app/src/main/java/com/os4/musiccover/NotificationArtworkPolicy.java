@@ -2,8 +2,9 @@ package com.os4.musiccover;
 
 /** A temporary thumbnail override, independent of the user's cover/lyrics preference. */
 final class NotificationArtworkPolicy {
-    static boolean shouldPoll(boolean listOpen, boolean moving, boolean requestPending) {
-        return listOpen || moving || requestPending;
+    static boolean needsMotionGeometry(Integer position, Integer previous) {
+        return position != null && previous != null
+                && Math.abs((long) position - previous) > 2L;
     }
 
     private boolean fullList;

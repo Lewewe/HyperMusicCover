@@ -1902,6 +1902,8 @@ public class Main extends XposedModule {
                     // A measurement, like cardrect: the full clock the size is a fraction of.
                     + (ClockCollapse.fullUnitState() == null ? ""
                             : "\nclockfull=" + ClockCollapse.fullUnitState())
+                    + (ClockCollapse.sizeReferenceState() == null ? ""
+                            : "\nclockreference=" + ClockCollapse.sizeReferenceState())
                     + "\nmctap=" + (sMcTitleTap ? 1 : 0)
                     + "\ntap=" + (sTapToggle ? 1 : 0)
                     + ShadeLayer.dumpCfg()
@@ -2011,6 +2013,7 @@ public class Main extends XposedModule {
                         // cover takes is still the user's.
                         else if ("clock".equals(k)) setClockHeightDp(Float.parseFloat(v));
                         else if ("clockfull".equals(k)) ClockCollapse.restoreFullUnit(v);
+                        else if ("clockreference".equals(k)) ClockCollapse.restoreSizeReference(v);
                         else if ("clocksize".equals(k)) setClockSize(Float.parseFloat(v));
                         // clockoff, glass and spring are not read: the clock's offset, the glass
                         // clock's end and the transition's spring are all fixed. Each is still
@@ -2658,6 +2661,9 @@ public class Main extends XposedModule {
                         saveState();
                         // A settled clock has no frames left to carry a new size on; ask for one.
                         ClockCollapse.refresh();
+                    } else if ("clockreference".equals(op)) {
+                        ClockCollapse.restoreCurrentSizeReference(i.getFloatExtra("v", Float.NaN));
+                        setResultData(ClockCollapse.sizeReferenceState());
                     } else if ("clocksize".equals(op)) {
                         setClockSize(i.getFloatExtra("v", 1f));
                         saveState();
