@@ -61,6 +61,7 @@ final class LyricSource {
     static final int SRC_KUWO = 9;
     /** LunaBeat's TTML Hub, keyed by the platform's song id like the AMLL database. */
     static final int SRC_HUB = 10;
+    static final int SRC_SPICY = 11;
 
     interface Callback {
         /**
@@ -756,6 +757,7 @@ final class LyricSource {
         // this one, and believing it is what cost five songs their lyrics. See infoFor().
         final String info = infoFor(c);
         final String dir = dirFor(c);
+        final String spicyId = SpicyLyrics.spotifyId(c);
         // An id is only worth having when there is a directory it belongs to; without one it
         // cannot be looked up anywhere, and pretending otherwise is how a lookup lands in the
         // wrong platform's id space.
@@ -805,24 +807,55 @@ final class LyricSource {
                 if (r.lines.isEmpty() && (id != null || q != null)) {
                     race(gen, pkg, ctx, id, dir, q, r);
                 }
+                if (spicyId == null) {
+                    Xp.log("[MCLyric] Spicy Lyrics skipped: no Spotify track id in media metadata");
+                } else if (!LockLyrics.sSpicyLyricsEnabled) {
+                    Xp.log("[MCLyric] Spicy Lyrics disabled");
+                } else if (LockLyrics.sSpicyLyricsApiKey.isEmpty()) {
+                    Xp.log("[MCLyric] Spicy Lyrics skipped: API key is empty");
+                } else if (!words(r.lines)) {
+                    try {
+                        List<LyricLine> spicy = SpicyLyrics.fetch(
+                                spicyId, LockLyrics.sSpicyLyricsApiKey);
+                        if (words(spicy)) {
+                            r.lines = spicy;
+                            r.source = SRC_SPICY;
+                            r.why = spicy.size() + " lines from Spicy Lyrics " + spicyId;
+                        } else {
+                            Xp.log("[MCLyric] Spicy Lyrics returned no word-timed lyrics for "
+                                    + spicyId);
+                        }
+                    } catch (Throwable t) {
+                        Xp.log("[MCLyric] Spicy Lyrics result was rejected: "
+                                + t.getClass().getSimpleName());
+                    }
+                }
+                // A player/session or local file may provide usable line timing before the
+                // online route runs. Still search every provider for a word-timed replacement.
+                if (q != null && !r.lines.isEmpty() && !words(r.lines) && !superseded(gen)) {
+                    OnlineLyrics.Lookup lookup = OnlineLyrics.wordFirst(pkg, q);
+                    if (lookup != null && words(lookup.lines) && !superseded(gen)) {
+                        r.lines = lookup.lines;
+                        r.source = lookup.found.source();
+                        r.why = lookup.lines.size() + " lines from " + lookup.found.who() + " "
+                                + lookup.found.id + " (word-timed; all provider/title variants checked)";
+                    }
+                }
                 // A catalogue that places the song and answers that it is instrumental has
                 // answered: the song has no words, and the next catalogue is not asked for some.
                 boolean instrumental = dropPlaceholder(r);
+                Xp.log("[MCLyric] " + pkg + " -> " + r.why);
+                onMainCurrent(gen, cb, r.lines, r.why, r.source);
                 // The other two catalogues, in order, and only for a song the first three could
                 // not place. Sequential rather than raced: this is the slow path by definition,
                 // nothing above it is still running by the time it starts, and a song that
                 // already works never reaches it, so what it costs is paid only by songs that
                 // would otherwise show nothing at all.
-                if (r.lines.isEmpty() && q != null && !instrumental) {
-                    web(pkg, q, r);
-                    instrumental = dropPlaceholder(r);
-                }
                 // The file, for a streaming player, when nothing else had the song - and not
                 // when a catalogue placed it and said it has no words.
                 if (r.lines.isEmpty() && !files && !instrumental) {
                     local(ctx, controller, r);
                 }
-                Xp.log("[MCLyric] " + pkg + " -> " + r.why);
                 onMain(cb, r.lines, r.why, r.source);
                 // Translation enrichment is optional and must never terminate SystemUI.
                 try {
@@ -1076,7 +1109,10 @@ final class LyricSource {
     }
 
     /** The whole lookup, including the mirrors and a miss. Nothing is waited for past this. */
-    private static final long RACE_BUDGET_MS = 8000L;
+    // The online route now spends its own budget checking all provider/title variants. Leave
+    // enough outer time for that worker to publish its result instead of treating an exact-budget
+    // completion as a miss.
+    private static final long RACE_BUDGET_MS = 12000L;
 
     /**
      * How long NetEase's answer waits for the database's, once it has one of its own.
@@ -1309,6 +1345,19 @@ final class LyricSource {
         }
     }
 
+    /** Whether a set of rows carries word timings, which is what the session route can add. */
+    private static boolean words(List<LyricLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return false;
+        }
+        for (LyricLine l : lines) {
+            if (l.hasWords()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * The lyric shipped with the file being played, when the session is playing a file.
      *
@@ -1386,51 +1435,24 @@ final class LyricSource {
         }
     }
 
-    /**
-     * By name, from the first two catalogues in this player's order - QQ Music and NetEase for
-     * most players. See OnlineLyrics.
-     */
+    /** By name, with every provider and title/artist variant checked before fallback. */
     private static void online(String pkg, NcmLyrics.Query q, Rows r) {
         String before = r.why;
         try {
-            OnlineLyrics.Found f = OnlineLyrics.first(pkg, q);
-            if (f == null) {
-                r.why = join(before, "no match on " + OnlineLyrics.describe(pkg).split(">")[0]
-                        + " or " + OnlineLyrics.describe(pkg).split(">")[1]);
+            OnlineLyrics.Lookup lookup = OnlineLyrics.wordFirst(pkg, q);
+            if (lookup == null) {
+                r.why = join(before, "no match on " + OnlineLyrics.describe(pkg));
                 return;
             }
-            take(f, r, before);
+            r.lines = lookup.lines;
+            r.source = lookup.found.source();
+            r.why = r.lines.size() + " lines from " + lookup.found.who() + " "
+                    + lookup.found.id + " (" + (lookup.found.words ? "word-timed" : "line-timed")
+                    + "; all provider/title variants checked)";
         } catch (Throwable t) {
             Xp.log("[MCLyric] the by-name lookup failed: " + t);
             r.why = join(before, "by-name error");
         }
-    }
-
-    /** The rest of the order - Kuwo, KuGou, LrcLib for most players - one at a time. */
-    private static void web(String pkg, NcmLyrics.Query q, Rows r) {
-        String before = r.why;
-        try {
-            OnlineLyrics.Found f = OnlineLyrics.rest(pkg, q);
-            if (f == null) {
-                r.why = join(before, "no match on the rest of " + OnlineLyrics.describe(pkg));
-                return;
-            }
-            take(f, r, before);
-        } catch (Throwable t) {
-            Xp.log("[MCLyric] the second net failed: " + t);
-            r.why = join(before, "second net error");
-        }
-    }
-
-    private static void take(OnlineLyrics.Found f, Rows r, String before) {
-        r.lines = LyricParse.parse(f.body, f.translation, f.roma);
-        r.why = r.lines.isEmpty()
-                ? join(before, f.who() + " " + f.id + " parsed to nothing " + shape(f.body))
-                : r.lines.size() + " lines from " + f.who() + " " + f.id
-                + " (" + (f.words ? "word-timed" : "line-timed")
-                + (f.translation != null ? " + translation" : "")
-                + (f.roma != null ? " + romanisation" : "") + ")";
-        if (!r.lines.isEmpty()) r.source = f.source();
     }
 
     /** Both halves of why it failed, when more than one source was asked and all came up empty. */
@@ -1484,6 +1506,17 @@ final class LyricSource {
                 onMain(cb, r.lines, r.why, r.source);
             }
         }, "MCLyricSource").start();
+    }
+
+    private static void onMainCurrent(final int gen, final Callback cb,
+                                      final List<LyricLine> lines, final String why,
+                                      final int source) {
+        Main.main().post(new Runnable() {
+            @Override
+            public void run() {
+                if (!superseded(gen)) cb.onLines(lines, why, source);
+            }
+        });
     }
 
     private static void onMain(final Callback cb, final List<LyricLine> lines,
