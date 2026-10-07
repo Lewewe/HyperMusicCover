@@ -5,6 +5,7 @@ import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,13 +76,218 @@ final class LyricTranslationLogic {
         return out;
     }
 
-    static List<Entry> entriesForTranslation(List<LyricLine> lines, String source,
-                                              String target) {
-        ArrayList<Entry> out = new ArrayList<>();
-        for (Entry entry : entriesOf(lines)) {
-            if (hasJapaneseScript(entry.text)) out.add(entry);
+    static List<Entry> entriesForTranslation(List<LyricLine> lines, String source, String target) {
+    List<Entry> entries = entriesOf(lines);
+    if (entries.isEmpty()) return entries;
+    boolean romajiSong = likelyJapaneseRomaji(entries);
+    if (romajiSong) {
+        // Romaji is Japanese written with Latin letters. Once the song is identified as
+        // Romaji, translate every line so mixed English/Japanese lines stay aligned and the
+        // complete result can be reused from the persistent translation cache.
+        return entries;
+    }
+    if (sameLanguage(source, target) || likelyLanguage(entries, target)) {
+        return Collections.emptyList();
+    }
+
+    // Provider Romaji has no Japanese Unicode characters, so script-only filtering would
+    // incorrectly treat it as English and skip translation.
+    List<Entry> japaneseOnly = new ArrayList<>();
+    for (Entry entry : entries) {
+        if (hasJapaneseScript(entry.text)
+                || (romajiSong && likelyJapaneseRomaji(entry.text))) {
+            japaneseOnly.add(entry);
         }
-        return out;
+    }
+    return japaneseOnly;
+    }
+
+private static boolean likelyJapaneseRomaji(List<Entry> entries) {
+    if (entries == null || entries.isEmpty()) return false;
+    int score = 0;
+    for (Entry entry : entries) score += japaneseRomajiScore(entry.text);
+    return score >= 2;
+}
+
+private static boolean likelyJapaneseRomaji(String text) {
+    return japaneseRomajiScore(text) > 0;
+}
+
+private static int japaneseRomajiScore(String text) {
+    if (text == null || text.trim().isEmpty()) return 0;
+    int score = 0;
+    StringBuilder token = new StringBuilder();
+    String lower = text.toLowerCase(Locale.ROOT);
+    for (int i = 0; i <= lower.length(); i++) {
+        char c = i == lower.length() ? ' ' : lower.charAt(i);
+        if (c >= 'a' && c <= 'z') {
+            token.append(c);
+            continue;
+        }
+        if (token.length() == 0) continue;
+        String word = token.toString();
+        token.setLength(0);
+        if (JAPANESE_ROMAJI_MARKERS.contains(word)
+                || word.endsWith("nai")
+                || word.endsWith("masu")
+                || word.endsWith("desu")
+                || word.endsWith("tara")
+                || word.endsWith("tari")
+                || word.endsWith("tte")
+                || word.endsWith("kute")
+                || word.endsWith("kereba")
+                || word.endsWith("nara")
+                || word.endsWith("dake")
+                || word.endsWith("mitai")
+                || word.endsWith("yoi")) {
+            score++;
+        }
+    }
+    return score;
+}
+
+private static final Set<String> JAPANESE_ROMAJI_MARKERS = new HashSet<>(Arrays.asList(
+        "watashi", "anata", "kore", "sore", "are", "kono", "sono", "dono",
+        "nani", "dare", "kimi", "boku", "ore", "mirai", "hikari", "tsuki",
+        "yoru", "kokoro", "sekai", "uchuu", "ai", "yume", "sora", "namida",
+        "sakura", "owaranai", "odori", "kakedashite", "shiranai", "kore",
+        "tsuki", "tamaranai", "tsunawatari", "kimatte", "nasumai",
+        "shinjiru", "taisetsu", "kanashii", "ureshii", "arigatou", "sayonara"
+));
+
+    private static boolean sameLanguage(String source, String target) {
+        String src = languageBase(source);
+        String dst = languageBase(target);
+        return !src.isEmpty() && !"auto".equals(src) && src.equals(dst);
+    }
+
+    private static String languageBase(String language) {
+        if (language == null) return "";
+        String code = language.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+        int separator = code.indexOf('-');
+        return separator < 0 ? code : code.substring(0, separator);
+    }
+
+    private static boolean likelyLanguage(List<Entry> entries, String target) {
+    String language = languageBase(target);
+    if (language.isEmpty() || "auto".equals(language)) return false;
+    StringBuilder text = new StringBuilder();
+    for (Entry entry : entries) {
+        if (text.length() > 0) text.append(' ');
+        text.append(entry.text);
+    }
+    String all = text.toString();
+    int kana = 0, hangul = 0, han = 0, greek = 0, thai = 0, armenian = 0, georgian = 0;
+    for (int i = 0; i < all.length();) {
+        int cp = all.codePointAt(i);
+        Character.UnicodeScript script = Character.UnicodeScript.of(cp);
+        if (script == Character.UnicodeScript.HIRAGANA
+                || script == Character.UnicodeScript.KATAKANA) kana++;
+        else if (script == Character.UnicodeScript.HANGUL) hangul++;
+        else if (script == Character.UnicodeScript.HAN) han++;
+        else if (script == Character.UnicodeScript.GREEK) greek++;
+        else if (script == Character.UnicodeScript.THAI) thai++;
+        else if (script == Character.UnicodeScript.ARMENIAN) armenian++;
+        else if (script == Character.UnicodeScript.GEORGIAN) georgian++;
+        i += Character.charCount(cp);
+    }
+    if ("ja".equals(language) && kana >= 2) return true;
+    if ("ko".equals(language) && hangul >= 3) return true;
+    if ("zh".equals(language) && han >= 4 && kana == 0) return true;
+    if ("el".equals(language) && greek >= 4) return true;
+    if ("th".equals(language) && thai >= 4) return true;
+    if ("hy".equals(language) && armenian >= 4) return true;
+    if ("ka".equals(language) && georgian >= 4) return true;
+
+    // Do not flag as English if Japanese script is present
+    if ("en".equals(language) && (kana > 0 || han > 0)) return false;
+
+    return likelyLatinLanguage(all, language);
+}
+
+    private static boolean likelyLatinLanguage(String text, String target) {
+        Map<String, Set<String>> markers = latinMarkers();
+        Set<String> targetMarkers = markers.get(target);
+        if (targetMarkers == null) return false;
+        Map<String, Integer> counts = new HashMap<>();
+        Map<String, Set<String>> distinct = new HashMap<>();
+        int words = 0;
+        StringBuilder token = new StringBuilder();
+        for (int i = 0; i <= text.length(); i++) {
+            int cp = i == text.length() ? -1 : text.codePointAt(i);
+            if (cp >= 0 && Character.isLetter(cp)) {
+                token.appendCodePoint(cp);
+                if (Character.charCount(cp) == 2) i++;
+                continue;
+            }
+            if (token.length() > 0) {
+                String word = fold(token.toString());
+                token.setLength(0);
+                words++;
+                for (Map.Entry<String, Set<String>> language : markers.entrySet()) {
+                    if (language.getValue().contains(word)) {
+                        counts.put(language.getKey(), counts.containsKey(language.getKey())
+                                ? counts.get(language.getKey()) + 1 : 1);
+                        Set<String> found = distinct.get(language.getKey());
+                        if (found == null) {
+                            found = new HashSet<>();
+                            distinct.put(language.getKey(), found);
+                        }
+                        found.add(word);
+                    }
+                }
+            }
+        }
+        int score = counts.containsKey(target) ? counts.get(target) : 0;
+        Set<String> targetWords = distinct.get(target);
+        if (score < 2 || targetWords == null || targetWords.size() < 2) return false;
+        // English lyrics are commonly short and repetitive, so a whole-song ratio can reject
+        // valid English tracks after only a few marker words. Keep the stricter ratio for other
+        // Latin languages, where overlap with English markers is more common.
+        if (!"en".equals(target) && score * 6 < words) return false;
+        for (Map.Entry<String, Integer> language : counts.entrySet()) {
+            if (!target.equals(language.getKey()) && language.getValue() >= score) return false;
+        }
+        return true;
+    }
+
+    private static String fold(String word) {
+        String decomposed = Normalizer.normalize(word.toLowerCase(Locale.ROOT),
+                Normalizer.Form.NFD);
+        StringBuilder result = new StringBuilder(decomposed.length());
+        for (int i = 0; i < decomposed.length();) {
+            int cp = decomposed.codePointAt(i);
+            int type = Character.getType(cp);
+            if (type != Character.NON_SPACING_MARK && type != Character.COMBINING_SPACING_MARK
+                    && type != Character.ENCLOSING_MARK) result.appendCodePoint(cp);
+            i += Character.charCount(cp);
+        }
+        return result.toString();
+    }
+
+    private static Map<String, Set<String>> latinMarkers() {
+        Map<String, Set<String>> markers = new HashMap<>();
+        markers.put("en", words("i me my you your we they the and are is was were have do not to of "
+                + "in on for with from what when where who will can this that he she it"));
+        markers.put("es", words("yo tu te mi que el la los las de del y en un una por para con "
+                + "como es soy eres estoy no pero porque cuando donde amor"));
+        markers.put("fr", words("je tu nous vous il elle le la les des du et est suis sont pas "
+                + "une un mon ma mes dans avec pour mais qui que amour"));
+        markers.put("de", words("ich du er sie wir ihr der die das und ist sind bin nicht ein "
+                + "eine mein meine mit auf fur zu von was wie liebe"));
+        markers.put("it", words("io tu lui lei noi voi il lo la gli le di del della e che sono "
+                + "sei non un una per con mi ti amore ma"));
+        markers.put("pt", words("eu voce voces ele ela nos eles elas o a os as de do da e que nao "
+                + "um uma para com meu minha seu sua amor estou sou"));
+        markers.put("nl", words("ik jij je hij zij wij de het een en van is niet mijn met voor "
+                + "liefde"));
+        return markers;
+    }
+
+    private static Set<String> words(String text) {
+        Set<String> result = new HashSet<>();
+        Collections.addAll(result, text.split("\s+"));
+        return result;
     }
 
     static List<Batch> batches(List<Entry> entries, int maxChars, int maxLines) {
