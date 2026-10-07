@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,19 +87,81 @@ final class LyricTranslationLogic {
     static List<Entry> entriesForTranslation(List<LyricLine> lines, String source, String target) {
     List<Entry> entries = entriesOf(lines);
     if (entries.isEmpty()) return entries;
+    boolean romajiSong = likelyJapaneseRomaji(entries);
+    if (romajiSong) {
+        // Romaji is Japanese written with Latin letters. Once the song is identified as
+        // Romaji, translate every line so mixed English/Japanese lines stay aligned and the
+        // complete result can be reused from the persistent translation cache.
+        return entries;
+    }
     if (sameLanguage(source, target) || likelyLanguage(entries, target)) {
         return Collections.emptyList();
     }
 
-    // Only translate lines containing Japanese script
+    // Provider Romaji has no Japanese Unicode characters, so script-only filtering would
+    // incorrectly treat it as English and skip translation.
     List<Entry> japaneseOnly = new ArrayList<>();
     for (Entry entry : entries) {
-        if (hasJapaneseScript(entry.text)) {
+        if (hasJapaneseScript(entry.text)
+                || (romajiSong && likelyJapaneseRomaji(entry.text))) {
             japaneseOnly.add(entry);
         }
     }
     return japaneseOnly;
 }
+
+private static boolean likelyJapaneseRomaji(List<Entry> entries) {
+    if (entries == null || entries.isEmpty()) return false;
+    int score = 0;
+    for (Entry entry : entries) score += japaneseRomajiScore(entry.text);
+    return score >= 2;
+}
+
+private static boolean likelyJapaneseRomaji(String text) {
+    return japaneseRomajiScore(text) > 0;
+}
+
+private static int japaneseRomajiScore(String text) {
+    if (text == null || text.trim().isEmpty()) return 0;
+    int score = 0;
+    StringBuilder token = new StringBuilder();
+    String lower = text.toLowerCase(Locale.ROOT);
+    for (int i = 0; i <= lower.length(); i++) {
+        char c = i == lower.length() ? ' ' : lower.charAt(i);
+        if (c >= 'a' && c <= 'z') {
+            token.append(c);
+            continue;
+        }
+        if (token.length() == 0) continue;
+        String word = token.toString();
+        token.setLength(0);
+        if (JAPANESE_ROMAJI_MARKERS.contains(word)
+                || word.endsWith("nai")
+                || word.endsWith("masu")
+                || word.endsWith("desu")
+                || word.endsWith("tara")
+                || word.endsWith("tari")
+                || word.endsWith("tte")
+                || word.endsWith("kute")
+                || word.endsWith("kereba")
+                || word.endsWith("nara")
+                || word.endsWith("dake")
+                || word.endsWith("mitai")
+                || word.endsWith("yoi")) {
+            score++;
+        }
+    }
+    return score;
+}
+
+private static final Set<String> JAPANESE_ROMAJI_MARKERS = new HashSet<>(Arrays.asList(
+        "watashi", "anata", "kore", "sore", "are", "kono", "sono", "dono",
+        "nani", "dare", "kimi", "boku", "ore", "mirai", "hikari", "tsuki",
+        "yoru", "kokoro", "sekai", "uchuu", "ai", "yume", "sora", "namida",
+        "sakura", "owaranai", "odori", "kakedashite", "shiranai", "kore",
+        "tsuki", "tamaranai", "tsunawatari", "kimatte", "nasumai",
+        "shinjiru", "taisetsu", "kanashii", "ureshii", "arigatou", "sayonara"
+));
 
     private static boolean sameLanguage(String source, String target) {
         String src = languageBase(source);

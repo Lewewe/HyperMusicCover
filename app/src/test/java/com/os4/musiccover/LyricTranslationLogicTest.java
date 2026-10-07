@@ -47,6 +47,35 @@ public class LyricTranslationLogicTest {
     }
 
     @Test
+    public void translatesProviderRomajiAsJapanese() {
+        List<LyricLine> lines = Arrays.asList(
+                line("Owarasenai de Toroimerai", 0),
+                line("Tsuki no hikari o tsukandara", 1000),
+                line("Byakuya no machi kakedashite", 2000),
+                line("Tsunawatari tamaranai", 3000),
+                line("[english] kimatte nasumai", 4000),
+                line("Don't be lazy", 5000)
+        );
+        List<LyricTranslationLogic.Entry> entries =
+                LyricTranslationLogic.entriesForTranslation(lines, "auto", "en");
+        assertEquals(6, entries.size());
+        assertEquals("Owarasenai de Toroimerai", entries.get(0).text);
+        assertEquals("Tsuki no hikari o tsukandara", entries.get(1).text);
+        assertEquals("Byakuya no machi kakedashite", entries.get(2).text);
+        assertEquals("Don't be lazy", entries.get(5).text);
+    }
+
+    @Test
+    public void doesNotClassifyCommonEnglishAsRomaji() {
+        List<LyricLine> lines = Arrays.asList(
+                line("You and me", 0),
+                line("I want to know", 1000),
+                line("You know what I mean", 2000)
+        );
+        assertEquals(0, LyricTranslationLogic.entriesForTranslation(lines, "auto", "en").size());
+    }
+
+    @Test
     public void responseMappingUsesIdsNotInputOrder() {
         String translated = "[[MCID:bb8-2]] third\n[[MCID:3e8-0]] first";
         Map<String, String> mapped = LyricTranslationLogic.parseMarkedTranslation(translated);
