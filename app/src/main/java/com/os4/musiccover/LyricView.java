@@ -2981,8 +2981,7 @@ final class LyricView extends View {
                                  float[] xs, int cs, int ce, int rs, int re, int syllable,
                                  int start, int end, float baseline, float e, boolean lead,
                                  float gain) {
-        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx) && LockLyrics.playing()
-                && l.hasWords()
+        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx) && l.hasWords()
                 && !LockLyrics.still() && !LockLyrics.inHeldAod()) {
             drawKaraokeSyllable(c, l, lay, p, xs, cs, ce, rs, re, syllable, start, end,
                     baseline, e, lead, gain, true);
@@ -3105,7 +3104,11 @@ final class LyricView extends View {
         eyeWordMotion[1] = 1f;
         eyeWordMotion[2] = 0f;
         eyeWordMotion[3] = 0f;
-        if (!eyeCandy || !LockLyrics.playing()) return;
+        if (!eyeCandy) return;
+        if (!LockLyrics.playing()) {
+            eyeWordMotion[2] = 1f;
+            return;
+        }
         boolean backing = rowLeadIndex >= 0 && l == lines.get(rowLeadIndex).bg;
         int mode = LockLyrics.sAliveFx;
         int entranceMs = AliveLyricsEffects.wordEntranceMs(mode, backing);
@@ -3129,8 +3132,7 @@ final class LyricView extends View {
                                     float gain, float wordX, float wordOffset, float wordAlpha,
                                     float wordBlur) {
         if (ms < onset) return;
-        float progress = !LockLyrics.playing() ? 1f
-                : clamp01((ms - onset) / (float) Math.max(1, flightMs));
+        float progress = clamp01((ms - onset) / (float) Math.max(1, flightMs));
         float remaining = 1f - progress;
         float settled = 1f - remaining * remaining * remaining;
         float alpha = (0.68f + 0.32f * settled) * wordAlpha;
