@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -1629,6 +1628,7 @@ final class LockLyrics {
                 + " demo=" + sDemo + " key=" + sKey + " lines=" + sLines.size()
                 + " has=" + hasLyrics() + " loading=" + sLoading
                 + " (" + sWhy + ") src=" + srcName(sSource)
+                + " compact=" + compactWithoutLyrics()
                 + " sessionHasLyric=" + LyricSource.hasLyricInfo(sController)
                 + " pos=" + positionMs() + " playing=" + playing()
                 + " cover=" + Main.coverModeOn() + " screen=" + Main.screenOnCached()
@@ -1753,7 +1753,10 @@ final class LockLyrics {
         sLines = lines == null ? Collections.<LyricLine>emptyList() : lines;
         if (!sLines.isEmpty() && wanted()) sArtworkPage.preferCompact();
         // Only a settled answer: the empty set a track change puts up while it looks is not one.
-        if (!sLoading) sHadLyrics = !sLines.isEmpty();
+        if (!sLoading) {
+            sHadLyrics = !sLines.isEmpty();
+            if (sLines.isEmpty() && !sDemo) sArtworkPage.preferCover();
+        }
         sVersion++;
         sWhy = why;
         Xp.log(TAG + sLines.size() + " lines: " + why);
