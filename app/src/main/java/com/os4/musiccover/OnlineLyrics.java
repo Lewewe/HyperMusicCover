@@ -8,6 +8,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
+import org.json.JSONObject;
 
 /**
  * The by-name catalogues, in the order HyperLyrics Enhanced asks them, and the one answer taken.
@@ -370,36 +371,64 @@ final class OnlineLyrics {
 
     /** One catalogue's answer for the song, or null. */
     static Found ask(Src src, NcmLyrics.Query q) {
+        String cacheKey = src.name() + "|" + q.key();
+        JSONObject cached = LyricDiskCache.read("providers", cacheKey);
+        Found cachedFound = fromCache(src, cached);
+        if (cachedFound != null) return cachedFound;
         try {
+            Found found;
             switch (src) {
                 case QQ: {
                     QqLyrics.Found f = QqLyrics.load(q);
-                    return f == null ? null
+                    found = f == null ? null
                             : new Found(src, f.id, f.body, f.translation, f.roma, f.words);
+                    break;
                 }
                 case NETEASE: {
                     NcmLyrics.Found f = NcmLyrics.load(q);
-                    return f == null ? null
+                    found = f == null ? null
                             : new Found(src, f.id, f.body, f.translation, f.roma, f.words);
+                    break;
                 }
                 case KUWO: {
                     KuwoLyrics.Found f = KuwoLyrics.load(q);
-                    return f == null ? null
+                    found = f == null ? null
                             : new Found(src, f.id, f.body, f.translation, f.roma, f.words);
+                    break;
                 }
                 case KUGOU:
                 case LRCLIB: {
                     // A KRC carries its translation and romanisation inside the body.
                     WebLyrics.Found f = WebLyrics.load(q, src == Src.KUGOU, src == Src.LRCLIB);
-                    return f == null ? null : new Found(src, f.id, f.body, null, null, f.words);
+                    found = f == null ? null : new Found(src, f.id, f.body, null, null, f.words);
+                    break;
                 }
                 default:
                     return null;
             }
+            if (found != null && found.body != null && !found.body.isEmpty()) {
+                JSONObject value = new JSONObject();
+                value.put("id", found.id);
+                value.put("body", found.body);
+                value.put("translation", found.translation);
+                value.put("roma", found.roma);
+                value.put("words", found.words);
+                LyricDiskCache.write("providers", cacheKey, value);
+            }
+            return found;
         } catch (Throwable t) {
             Xp.log("[MCLyric] " + src + " failed: " + t);
             return null;
         }
+    }
+
+    private static Found fromCache(Src src, JSONObject value) {
+        if (value == null) return null;
+        String body = value.optString("body", "");
+        if (body.isEmpty()) return null;
+        return new Found(src, value.optString("id", null), body,
+                value.optString("translation", null), value.optString("roma", null),
+                value.optBoolean("words", false));
     }
 
     /** For op ncm: the order, and what QQ Music and Kuwo make of the song. */

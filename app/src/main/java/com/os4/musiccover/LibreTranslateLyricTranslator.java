@@ -72,6 +72,15 @@ class LibreTranslateLyricTranslator implements LyricTranslator {
         synchronized (CACHE) {
             hit = CACHE.get(cacheKey);
         }
+        if (hit == null) {
+            Map<String, String> diskHit = fromDisk(cacheKey);
+            if (diskHit != null) {
+                hit = diskHit;
+                synchronized (CACHE) {
+                    CACHE.put(cacheKey, diskHit);
+                }
+            }
+        }
         if (hit != null && !hit.isEmpty()) {
             cb.onTranslated(cacheKey, LyricTranslationLogic.merge(lines, hit), true);
             return;
@@ -94,9 +103,36 @@ class LibreTranslateLyricTranslator implements LyricTranslator {
                 synchronized (CACHE) {
                     CACHE.put(cacheKey, translated);
                 }
+                toDisk(cacheKey, translated);
                 cb.onTranslated(cacheKey, LyricTranslationLogic.merge(lines, translated), false);
             }
         });
+    }
+
+    private static Map<String, String> fromDisk(String key) {
+        org.json.JSONObject object = LyricDiskCache.read("translations", key);
+        if (object == null) return null;
+        java.util.Iterator<String> names = object.keys();
+        Map<String, String> result = new LinkedHashMap<>();
+        while (names.hasNext()) {
+            String name = names.next();
+            String value = object.optString(name, "");
+            if (!value.isEmpty()) result.put(name, value);
+        }
+        return result.isEmpty() ? null : result;
+    }
+
+    private static void toDisk(String key, Map<String, String> values) {
+        try {
+            org.json.JSONObject object = new org.json.JSONObject();
+            for (Map.Entry<String, String> entry : values.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    object.put(entry.getKey(), entry.getValue());
+                }
+            }
+            LyricDiskCache.write("translations", key, object);
+        } catch (Throwable ignored) {
+        }
     }
 
     protected Map<String, String> translateBatch(LyricTranslationLogic.Batch batch, Config cfg,

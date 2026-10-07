@@ -52,8 +52,10 @@ Latin-script lyrics are not assumed to be English.
 - Failures leave original lyrics intact. Primary timestamps, syllable arrays,
   duet alignment and background-vocal objects are preserved. No synthetic translated
   word timing is created.
-- Translation results have a bounded in-memory cache, separate from the native lyric
-  cache and partitioned by provider, endpoint, language pair and lyric text/timing.
+- Translation results have bounded in-memory and persistent caches, separate from the
+  native lyric cache and partitioned by provider, endpoint, language pair and lyric
+  text/timing. Persistent entries expire after 90 days and remain within a bounded
+  cache directory; API keys are never written there.
   Settings changes restore native lyrics, then reapply the current provider. The
   translation cache is keyed by original lyric text and timing, not native secondary text.
   Replies for obsolete tracks, base lyrics or settings are discarded.
