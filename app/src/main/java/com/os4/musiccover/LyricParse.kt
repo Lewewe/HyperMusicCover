@@ -153,7 +153,13 @@ object LyricParse {
 
     @JvmStatic
     fun parse(body: String): List<LyricLine> {
-        val lyrics = AutoParser().parse(body)
+        // A malformed lyric must not let a parser exception terminate SystemUI's worker.
+        val lyrics = try {
+            AutoParser().parse(body)
+        } catch (t: Throwable) {
+            runCatching { Xp.log("[MCLyric] the parser gave up on a lyric (" + body.length + " chars): " + t) }
+            return emptyList()
+        }
         val src = lyrics.lines
         val out = ArrayList<LyricLine>(src.size)
         // Where the tail of a line may run to when the file left it without an end of its own:

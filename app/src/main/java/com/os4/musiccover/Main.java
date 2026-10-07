@@ -949,6 +949,7 @@ public class Main extends XposedModule {
         PassBlurScaleFix.install();
         // The mini player hangs off the shortcut row, not the clock container.
         MiniPlayerRuntime.install(cl);
+        PaletteThrottle.INSTANCE.install(cl);
 
         try {
             sContainerCls = Xp.findClass(CLS_CONTAINER, cl);
@@ -2406,8 +2407,6 @@ public class Main extends XposedModule {
                         // ImmersiveHost, whose page closing onto the cover waits for this.
                         CoverCardLayer.releaseHeld();
                         ImmersiveHost.coverShown();
-                    } else if ("bouncer".equals(op)) {
-                        setResultData(sBouncerTrace.toString());
                     } else if ("cardstate".equals(op)) {
                         // The square card's playback scale, next to what the session says - for
                         // "the card stayed small", where the log is not there to read.
@@ -2872,37 +2871,8 @@ public class Main extends XposedModule {
                             setResultData("mini not written: " + t + "\n"
                                     + all.substring(0, Math.min(all.length(), 1500)));
                         }
-                    } else if ("edge".equals(op)) {
-                        // The pill's and the discs' clips, outlines and material, and the rim as
-                        // the window's pixels hold it (EdgeProbe, EdgeWatch). The pixels come a
-                        // frame later, so this one answers from the copy's callback; the app's
-                        // "copy diagnostics" row asks the same.
-                        // It must finish whatever happens: an ordered broadcast left open here
-                        // times out as SystemUI's ANR. So once, on the answer, a throw, or 3s.
-                        final PendingResult pending = goAsync();
-                        async = true;
-                        final java.util.concurrent.atomic.AtomicBoolean answered =
-                                new java.util.concurrent.atomic.AtomicBoolean();
-                        final java.util.function.Consumer<String> answer = report -> {
-                            if (!answered.compareAndSet(false, true)) return;
-                            pending.setResultData(report);
-                            pending.setResultCode(OP_ACK);
-                            pending.finish();
-                        };
-                        new Handler(Looper.getMainLooper()).postDelayed(
-                                () -> answer.accept("edge: no answer in 3s"), 3000);
-                        try {
-                            // --ez png true keeps the crop the rim was read from, for
-                            // checking EdgeProbe's numbers against the pixels themselves.
-                            java.io.File png = i.getBooleanExtra("png", false)
-                                    ? new java.io.File(c.getFilesDir(), "edge.png") : null;
-                            MiniPlayerRuntime.edgeReport(c, png, report -> {
-                                answer.accept(report);
-                                return kotlin.Unit.INSTANCE;
-                            });
-                        } catch (Throwable t) {
-                            answer.accept("edge failed: " + Log.getStackTraceString(t));
-                        }
+                    } else if ("palette".equals(op)) {
+                        setResultData(PaletteThrottle.INSTANCE.describe());
                     } else if ("rowtree".equals(op)) {
                         String key = i.getStringExtra("key");
                         setResultData(MiniPlayerRuntime.rowTree(key == null ? "" : key));
@@ -5337,7 +5307,6 @@ public class Main extends XposedModule {
             return requested;
         }
         float out = Float.isNaN(top) || top <= requested ? requested : top;
-        traceRoom(requested, top, out);
         ClockMove.noteRoom(requested, top, out);
         return out;
     }
@@ -5460,32 +5429,6 @@ public class Main extends XposedModule {
         }
     };
 
-    /** The last clock y's asked and given, for `op mini`. */
-    private static final java.util.ArrayDeque<String> sRoomTrace = new java.util.ArrayDeque<>();
-    private static String sRoomLast = "";
-
-    private static void traceRoom(float requested, float top, float out) {
-        String src;
-        try {
-            src = MiniPlayerRuntime.stackContentSource();
-        } catch (Throwable t) {
-            src = "?";
-        }
-        String line = r1(requested) + ">" + r1(out) + "(top " + r1(top) + " " + src + ")";
-        if (line.equals(sRoomLast)) return;
-        sRoomLast = line;
-        synchronized (sRoomTrace) {
-            sRoomTrace.addLast(android.os.SystemClock.uptimeMillis() % 100000 + " " + line);
-            while (sRoomTrace.size() > 120) sRoomTrace.removeFirst();
-        }
-    }
-
-    static String roomTrace() {
-        synchronized (sRoomTrace) {
-            return "hold=" + sHoldY + " last=" + r1(sLastSystemY) + " " + String.join(" ; ", sRoomTrace);
-        }
-    }
-
     /**
      * The stack's rows have moved since the clock was last told: the OEM's own notification-Y
      * flow is sent its value again, nudged a hair so it is a change, and the clock animates to
@@ -5515,7 +5458,6 @@ public class Main extends XposedModule {
             Xp.callMethod(flow, "setValue", next);
             ClockMove.noteReassert(y, true);
         } catch (Throwable t) {
-            traceRoom(Float.NaN, Float.NaN, Float.NaN);
             ClockMove.noteReassert(Float.NaN, false);
         }
     }
@@ -8405,7 +8347,6 @@ public class Main extends XposedModule {
         if (!bouncerShown()) {
             sSecurityView = null;
             sBouncerSince = 0L;
-            noteBouncer(0f, 0f);
             return 0f;
         }
         long now = android.os.SystemClock.uptimeMillis();
@@ -8414,7 +8355,6 @@ public class Main extends XposedModule {
         // to 0 and fades it in (measured: shown, 1.0, 1.0, then 0 at +15ms and up over ~70ms).
         // Followed as fast as the blur now follows, that was a flash of blur at the start.
         if (now - sBouncerSince < BOUNCER_SETTLE_MS) {
-            noteBouncer(0f, -1f);
             return 0f;
         }
         View b = sBouncerView;
@@ -8433,7 +8373,6 @@ public class Main extends XposedModule {
             }
         }
         level = Math.max(0f, Math.min(1f, level));
-        noteBouncer(level, b.getAlpha());
         return level;
     }
 
@@ -8460,26 +8399,6 @@ public class Main extends XposedModule {
             }
         }
         return null;
-    }
-
-    /** The last few changes of what bouncerLevel() read, for `op bouncer`. */
-    private static final StringBuilder sBouncerTrace = new StringBuilder();
-    private static int sBouncerTraceLines;
-    private static String sBouncerLast = "";
-
-    private static void noteBouncer(float level, float own) {
-        String now = String.format(java.util.Locale.ROOT, "lvl=%.2f own=%.2f sec=%s", level, own,
-                sSecurityView == null ? "-" : sSecurityView.getClass().getSimpleName());
-        if (now.equals(sBouncerLast)) return;
-        sBouncerLast = now;
-        if (sBouncerTraceLines >= 80) {
-            int cut = sBouncerTrace.indexOf("\n");
-            if (cut >= 0) sBouncerTrace.delete(0, cut + 1);
-        } else {
-            sBouncerTraceLines++;
-        }
-        sBouncerTrace.append(android.os.SystemClock.uptimeMillis()).append(' ').append(now)
-                .append('\n');
     }
 
     /**
