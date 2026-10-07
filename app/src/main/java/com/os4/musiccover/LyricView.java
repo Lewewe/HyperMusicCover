@@ -1909,6 +1909,10 @@ final class LyricView extends View {
                 String nativeSecondary = LockLyrics.sOnlineTranslateMode == LockLyrics.TR_MODE_OFF
                         ? l.translation : null;
                 String onlineSecondary = l.onlineTranslation;
+                if (nativeSecondary != null && l.roma != null
+                        && (transOn & LockLyrics.BELOW_ROMA) != 0) {
+                    nativeSecondary += "\n" + l.roma;
+                }
                 if (onlineSecondary != null && l.roma != null
                         && (transOn & LockLyrics.BELOW_ROMA) != 0) {
                     onlineSecondary += "\n" + l.roma;
@@ -2757,6 +2761,10 @@ final class LyricView extends View {
                     ? l.translation : null;
             String onlineSecondary = l.onlineTranslation;
             if (LockLyrics.sTrans) {
+                if (nativeSecondary != null && l.roma != null
+                        && (LockLyrics.below() & LockLyrics.BELOW_ROMA) != 0) {
+                    nativeSecondary += "\n" + l.roma;
+                }
                 if (onlineSecondary != null && l.roma != null
                         && (LockLyrics.below() & LockLyrics.BELOW_ROMA) != 0) {
                     onlineSecondary += "\n" + l.roma;
