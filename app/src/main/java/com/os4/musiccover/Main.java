@@ -2558,15 +2558,14 @@ public class Main extends XposedModule {
                         HyperTweaks.sBarGlow = i.getBooleanExtra("on", !HyperTweaks.sBarGlow);
                         saveState();
                         // The card on screen was built before this switch was read, so it is
-                        // upgraded in place - its constructor is long past and the mode it read
-                        // there is a final field. Turning the switch off cannot undo that on this
-                        // card: it applies to the next one the OEM builds.
+                        // changed in place - lit as applyBarGlow lights a new one, or put back to
+                        // the flat bar it was built as (HyperTweaks.clearBarGlow).
                         View bar = findLockScreenView("media_progress_bar");
-                        String r = bar == null ? "no card up" : HyperTweaks.applyBarGlow(bar);
+                        String r = bar == null ? "no card up" : HyperTweaks.sBarGlow
+                                ? HyperTweaks.applyBarGlow(bar) : HyperTweaks.clearBarGlow(bar);
                         Xp.log(TAG + "media bar glow " + (HyperTweaks.sBarGlow ? "on" : "off")
                                 + " - " + r);
-                        setResultData((HyperTweaks.sBarGlow ? "on " : "off ") + r
-                                + (HyperTweaks.sBarGlow ? "" : " (the card up keeps its glow)"));
+                        setResultData((HyperTweaks.sBarGlow ? "on " : "off ") + r);
                     } else if ("hidefp".equals(op)) {
                         sHideFp = i.getBooleanExtra("on", !sHideFp);
                         saveState();
@@ -9015,6 +9014,8 @@ public class Main extends XposedModule {
                 sCardToken = null;
             }
             sCardKey = cardKey(mediaData);
+            // The card's title may be one the session callback has not shown us yet.
+            TrackName.note(sWatched);
         } else {
             sCardToken = null;
             sCardKey = "";
@@ -9367,6 +9368,7 @@ public class Main extends XposedModule {
                     public void onMetadataChanged(MediaMetadata md) {
                         if (sWatched == null || !watched.getSessionToken().equals(sWatched.getSessionToken())) return;
                         sWatchedMetadata = new SessionMetadata(watched, md);
+                        TrackName.note(watched.getPackageName(), md);
                         // Every track change re-reads the state rather than trusting that the
                         // last callback of a skip was the one that says where it ended up.
                         MediaController w = sWatched;
@@ -9500,12 +9502,17 @@ public class Main extends XposedModule {
      *
      * A key too short to carry a title answers no, which leaves the plain comparison the callers
      * have already made in charge.
+     *
+     * Two titles can still be one track: Salt, 汽水 and QQ sing into TITLE, so their title moves
+     * with every line. Those are the same track when TrackName saw both titles published on the
+     * same song - and then the artist is not asked either, since 汽水 respells it as it goes.
      */
     static boolean sameTrack(String a, String b) {
         String pa = keyField(a, 0), pb = keyField(b, 0);
         String ta = keyField(a, 1), tb = keyField(b, 1);
         if (pa.isEmpty() || !pa.equals(pb)) return false;
-        if (ta.isEmpty() || !ta.equals(tb)) return false;
+        if (ta.isEmpty() || tb.isEmpty()) return false;
+        if (!ta.equals(tb)) return TrackName.sameSong(pa, ta, tb);
         String aa = keyField(a, 2), ab = keyField(b, 2);
         return aa.equals(ab) || aa.startsWith(ab) || ab.startsWith(aa);
     }
