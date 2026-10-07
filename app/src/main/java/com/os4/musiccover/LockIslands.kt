@@ -471,6 +471,7 @@ internal object LockIslands {
             main.removeCallbacks(notificationArtworkUpdate)
             notificationArtworkQueued = false
             notificationArtworkTouching = false
+            artworkGestureDirection.clearTouch()
             artworkMotionUntil = 0L
             requestedArtworkListAt = 0L
             previousArtworkScroll = null
@@ -923,18 +924,22 @@ internal object LockIslands {
     fun notificationArtworkTouch(event: android.view.MotionEvent) {
         val action = event.actionMasked
         if (action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL) {
+            if (action == android.view.MotionEvent.ACTION_UP) artworkGestureDirection.updateTouch(event.rawY)
             notificationArtworkTouching = false
             notificationArtworkMotion(null)
             return
         }
         if (!tracksNotificationArtwork()) {
             notificationArtworkTouching = false
+            artworkGestureDirection.clearTouch()
             return
         }
         if (action == android.view.MotionEvent.ACTION_DOWN) {
-            artworkGestureDirection.reset()
             notificationArtworkMotion(NumState.position())
+            artworkGestureDirection.beginTouch(event.rawY)
             notificationArtworkTouching = true
+        } else if (action == android.view.MotionEvent.ACTION_MOVE) {
+            artworkGestureDirection.updateTouch(event.rawY)
         }
     }
 
@@ -951,6 +956,7 @@ internal object LockIslands {
             if (!Main.coverModeOn() || !Main.keyguardLocked() || !Main.screenOnCached()) {
                 previousArtworkScroll = null
                 notificationArtworkTouching = false
+                artworkGestureDirection.clearTouch()
                 return
             }
             notificationArtworkRunning = true
@@ -973,7 +979,9 @@ internal object LockIslands {
                     previousArtworkScroll = position
                 }
                 // Native strategy geometry is needed only for a meaningful scroll delta.
-                val towardList = if (NotificationArtworkPolicy.needsMotionGeometry(position, previous)) {
+                // A downward pull's spring rebound is not an upward finger gesture.
+                val towardList = if (artworkGestureDirection.allowsListMotion()
+                        && NotificationArtworkPolicy.needsMotionGeometry(position, previous)) {
                     var direction = artworkGestureDirection.forMembers(stackMembers.size)
                     if (direction == 0) {
                         if (perf) artworkPerfGeometry++

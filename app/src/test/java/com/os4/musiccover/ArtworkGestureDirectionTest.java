@@ -4,6 +4,34 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ArtworkGestureDirectionTest {
+    @Test public void downwardPullAndSpringReboundCannotOpenTheList() {
+        ArtworkGestureDirection gesture = new ArtworkGestureDirection();
+        gesture.beginTouch(1000f);
+        gesture.updateTouch(1040f);
+        assertFalse(gesture.allowsListMotion());
+        gesture.updateTouch(1000f);
+        gesture.reset();
+        assertFalse(gesture.allowsListMotion());
+        gesture.clearTouch();
+        assertTrue(gesture.allowsListMotion());
+    }
+
+    @Test public void realUpwardDragAndDeliberateReversalStillOpenTheList() {
+        ArtworkGestureDirection gesture = new ArtworkGestureDirection();
+        gesture.beginTouch(1000f);
+        gesture.updateTouch(999f);
+        assertFalse(gesture.allowsListMotion());
+        gesture.updateTouch(990f);
+        assertTrue(gesture.allowsListMotion());
+        gesture.reset();
+        assertTrue(gesture.allowsListMotion());
+        gesture.beginTouch(1000f);
+        gesture.updateTouch(1040f);
+        assertFalse(gesture.allowsListMotion());
+        gesture.updateTouch(980f);
+        assertTrue(gesture.allowsListMotion());
+    }
+
     @Test public void directionIsReusedOnlyForTheSameGestureAndNotificationCount() {
         ArtworkGestureDirection cache = new ArtworkGestureDirection();
         assertEquals(0, cache.forMembers(3));

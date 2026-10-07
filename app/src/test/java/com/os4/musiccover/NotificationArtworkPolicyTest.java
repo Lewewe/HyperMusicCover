@@ -4,6 +4,24 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class NotificationArtworkPolicyTest {
+    @Test public void pilePullDownAndOvershootingReboundKeepTheBigArtwork() {
+        NotificationArtworkPolicy navigation = new NotificationArtworkPolicy();
+        ArtworkGestureDirection gesture = new ArtworkGestureDirection();
+        assertFalse(navigation.listOpen(true, "STACK", false));
+        gesture.beginTouch(1000f);
+        gesture.updateTouch(1040f);
+        int previous = 395;
+        for (int position : new int[]{370, 350, 370, 395, 405, 395}) {
+            boolean toward = gesture.allowsListMotion() && position - previous > 2;
+            assertFalse(navigation.listOpen(true, "STACK", true, toward));
+            previous = position;
+        }
+        assertFalse(navigation.listOpen(true, "STACK", false));
+        gesture.beginTouch(1000f);
+        gesture.updateTouch(980f);
+        assertTrue(navigation.listOpen(true, "STACK", true, gesture.allowsListMotion()));
+    }
+
     @Test public void motionCallbacksKeepTheSampleCadenceAndWakeAnIdleDetectorImmediately() {
         assertEquals(0L, NotificationArtworkPolicy.wakeDelay(false, 0L, 100L));
         assertEquals(32L, NotificationArtworkPolicy.wakeDelay(true, 228L, 100L));
