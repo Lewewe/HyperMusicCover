@@ -29,7 +29,7 @@ final class LyricDiskCache {
                 return null;
             }
             try (FileInputStream in = new FileInputStream(file)) {
-                byte[] bytes = new byte[(int) Math.min(file.length(), 1024L * 1024L)];
+                byte[] bytes = new byte[(int) Math.min(file.length(), MAX_BYTES)];
                 int count = in.read(bytes);
                 if (count <= 0) return null;
                 file.setLastModified(System.currentTimeMillis());
