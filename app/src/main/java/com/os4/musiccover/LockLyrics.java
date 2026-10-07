@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +100,15 @@ final class LockLyrics {
      * than leaving a gap where it was.
      */
     static volatile boolean sTrans = true;
+    static final int TR_MODE_OFF = 0;
+    static final int TR_MODE_ORIGINAL_AND_TRANSLATION = 1;
+    static volatile int sOnlineTranslateMode = TR_MODE_OFF;
+    static volatile String sTranslateProvider = TranslationProvider.CUSTOM;
+    static volatile String sTranslateEndpoint = "";
+    static volatile String sTranslateApiKey = "";
+    static volatile String sTranslateSourceLang = "auto";
+    static volatile String sTranslateTargetLang = "en";
+    private static volatile int sTranslateRevision;
     /**
      * The fifth: whether a line's romanisation is drawn under it, over the translation. Off by
      * default and apart from the translation's switch - either can be shown alone (#64). Like
@@ -109,6 +119,84 @@ final class LockLyrics {
     static volatile boolean sRapidGroups = false;
     /** The two switches together, as LyricLine.under() and the layout read them. */
     static final int BELOW_TRANS = 1, BELOW_ROMA = 2;
+
+    static boolean setTranslateConfig(String provider, String endpoint, String apiKey,
+                                      String sourceLang, String targetLang, int mode) {
+        String backend = TranslationProvider.normalize(provider);
+        String ep = endpoint == null ? "" : endpoint.trim();
+        String key = apiKey == null ? "" : apiKey.trim();
+        String src = sourceLang == null ? "auto" : sourceLang.trim();
+        String dst = targetLang == null ? "en" : targetLang.trim();
+        if (src.isEmpty()) src = "auto";
+        if (dst.isEmpty()) dst = "en";
+        int nextMode = mode <= TR_MODE_OFF ? TR_MODE_OFF : TR_MODE_ORIGINAL_AND_TRANSLATION;
+        boolean changed = !backend.equals(sTranslateProvider)
+                || !ep.equals(sTranslateEndpoint) || !key.equals(sTranslateApiKey)
+                || !src.equals(sTranslateSourceLang) || !dst.equals(sTranslateTargetLang)
+                || nextMode != sOnlineTranslateMode;
+        sTranslateProvider = backend;
+        sTranslateEndpoint = ep;
+        sTranslateApiKey = key;
+        sTranslateSourceLang = src;
+        sTranslateTargetLang = dst;
+        sOnlineTranslateMode = nextMode;
+        if (changed) sTranslateRevision++;
+        return changed;
+    }
+
+    private static LyricTranslator.Config translationConfig() {
+        return new LyricTranslator.Config(sTranslateProvider, sTranslateEndpoint, sTranslateApiKey,
+                sTranslateSourceLang, sTranslateTargetLang, sOnlineTranslateMode);
+    }
+
+    static void translationConfigChanged() {
+        if (sDemo || sKey.isEmpty()) return;
+        Cached nativeLyrics = CACHE.get(sKey);
+        if (nativeLyrics == null) return;
+        setLines(nativeLyrics.lines, "translation settings changed");
+        translateAsync(sKey, nativeLyrics.lines, sGen);
+    }
+
+    private static void translateAsync(final String key, final List<LyricLine> lines,
+                                       final int generation) {
+        if (lines == null || lines.isEmpty()) return;
+        final LyricTranslator.Config cfg = translationConfig();
+        if (!cfg.enabled()) return;
+        final int revision = sTranslateRevision;
+        final List<LyricLine> displayedBase = sLines;
+        final List<LyricLine> base = new ArrayList<>(lines);
+        TranslationProvider.translator(cfg.provider).translate(key, base, cfg,
+                new LyricTranslator.Callback() {
+                    @Override
+                    public boolean isCurrent() {
+                        return revision == sTranslateRevision && generation == sGen
+                                && key.equals(sKey) && sLines == displayedBase
+                                && !sDemo && cfg.sameSettings(translationConfig());
+                    }
+
+                    @Override
+                    public void onTranslated(String cacheKey, final List<LyricLine> merged,
+                                             boolean fromCache) {
+                        if (merged == null || merged.isEmpty()) return;
+                        Main.main().post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (generation != sGen || !key.equals(sKey) || sDemo
+                                        || revision != sTranslateRevision
+                                        || sLines != displayedBase
+                                        || !cfg.sameSettings(translationConfig())) return;
+                                setLines(merged, fromCache ? "cached + online translation"
+                                        : "online translation");
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onFailed(String why) {
+                        Xp.log(TAG + "online translation failed: " + why);
+                    }
+                });
+    }
 
     static int below() {
         return (sTrans ? BELOW_TRANS : 0) | (sRoma ? BELOW_ROMA : 0);
@@ -900,6 +988,7 @@ final class LockLyrics {
             sLoading = false;
             sSource = hit.source;
             setLines(hit.lines, "cached");
+            translateAsync(key, hit.lines, sGen);
             return;
         }
         // What the lookup about to start will read the session as, so a payload that turns up
@@ -955,6 +1044,7 @@ final class LockLyrics {
                 sLoading = false;
                 sSource = hit.source;
                 setLines(hit.lines, "cached");
+                translateAsync(key, hit.lines, sGen);
                 return;
             }
             sInfoSeen = LyricSource.infoFor(c);
@@ -1097,6 +1187,7 @@ final class LockLyrics {
         if (source == LyricSource.SRC_LYRIC_INFO) sSessionPkg = pkgOf(want);
         if (!lines.isEmpty()) CACHE.put(want, new Cached(lines, source));
         setLines(lines, why);
+        translateAsync(want, lines, sGen);
         // A payload that turned up while this was looking. See rereadIfNewPayload().
         rereadIfNewPayload(want, sController);
     }

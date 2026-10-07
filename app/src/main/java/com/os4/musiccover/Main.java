@@ -1936,6 +1936,12 @@ public class Main extends XposedModule {
                     // the key did not exist before this setting did, and the lyrics are supposed
                     // to look the way they always have on a file that predates it.
                     + "\nlyrictrans=" + (LockLyrics.sTrans ? 1 : 0)
+                    + "\nlyrictrmode=" + LockLyrics.sOnlineTranslateMode
+                    + "\nlyrictrprovider=" + LockLyrics.sTranslateProvider
+                    + "\nlyrictrendpoint=" + LockLyrics.sTranslateEndpoint
+                    + "\nlyrictrkey=" + LockLyrics.sTranslateApiKey
+                    + "\nlyrictrsource=" + LockLyrics.sTranslateSourceLang
+                    + "\nlyrictrtarget=" + LockLyrics.sTranslateTargetLang
                     // Off when absent, which is what every file from before it had.
                     + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
                     + "\nlyricgroups=" + (LockLyrics.sRapidGroups ? 1 : 0)
@@ -2048,6 +2054,16 @@ public class Main extends XposedModule {
                         else if ("lyrichidden".equals(k)) LockLyrics.sTapHidden = "1".equals(v);
                         else if ("lyrichdr".equals(k)) LockLyrics.sHdr = "1".equals(v);
                         else if ("lyrictrans".equals(k)) LockLyrics.sTrans = "1".equals(v);
+                        else if ("lyrictrmode".equals(k)) LockLyrics.sOnlineTranslateMode =
+                                "1".equals(v) ? LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION : LockLyrics.TR_MODE_OFF;
+                        else if ("lyrictrprovider".equals(k)) LockLyrics.sTranslateProvider =
+                                TranslationProvider.normalize(v);
+                        else if ("lyrictrendpoint".equals(k)) LockLyrics.sTranslateEndpoint = v;
+                        else if ("lyrictrkey".equals(k)) LockLyrics.sTranslateApiKey = v;
+                        else if ("lyrictrsource".equals(k)) LockLyrics.sTranslateSourceLang =
+                                v.isEmpty() ? "auto" : v;
+                        else if ("lyrictrtarget".equals(k)) LockLyrics.sTranslateTargetLang =
+                                v.isEmpty() ? "en" : v;
                         else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
                         else if ("lyricgroups".equals(k)) LockLyrics.sRapidGroups = "1".equals(v);
                         // Clamped in the setter; absent or unreadable means left, see saveState.
@@ -2353,6 +2369,14 @@ public class Main extends XposedModule {
                         // it; refresh only has to start the frames that let it.
                         LockLyrics.refresh();
                         saveState();
+                    } else if ("lyrictrcfg".equals(op)) {
+                        if (LockLyrics.setTranslateConfig(i.getStringExtra("provider"),
+                                i.getStringExtra("endpoint"), i.getStringExtra("apikey"),
+                                i.getStringExtra("source"), i.getStringExtra("target"),
+                                i.getIntExtra("mode", LockLyrics.sOnlineTranslateMode))) {
+                            LockLyrics.translationConfigChanged();
+                            saveState();
+                        }
                     } else if ("lyricroma".equals(op)) {
                         LockLyrics.sRoma = i.getBooleanExtra("on", !LockLyrics.sRoma);
                         Xp.log(TAG + "lyrics romanisations: " + LockLyrics.sRoma);
@@ -2833,6 +2857,12 @@ public class Main extends XposedModule {
                         out.putBoolean("lyrickeep", LockLyrics.sKeepOn);
                         out.putBoolean("lyrichdr", LockLyrics.sHdr);
                         out.putBoolean("lyrictrans", LockLyrics.sTrans);
+                        out.putInt("lyrictrmode", LockLyrics.sOnlineTranslateMode);
+                        out.putString("lyrictrprovider", LockLyrics.sTranslateProvider);
+                        out.putString("lyrictrendpoint", LockLyrics.sTranslateEndpoint);
+                        out.putString("lyrictrkey", LockLyrics.sTranslateApiKey);
+                        out.putString("lyrictrsource", LockLyrics.sTranslateSourceLang);
+                        out.putString("lyrictrtarget", LockLyrics.sTranslateTargetLang);
                         out.putBoolean("lyricroma", LockLyrics.sRoma);
                         out.putBoolean("lyricgroups", LockLyrics.sRapidGroups);
                         out.putInt("lyricalign", LockLyrics.sAlign);

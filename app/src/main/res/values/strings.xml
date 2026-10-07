@@ -226,4 +226,23 @@
     <string name="demo_island_stack_title">The stack island</string>
     <string name="mini_status_at_date">Status beside the date</string>
     <string name="mini_status_at_date_summary">Move Do Not Disturb and charging status beside the date. Temporary hints stay at the bottom.</string>
+    <string name="lyrics_online_mode">Online translation</string>
+    <string name="lyrics_online_mode_summary">Translate lyric lines asynchronously without changing timing</string>
+    <string name="lyrics_online_mode_off">Off</string>
+    <string name="lyrics_online_mode_dual">Original + translation</string>
+    <string name="lyrics_online_backend">Translation backend</string>
+    <string name="lyrics_online_backend_unset">Not configured</string>
+    <string name="lyrics_online_endpoint_hint">Endpoint URL</string>
+    <string name="lyrics_online_api_key_hint">API key</string>
+    <string name="lyrics_online_source_hint">Source language (auto)</string>
+    <string name="lyrics_online_target_hint">Target language (en)</string>
+    <string name="lyrics_online_privacy_note">Uses your own service and credentials. Keys stay on-device.</string>
+    <string name="lyrics_online_provider_custom">Custom · LibreTranslate</string>
+    <string name="lyrics_online_provider_google">Google Cloud Translation</string>
+    <string name="lyrics_online_provider_deepl_free">DeepL API · Free</string>
+    <string name="lyrics_online_provider_deepl_pro">DeepL API · Pro</string>
+    <string name="lyrics_online_credentials">Credentials and languages</string>
+    <string name="lyrics_online_credentials_ready">Configured · tap to edit</string>
+    <string name="lyrics_online_save">Save</string>
+    <string name="lyrics_online_cancel">Cancel</string>
 </resources>

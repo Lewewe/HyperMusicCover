@@ -30,6 +30,11 @@ object SettingsBackup {
     private const val KEY_LYRICS_KEEP_ON = "lyricsKeepOn"
     private const val KEY_LYRICS_HDR = "lyricsHdr"
     private const val KEY_LYRICS_TRANS = "lyricsTranslation"
+    private const val KEY_LYRICS_TRANSLATE_MODE = "lyricsTranslateMode"
+    private const val KEY_LYRICS_TRANSLATE_PROVIDER = "lyricsTranslateProvider"
+    private const val KEY_LYRICS_TRANSLATE_ENDPOINT = "lyricsTranslateEndpoint"
+    private const val KEY_LYRICS_TRANSLATE_SOURCE = "lyricsTranslateSource"
+    private const val KEY_LYRICS_TRANSLATE_TARGET = "lyricsTranslateTarget"
     private const val KEY_LYRICS_ROMA = "lyricsRomanisation"
     private const val KEY_LYRICS_GROUPS = "lyricsGentleFlow"
     private const val KEY_LYRICS_ALIGN = "lyricsAlignment"
@@ -62,6 +67,11 @@ object SettingsBackup {
             json.put(KEY_LYRICS_KEEP_ON, module.lyricsKeepOn)
             json.put(KEY_LYRICS_HDR, module.lyricsHdr)
             json.put(KEY_LYRICS_TRANS, module.lyricsTrans)
+            json.put(KEY_LYRICS_TRANSLATE_MODE, module.lyricOnlineMode)
+            json.put(KEY_LYRICS_TRANSLATE_PROVIDER, module.lyricTranslateProvider)
+            json.put(KEY_LYRICS_TRANSLATE_ENDPOINT, module.lyricTranslateEndpoint)
+            json.put(KEY_LYRICS_TRANSLATE_SOURCE, module.lyricTranslateSource)
+            json.put(KEY_LYRICS_TRANSLATE_TARGET, module.lyricTranslateTarget)
             json.put(KEY_LYRICS_ROMA, module.lyricsRoma)
             json.put(KEY_LYRICS_GROUPS, module.lyricsGroups)
             json.put(KEY_LYRICS_ALIGN, module.lyricsAlign)
@@ -113,6 +123,17 @@ object SettingsBackup {
             }
             if (obj.has(KEY_LYRICS_TRANS)) {
                 ModuleBridge.setLyricsTrans(context, obj.getBoolean(KEY_LYRICS_TRANS))
+            }
+            if (obj.has(KEY_LYRICS_TRANSLATE_MODE) || obj.has(KEY_LYRICS_TRANSLATE_PROVIDER)) {
+                ModuleBridge.setLyricTranslateConfig(
+                    context,
+                    obj.optString(KEY_LYRICS_TRANSLATE_ENDPOINT, ""),
+                    "",
+                    obj.optString(KEY_LYRICS_TRANSLATE_SOURCE, "auto"),
+                    obj.optString(KEY_LYRICS_TRANSLATE_TARGET, "en"),
+                    obj.optInt(KEY_LYRICS_TRANSLATE_MODE, 0),
+                    obj.optString(KEY_LYRICS_TRANSLATE_PROVIDER, TranslationProvider.CUSTOM),
+                )
             }
             if (obj.has(KEY_LYRICS_ROMA)) {
                 ModuleBridge.setLyricsRoma(context, obj.getBoolean(KEY_LYRICS_ROMA))

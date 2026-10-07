@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -19,6 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +33,7 @@ import com.os4.musiccover.ModuleBridge
 import com.os4.musiccover.R
 import com.os4.musiccover.ShadeActivity
 import com.os4.musiccover.MiniPlayerActivity
+import com.os4.musiccover.TranslationProvider
 import com.os4.musiccover.ui.util.PageScaffold
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -36,6 +42,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -360,6 +367,7 @@ private fun LyricsGroup(
     onChange: (ModuleBridge.State) -> Unit,
 ) {
     val context = LocalContext.current
+    var showTranslationCredentials by remember { mutableStateOf(false) }
     // Whether a provider module is installed is a fact about the package list and does not
     // change while the page is open; whether one is working comes from the module.
     val providerInstalled = remember {
@@ -491,6 +499,71 @@ private fun LyricsGroup(
                 ModuleBridge.setLyricsTrans(context, it)
             },
         )
+        val providers = listOf(
+            TranslationProvider.CUSTOM, TranslationProvider.GOOGLE,
+            TranslationProvider.DEEPL_FREE, TranslationProvider.DEEPL_PRO,
+        )
+        WindowDropdownPreference(
+            title = stringResource(R.string.lyrics_online_backend),
+            items = listOf(
+                stringResource(R.string.lyrics_online_provider_custom),
+                stringResource(R.string.lyrics_online_provider_google),
+                stringResource(R.string.lyrics_online_provider_deepl_free),
+                stringResource(R.string.lyrics_online_provider_deepl_pro),
+            ),
+            selectedIndex = providers.indexOf(module.lyricTranslateProvider).coerceAtLeast(0),
+            enabled = enabled,
+            onSelectedIndexChange = { index ->
+                val provider = providers[index]
+                val updated = module.copy(
+                    lyricTranslateProvider = provider,
+                    lyricTranslateApiKey = if (provider == module.lyricTranslateProvider)
+                        module.lyricTranslateApiKey else "",
+                )
+                onChange(updated)
+                ModuleBridge.setLyricTranslateConfig(
+                    context, updated.lyricTranslateEndpoint, updated.lyricTranslateApiKey,
+                    updated.lyricTranslateSource, updated.lyricTranslateTarget,
+                    updated.lyricOnlineMode, provider,
+                )
+            },
+        )
+        ArrowPreference(
+            title = stringResource(R.string.lyrics_online_credentials),
+            summary = stringResource(R.string.lyrics_online_credentials_ready),
+            enabled = enabled,
+            onClick = { showTranslationCredentials = true },
+        )
+        WindowDropdownPreference(
+            title = stringResource(R.string.lyrics_online_mode),
+            summary = stringResource(R.string.lyrics_online_mode_summary),
+            items = listOf(
+                stringResource(R.string.lyrics_online_mode_off),
+                stringResource(R.string.lyrics_online_mode_dual),
+            ),
+            selectedIndex = if (module.lyricOnlineMode == 0) 0 else 1,
+            enabled = enabled,
+            onSelectedIndexChange = {
+                val mode = if (it == 0) 0 else 1
+                onChange(module.copy(lyricOnlineMode = mode))
+                ModuleBridge.setLyricTranslateConfig(
+                    context, module.lyricTranslateEndpoint, module.lyricTranslateApiKey,
+                    module.lyricTranslateSource, module.lyricTranslateTarget, mode,
+                    module.lyricTranslateProvider,
+                )
+            },
+        )
+        if (showTranslationCredentials) {
+            TranslationCredentialsDialog(module, { showTranslationCredentials = false }) {
+                onChange(it)
+                ModuleBridge.setLyricTranslateConfig(
+                    context, it.lyricTranslateEndpoint, it.lyricTranslateApiKey,
+                    it.lyricTranslateSource, it.lyricTranslateTarget, it.lyricOnlineMode,
+                    it.lyricTranslateProvider,
+                )
+                showTranslationCredentials = false
+            }
+        }
         SwitchPreference(
             title = stringResource(R.string.lyrics_roma),
             checked = module.lyricsRoma,
@@ -529,6 +602,74 @@ private fun LyricsGroup(
                 ModuleBridge.setLyricsKeepOn(context, it)
             },
         )
+    }
+}
+
+@Composable
+private fun TranslationCredentialsDialog(
+    state: ModuleBridge.State,
+    onDismiss: () -> Unit,
+    onSave: (ModuleBridge.State) -> Unit,
+) {
+    val custom = state.lyricTranslateProvider == TranslationProvider.CUSTOM
+    var endpoint by remember { mutableStateOf(state.lyricTranslateEndpoint) }
+    var apiKey by remember { mutableStateOf(state.lyricTranslateApiKey) }
+    var source by remember { mutableStateOf(state.lyricTranslateSource) }
+    var target by remember { mutableStateOf(state.lyricTranslateTarget) }
+    val valid = (if (custom) TranslationProvider.isValidCustomEndpoint(endpoint)
+        else apiKey.isNotBlank()) && target.trim().matches(Regex("[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?"))
+    WindowDialog(
+        show = true,
+        title = stringResource(R.string.lyrics_online_credentials),
+        summary = stringResource(R.string.lyrics_online_privacy_note),
+        onDismissRequest = onDismiss,
+    ) {
+        val dismiss = LocalDismissState.current
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            if (custom) {
+                TextField(
+                    value = endpoint, onValueChange = { endpoint = it }, singleLine = true,
+                    label = stringResource(R.string.lyrics_online_endpoint_hint),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                )
+            }
+            TextField(
+                value = apiKey, onValueChange = { apiKey = it }, singleLine = true,
+                label = stringResource(R.string.lyrics_online_api_key_hint),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+            TextField(
+                value = source, onValueChange = { source = it }, singleLine = true,
+                label = stringResource(R.string.lyrics_online_source_hint),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+            TextField(
+                value = target, onValueChange = { target = it }, singleLine = true,
+                label = stringResource(R.string.lyrics_online_target_hint),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+            TextButton(
+                text = stringResource(R.string.lyrics_online_save),
+                enabled = valid,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    onSave(state.copy(
+                        lyricTranslateEndpoint = endpoint.trim(),
+                        lyricTranslateApiKey = apiKey.trim(),
+                        lyricTranslateSource = source.trim().ifEmpty { "auto" },
+                        lyricTranslateTarget = target.trim(),
+                    ))
+                    dismiss?.invoke()
+                },
+            )
+            TextButton(
+                text = stringResource(R.string.lyrics_online_cancel),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { dismiss?.invoke() },
+            )
+        }
     }
 }
 

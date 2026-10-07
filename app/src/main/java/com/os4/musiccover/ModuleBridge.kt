@@ -126,6 +126,12 @@ object ModuleBridge {
         val lyricsHdr: Boolean = false,
         /** Draw each line's translation under it. On unless the user turns it off. */
         val lyricsTrans: Boolean = true,
+        val lyricOnlineMode: Int = 0,
+        val lyricTranslateProvider: String = TranslationProvider.CUSTOM,
+        val lyricTranslateEndpoint: String = "",
+        val lyricTranslateApiKey: String = "",
+        val lyricTranslateSource: String = "auto",
+        val lyricTranslateTarget: String = "en",
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
         /** Keep fast lyrics together in small groups instead of scrolling on every line. */
@@ -452,6 +458,18 @@ object ModuleBridge {
     fun setLyricsTrans(context: Context, on: Boolean) =
         send(context, "lyrictrans") { putExtra("on", on) }
 
+    fun setLyricTranslateConfig(
+        context: Context, endpoint: String, apiKey: String, source: String, target: String,
+        mode: Int, provider: String = TranslationProvider.CUSTOM,
+    ) = send(context, "lyrictrcfg") {
+        putExtra("provider", TranslationProvider.normalize(provider))
+        putExtra("endpoint", endpoint)
+        putExtra("apikey", apiKey)
+        putExtra("source", source)
+        putExtra("target", target)
+        putExtra("mode", mode)
+    }
+
     fun setLyricsRoma(context: Context, on: Boolean) =
         send(context, "lyricroma") { putExtra("on", on) }
 
@@ -772,6 +790,12 @@ object ModuleBridge {
             lyricsHdr = b.getBoolean("lyrichdr", false),
             // Defaults the other way: this one is on for anyone whose module predates the key.
             lyricsTrans = b.getBoolean("lyrictrans", true),
+            lyricOnlineMode = b.getInt("lyrictrmode", 0),
+            lyricTranslateProvider = TranslationProvider.normalize(b.getString("lyrictrprovider")),
+            lyricTranslateEndpoint = b.getString("lyrictrendpoint") ?: "",
+            lyricTranslateApiKey = b.getString("lyrictrkey") ?: "",
+            lyricTranslateSource = b.getString("lyrictrsource") ?: "auto",
+            lyricTranslateTarget = b.getString("lyrictrtarget") ?: "en",
             lyricsRoma = b.getBoolean("lyricroma", false),
             lyricsGroups = b.getBoolean("lyricgroups", false),
             lyricsAlign = b.getInt("lyricalign", 0),
