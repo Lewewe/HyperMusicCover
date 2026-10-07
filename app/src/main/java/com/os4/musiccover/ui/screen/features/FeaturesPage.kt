@@ -499,70 +499,73 @@ private fun LyricsGroup(
                 ModuleBridge.setLyricsTrans(context, it)
             },
         )
-        val providers = listOf(
-            TranslationProvider.CUSTOM, TranslationProvider.GOOGLE,
-            TranslationProvider.DEEPL_FREE, TranslationProvider.DEEPL_PRO,
-        )
-        WindowDropdownPreference(
-            title = stringResource(R.string.lyrics_online_backend),
-            items = listOf(
-                stringResource(R.string.lyrics_online_provider_custom),
-                stringResource(R.string.lyrics_online_provider_google),
-                stringResource(R.string.lyrics_online_provider_deepl_free),
-                stringResource(R.string.lyrics_online_provider_deepl_pro),
-            ),
-            selectedIndex = providers.indexOf(module.lyricTranslateProvider).coerceAtLeast(0),
-            enabled = enabled,
-            onSelectedIndexChange = { index ->
-                val provider = providers[index]
-                val updated = module.copy(
-                    lyricTranslateProvider = provider,
-                    lyricTranslateApiKey = if (provider == module.lyricTranslateProvider)
-                        module.lyricTranslateApiKey else "",
-                )
-                onChange(updated)
-                ModuleBridge.setLyricTranslateConfig(
-                    context, updated.lyricTranslateEndpoint, updated.lyricTranslateApiKey,
-                    updated.lyricTranslateSource, updated.lyricTranslateTarget,
-                    updated.lyricOnlineMode, provider,
-                )
-            },
-        )
-        ArrowPreference(
-            title = stringResource(R.string.lyrics_online_credentials),
-            summary = stringResource(R.string.lyrics_online_credentials_ready),
-            enabled = enabled,
-            onClick = { showTranslationCredentials = true },
+        val translateModes = listOf(
+            stringResource(R.string.lyrics_online_mode_off),
+            stringResource(R.string.lyrics_online_mode_dual),
         )
         WindowDropdownPreference(
             title = stringResource(R.string.lyrics_online_mode),
             summary = stringResource(R.string.lyrics_online_mode_summary),
-            items = listOf(
-                stringResource(R.string.lyrics_online_mode_off),
-                stringResource(R.string.lyrics_online_mode_dual),
-            ),
-            selectedIndex = if (module.lyricOnlineMode == 0) 0 else 1,
+            items = translateModes,
+            selectedIndex = if (module.lyricOnlineMode <= 0) 0 else 1,
             enabled = enabled,
             onSelectedIndexChange = {
-                val mode = if (it == 0) 0 else 1
-                onChange(module.copy(lyricOnlineMode = mode))
+                val mode = if (it <= 0) 0 else 1
+                val updated = module.copy(lyricOnlineMode = mode)
+                onChange(updated)
                 ModuleBridge.setLyricTranslateConfig(
-                    context, module.lyricTranslateEndpoint, module.lyricTranslateApiKey,
-                    module.lyricTranslateSource, module.lyricTranslateTarget, mode,
-                    module.lyricTranslateProvider,
+                    context, updated.lyricTranslateEndpoint, updated.lyricTranslateApiKey,
+                    updated.lyricTranslateSource, updated.lyricTranslateTarget, mode,
+                    updated.lyricTranslateProvider,
                 )
             },
         )
-        if (showTranslationCredentials) {
-            TranslationCredentialsDialog(module, { showTranslationCredentials = false }) {
-                onChange(it)
-                ModuleBridge.setLyricTranslateConfig(
-                    context, it.lyricTranslateEndpoint, it.lyricTranslateApiKey,
-                    it.lyricTranslateSource, it.lyricTranslateTarget, it.lyricOnlineMode,
-                    it.lyricTranslateProvider,
-                )
-                showTranslationCredentials = false
-            }
+        if (module.lyricOnlineMode > 0) {
+            val providers = listOf(
+                TranslationProvider.CUSTOM,
+                TranslationProvider.GOOGLE,
+                TranslationProvider.DEEPL_FREE,
+                TranslationProvider.DEEPL_PRO,
+            )
+            WindowDropdownPreference(
+                title = stringResource(R.string.lyrics_online_backend),
+                summary = stringResource(R.string.lyrics_online_provider_summary),
+                items = listOf(
+                    stringResource(R.string.lyrics_online_provider_custom),
+                    stringResource(R.string.lyrics_online_provider_google),
+                    stringResource(R.string.lyrics_online_provider_deepl_free),
+                    stringResource(R.string.lyrics_online_provider_deepl_pro),
+                ),
+                selectedIndex = providers.indexOf(module.lyricTranslateProvider).coerceAtLeast(0),
+                enabled = enabled,
+                onSelectedIndexChange = { index ->
+                    val provider = providers[index]
+                    if (provider != module.lyricTranslateProvider) {
+                        val updated = module.copy(
+                            lyricTranslateProvider = provider,
+                            lyricTranslateApiKey = "",
+                        )
+                        onChange(updated)
+                        ModuleBridge.setLyricTranslateConfig(
+                            context, updated.lyricTranslateEndpoint, "",
+                            updated.lyricTranslateSource, updated.lyricTranslateTarget,
+                            updated.lyricOnlineMode, provider,
+                        )
+                    }
+                },
+            )
+            ArrowPreference(
+                title = stringResource(R.string.lyrics_online_credentials),
+                summary = stringResource(
+                    if ((module.lyricTranslateProvider == TranslationProvider.CUSTOM &&
+                            module.lyricTranslateEndpoint.isBlank()) ||
+                        (module.lyricTranslateProvider != TranslationProvider.CUSTOM &&
+                            module.lyricTranslateApiKey.isBlank())) R.string.lyrics_online_backend_unset
+                    else R.string.lyrics_online_credentials_ready,
+                ),
+                enabled = enabled,
+                onClick = { showTranslationCredentials = true },
+            )
         }
         SwitchPreference(
             title = stringResource(R.string.lyrics_roma),

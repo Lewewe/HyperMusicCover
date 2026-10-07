@@ -165,6 +165,7 @@
     <string name="get_update_detail">检查软件更新和新功能</string>
     <string name="update_available">有可用更新：%1$s</string>
     <string name="get_update_directly">直接更新</string>
+    <string name="lyrics_online_provider_summary">选择服务，再配置你自己的凭据</string>
     <string name="get_update_directly_desc">直接从 Github 安装更新</string>
     <string name="updating">正在更新…</string>
     <string name="update_notes_title">更新日志</string>
