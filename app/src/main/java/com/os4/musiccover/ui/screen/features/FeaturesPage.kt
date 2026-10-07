@@ -501,6 +501,16 @@ private fun LyricsGroup(
             },
         )
         SwitchPreference(
+            title = stringResource(R.string.lyrics_groups),
+            summary = stringResource(R.string.lyrics_groups_summary),
+            checked = module.lyricsGroups,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(lyricsGroups = it))
+                ModuleBridge.setLyricsGroups(context, it)
+            },
+        )
+        SwitchPreference(
             title = stringResource(R.string.lyrics_hdr),
             summary = stringResource(R.string.lyrics_hdr_summary),
             checked = module.lyricsHdr,

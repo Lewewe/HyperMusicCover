@@ -105,6 +105,8 @@ final class LockLyrics {
      * the translation it is laid out, not fetched: switching it redraws what is already there.
      */
     static volatile boolean sRoma = false;
+    /** Optional retention of quick successive lyrics in readable groups of up to four lines. */
+    static volatile boolean sRapidGroups = false;
     /** The two switches together, as LyricLine.under() and the layout read them. */
     static final int BELOW_TRANS = 1, BELOW_ROMA = 2;
 
@@ -1613,11 +1615,10 @@ final class LockLyrics {
                 readState(false);
                 v.kick();
                 if (playing()) {
-                    delay = 500L;
                     int pos = positionMs();
-                    // The stack moves a second ahead of each line's first word (LyricView.LEAD_MS).
-                    int next = nextStartAfter(pos + 1000);
-                    if (next >= 0) delay = Math.max(16L, Math.min(delay, next - 1000L - pos + 8L));
+                    // The renderer owns lead times, rapid-group boundaries and interlude ends.
+                    // Assuming a one-second lead can miss quick lines while the view is idle.
+                    delay = LyricTickPolicy.delay(pos, v.nextMoveAfter(pos));
                 }
             }
             Main.main().postDelayed(this, delay);
@@ -2086,18 +2087,4 @@ final class LockLyrics {
         return sb.toString();
     }
 
-    private static int nextStartAfter(int pos) {
-        List<LyricLine> l = sLines;
-        int lo = 0, hi = l.size() - 1, best = -1;
-        while (lo <= hi) {
-            int mid = (lo + hi) >>> 1;
-            if (l.get(mid).start > pos) {
-                best = mid;
-                hi = mid - 1;
-            } else {
-                lo = mid + 1;
-            }
-        }
-        return best < 0 ? -1 : l.get(best).start;
-    }
 }

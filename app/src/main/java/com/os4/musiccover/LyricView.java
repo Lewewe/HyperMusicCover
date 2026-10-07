@@ -348,6 +348,9 @@ final class LyricView extends View {
     /** The line the stack is on, the line whose interlude is showing (-1), and both as one key. */
     private int focus = -1;
     private int dotsFor = -1;
+    private RapidLyricGroups rapidGroups = new RapidLyricGroups(Collections.emptyList());
+    /** The scroll anchor may stay on a group's first line while the singing focus advances. */
+    private int readingFirst = -1, readingLast = -1;
     /** The scroll spring for the current move, set per move like AMLL's policy. */
     private float springK = K_SLOW, springC = C_SLOW;
     private boolean dotsWasShowing;
@@ -666,7 +669,9 @@ final class LyricView extends View {
             }
         }
         int key = dots >= 0 ? -(dots + 1) : sf;
-        if (key != focusKey) {
+        int oldReadingFirst = readingFirst, oldReadingLast = readingLast;
+        readingRange(sf, dots);
+        if (key != focusKey || oldReadingFirst != readingFirst || oldReadingLast != readingLast) {
             // Whether this was a seek is a question about the playhead, not about how many lines
             // it crossed. Counting lines got it wrong in both directions and inconsistently
             // inside one drag: eight lines is seconds of a fast song and minutes of a slow one,
@@ -680,7 +685,7 @@ final class LyricView extends View {
             dotsFor = dots;
             focusKey = key;
             focusChangedAt = now;
-            float to = dots >= 0 ? dotsTop[dots] : base[sf];
+            float to = dots >= 0 ? dotsTop[dots] : base[readingFirst];
             if (first) {
                 snap(to);
                 // A freshly laid out song has nowhere to slide from, and the correction it needs
@@ -743,7 +748,7 @@ final class LyricView extends View {
             why |= 8;
         }
 
-        float target = dotsFor >= 0 ? dotsTop[dotsFor] : base[focus];
+        float target = dotsFor >= 0 ? dotsTop[dotsFor] : base[readingFirst];
         // Band-relative so it means the same on any screen; the fallback is for the frames
         // before the band has been measured.
         float band = bandBottom - bandTop;
@@ -802,7 +807,7 @@ final class LyricView extends View {
             boolean focused = dotsFor < 0 && i == focus;
             // Emphasis: on the scroll focus, and on a duet's overlapping answer while it is sung.
             // Off in one frame - the line that has been sung drops to the inactive level at once.
-            boolean on = focused || (dotsFor < 0 && i < focus && i >= focus - 2
+            boolean on = focused || retained(i) || (dotsFor < 0 && i < focus && i >= focus - 2
                     && ms >= l.start && ms < l.end);
             float eTo = on ? 1f : 0f;
             float e = approach(emph[i], eTo, dtTo, eTo > emph[i] ? TAU_EMPH_IN : TAU_EMPH_OUT);
@@ -823,7 +828,7 @@ final class LyricView extends View {
                 why |= 64;
             }
             // Size: the focus at full size, the rest a little smaller, travelling with the scroll.
-            float scTo = focused ? 1f : INACTIVE_SCALE;
+            float scTo = focused || retained(i) ? 1f : INACTIVE_SCALE;
             float sc = started ? approach(scale[i], scTo, dtTo, TAU_SCALE) : scale[i];
             if (Math.abs(sc - scTo) < 0.0005f) sc = scTo;
             if (sc != scale[i]) {
@@ -848,12 +853,34 @@ final class LyricView extends View {
         return changed || (why & 256) != 0;
     }
 
+    private void readingRange(int line, int dots) {
+        readingFirst = readingLast = line;
+        if (dots >= 0 || !rapidGrouped(line)) return;
+        float band = bandBottom - bandTop;
+        float fade = Math.min(EDGE_FADE_DP * density, Math.max(0f, band) / 3f);
+        long range = rapidGroups.range(line, base, height, Math.max(0f, band - 2f * fade));
+        readingFirst = RapidLyricGroups.first(range);
+        readingLast = RapidLyricGroups.last(range);
+    }
+
+    /** Sung lines in the current fast group remain sharp and readable until the next group. */
+    private boolean retained(int line) {
+        return LockLyrics.sRapidGroups && dotsFor < 0 && readingLast > readingFirst
+                && line >= readingFirst && line <= focus;
+    }
+
+    private boolean rapidGrouped(int line) {
+        return LockLyrics.sRapidGroups && rapidGroups.grouped(line);
+    }
+
     /**
      * When the stack moves to line i: a second before its first word, but not before the line
      * ahead of it has finished, and never after its own start.
      */
     private long switchAt(int i) {
         LyricLine l = lines.get(i);
+        // In a quick group only the highlight advances, exactly when the next line is sung.
+        if (rapidGrouped(i) || rapidGrouped(i - 1)) return l.start;
         long early = (long) l.start - LEAD_MS;
         if (i == 0) return early;
         long prevEnd = lines.get(i - 1).end;
@@ -869,6 +896,7 @@ final class LyricView extends View {
     /** How many rows from the focus a line counts as - lines above count one further. */
     private int rowsFromFocus(int i) {
         if (dotsFor >= 0) return i >= dotsFor ? i - dotsFor + 1 : dotsFor - i + 1;
+        if (retained(i)) return 0;
         if (i == focus) return 0;
         return i > focus ? i - focus : focus - i + 1;
     }
@@ -1661,6 +1689,7 @@ final class LyricView extends View {
         builtTrans = b.transOn;
         builtAlign = b.align;
         lines = b.lines;
+        rapidGroups = new RapidLyricGroups(lines);
         layoutWidth = b.width;
         layoutMs = b.tookMs;
         buildGen++;
@@ -1676,6 +1705,7 @@ final class LyricView extends View {
         dotsTop = b.dotsTop;
         blurBmp = new Bitmap[n][BLUR_MAX_ROWS];
         if (reveal) {
+            readingRange(focus, dotsFor);
             revealTranslations(oldBase);
             Xp.log(TAG + "translations borrowed into " + n + " lines, sliding them in");
             return;
@@ -1693,6 +1723,7 @@ final class LyricView extends View {
         blur = new float[n];
         focus = -1;
         dotsFor = -1;
+        readingFirst = readingLast = -1;
         focusKey = Integer.MIN_VALUE;
         if (LockLyrics.verbose || n > 0) {
             Xp.log(TAG + "view laid out " + n + " lines at width " + b.w + " in " + b.tookMs
@@ -1734,7 +1765,7 @@ final class LyricView extends View {
         int n = lines.size();
         long now = now();
         if (dotsFor >= 0 && Float.isNaN(dotsTop[dotsFor])) dotsFor = -1;
-        float to = dotsFor >= 0 ? dotsTop[dotsFor] : base[focus];
+        float to = dotsFor >= 0 ? dotsTop[dotsFor] : base[readingFirst];
         springK = K_SLOW;
         springC = C_SLOW;
         float anchor = anchorY();
@@ -1859,6 +1890,11 @@ final class LyricView extends View {
         if (!centring()) return 0f;
         float bandH = bandBottom - bandTop;
         float anchor = bandTop + ANCHOR * bandH;
+        if (dotsFor < 0 && readingFirst >= 0 && readingLast > readingFirst) {
+            // Reserve the fitting group's space so its first line does not jump at every word.
+            float blockH = base[readingLast] - base[readingFirst] + height[readingLast];
+            return bandTop + (bandH - blockH) / 2f - anchor;
+        }
         int n = lines.size();
         // Rows are at least a line's gap apart, so this brackets whatever the band can hold.
         int span = 2 + (int) (bandH / Math.max(1f, GAP_DP * density));
@@ -1946,7 +1982,7 @@ final class LyricView extends View {
                     clamp01((bandBottom - (y + height[i])) / fade));
             float a = vis * edge;
             // Lines already sung, above the focus, sit further back than the ones to come.
-            if (dotsFor >= 0 ? i < dotsFor : i < focus) a *= ABOVE_ALPHA;
+            if ((dotsFor >= 0 ? i < dotsFor : i < focus) && !retained(i)) a *= ABOVE_ALPHA;
             if (a <= 0.003f) continue;
             drawLine(canvas, i, side, y, a);
         }
@@ -2032,7 +2068,10 @@ final class LyricView extends View {
         // In the AOD's still mode a word-timed line is drawn whole, like a line-timed one: a fill
         // frozen at whatever syllable the one frame caught would be wrong for the whole line.
         boolean still = LockLyrics.still();
-        boolean words = l.hasWords() && e > 0f && !still;
+        // Retained lines stay readable, but finished word lifts/glows need no per-word rendering.
+        boolean settledWords = retained(i) && i < focus
+                && (long) ms >= (long) l.end + Math.max(LIFT_MIN_MS, GLOW_TAIL_MS);
+        boolean words = l.hasWords() && e > 0f && !still && !settledWords;
         int save = canvas.save();
         canvas.translate(x, y);
         canvas.scale(sc, sc, pivotX, 0f);
@@ -2066,7 +2105,7 @@ final class LyricView extends View {
             float t = hi > lo ? clamp01((r - lo) / (hi - lo)) : 0f;
             // A word-timed line that is not the focus is all unsung colour; a line-timed one is
             // lit while it is sung.
-            float w = l.hasWords() && !still ? 0f : lit[i];
+            float w = l.hasWords() && !still && !settledWords ? 0f : lit[i];
             float base = a * (INACTIVE + (1f - INACTIVE) * w);
             if (t < 1f) drawBlurLevel(canvas, i, lo, base * (1f - t), hi, w);
             if (t > 0f) drawBlurLevel(canvas, i, hi, base * t, lo, w);

@@ -128,6 +128,8 @@ object ModuleBridge {
         val lyricsTrans: Boolean = true,
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
+        /** Keep fast lyrics together in small groups instead of scrolling on every line. */
+        val lyricsGroups: Boolean = false,
         /** Where the lines settle in their column: 0 left, 1 centre, 2 right. */
         val lyricsAlign: Int = 0,
         /** The lyric band's height as a share of the room between the clock and the card. */
@@ -453,6 +455,9 @@ object ModuleBridge {
     fun setLyricsRoma(context: Context, on: Boolean) =
         send(context, "lyricroma") { putExtra("on", on) }
 
+    fun setLyricsGroups(context: Context, on: Boolean) =
+        send(context, "lyricgroups") { putExtra("on", on) }
+
     fun setLyricsAlign(context: Context, mode: Int) =
         send(context, "lyricalign") { putExtra("v", mode) }
 
@@ -768,6 +773,7 @@ object ModuleBridge {
             // Defaults the other way: this one is on for anyone whose module predates the key.
             lyricsTrans = b.getBoolean("lyrictrans", true),
             lyricsRoma = b.getBoolean("lyricroma", false),
+            lyricsGroups = b.getBoolean("lyricgroups", false),
             lyricsAlign = b.getInt("lyricalign", 0),
             lyricFill = b.getFloat("lyricfill", 1f),
             lyricPos = b.getFloat("lyricpos", 0.5f),

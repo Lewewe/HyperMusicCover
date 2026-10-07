@@ -31,6 +31,7 @@ object SettingsBackup {
     private const val KEY_LYRICS_HDR = "lyricsHdr"
     private const val KEY_LYRICS_TRANS = "lyricsTranslation"
     private const val KEY_LYRICS_ROMA = "lyricsRomanisation"
+    private const val KEY_LYRICS_GROUPS = "lyricsGentleFlow"
     private const val KEY_LYRICS_ALIGN = "lyricsAlignment"
     private const val KEY_FP_AVOID = "fingerprintAvoid"
     /** The whole notification-shade page, as one object keyed the way the module names them. */
@@ -62,6 +63,7 @@ object SettingsBackup {
             json.put(KEY_LYRICS_HDR, module.lyricsHdr)
             json.put(KEY_LYRICS_TRANS, module.lyricsTrans)
             json.put(KEY_LYRICS_ROMA, module.lyricsRoma)
+            json.put(KEY_LYRICS_GROUPS, module.lyricsGroups)
             json.put(KEY_LYRICS_ALIGN, module.lyricsAlign)
             json.put(KEY_FP_AVOID, module.fpAvoid)
             // Written whole rather than key by key, because the map is built from the module's
@@ -114,6 +116,9 @@ object SettingsBackup {
             }
             if (obj.has(KEY_LYRICS_ROMA)) {
                 ModuleBridge.setLyricsRoma(context, obj.getBoolean(KEY_LYRICS_ROMA))
+            }
+            if (obj.has(KEY_LYRICS_GROUPS)) {
+                ModuleBridge.setLyricsGroups(context, obj.getBoolean(KEY_LYRICS_GROUPS))
             }
             if (obj.has(KEY_LYRICS_ALIGN)) {
                 ModuleBridge.setLyricsAlign(context, obj.getInt(KEY_LYRICS_ALIGN))
