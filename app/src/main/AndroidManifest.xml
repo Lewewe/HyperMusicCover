@@ -121,6 +121,12 @@
             android:theme="@style/Theme.HyperMusicCover" />
 
         <activity
+            android:name=".ExtrasActivity"
+            android:exported="false"
+            android:label="@string/extras_section"
+            android:theme="@style/Theme.HyperMusicCover" />
+
+        <activity
             android:name=".ShadeActivity"
             android:exported="false"
             android:label="@string/features_shade_title"

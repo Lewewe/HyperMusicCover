@@ -61,6 +61,7 @@ final class LyricSource {
     static final int SRC_KUWO = 9;
     /** LunaBeat's TTML Hub, keyed by the platform's song id like the AMLL database. */
     static final int SRC_HUB = 10;
+    static final int SRC_SPICY = 11;
 
     interface Callback {
         /**
@@ -756,6 +757,8 @@ final class LyricSource {
         // this one, and believing it is what cost five songs their lyrics. See infoFor().
         final String info = infoFor(c);
         final String dir = dirFor(c);
+        final boolean extended = LockLyrics.sSearchMode == LockLyrics.SEARCH_EXTENDED;
+        final String spicyId = extended ? SpicyLyrics.spotifyId(c) : null;
         // An id is only worth having when there is a directory it belongs to; without one it
         // cannot be looked up anywhere, and pretending otherwise is how a lookup lands in the
         // wrong platform's id space.
@@ -777,58 +780,147 @@ final class LyricSource {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Rows r = new Rows();
-                // A player of files is playing a file on this phone, and its lyric is the one
-                // the person keeps with it: read first, and kept over whatever the session or a
-                // module has, word-timed or not (#64 - a module's lyric was taking Salt's place).
-                // A streaming player's song is its catalogue's recording, which a file of the
-                // same name need not be; it reads the file only once everything else is empty.
-                boolean files = !streaming(pkg);
-                if (files) {
-                    local(ctx, controller, r);
-                }
-                // The sources after it, best first, each one asked only because the one before
-                // it came up empty. Every step falls through rather than stopping, which is the
-                // whole shape of this: a source that is present but useless - a provider module
-                // that wrote a lyricInfo it could not fill, an id the database does not have -
-                // used to end the search, and the song played on with nothing on screen while a
-                // perfectly good answer sat one step further down.
-                if (r.lines.isEmpty() && info != null) {
-                    session(info, r);
-                }
-                // The bridge, when the session had nothing. Same standing as the session's own
-                // payload and for the same reason - both are the player's lyric, handed over by
-                // whoever managed to reach it.
-                if (r.lines.isEmpty()) {
-                    lyricon(controller, r);
-                }
-                if (r.lines.isEmpty() && (id != null || q != null)) {
-                    race(gen, pkg, ctx, id, dir, q, r);
-                }
-                // A catalogue that places the song and answers that it is instrumental has
-                // answered: the song has no words, and the next catalogue is not asked for some.
-                boolean instrumental = dropPlaceholder(r);
-                // The other two catalogues, in order, and only for a song the first three could
-                // not place. Sequential rather than raced: this is the slow path by definition,
-                // nothing above it is still running by the time it starts, and a song that
-                // already works never reaches it, so what it costs is paid only by songs that
-                // would otherwise show nothing at all.
-                if (r.lines.isEmpty() && q != null && !instrumental) {
-                    web(pkg, q, r);
-                    instrumental = dropPlaceholder(r);
-                }
-                // The file, for a streaming player, when nothing else had the song - and not
-                // when a catalogue placed it and said it has no words.
-                if (r.lines.isEmpty() && !files && !instrumental) {
-                    local(ctx, controller, r);
-                }
-                Xp.log("[MCLyric] " + pkg + " -> " + r.why);
-                onMain(cb, r.lines, r.why, r.source);
-                // Translation enrichment is optional and must never terminate SystemUI.
-                try {
-                    borrow(gen, pkg, ctx, id, dir, q, r, cb);
-                } catch (Throwable t) {
-                    Xp.w("[MCLyric] borrowing a translation failed: " + t);
+                if (extended) {
+                    Rows r = new Rows();
+                    // A player of files is playing a file on this phone, and its lyric is the one
+                    // the person keeps with it: read first, and kept over whatever the session or a
+                    // module has, word-timed or not (#64 - a module's lyric was taking Salt's place).
+                    // A streaming player's song is its catalogue's recording, which a file of the
+                    // same name need not be; it reads the file only once everything else is empty.
+                    boolean files = !streaming(pkg);
+                    if (files) {
+                        local(ctx, controller, r);
+                    }
+                    // The sources after it, best first, each one asked only because the one before
+                    // it came up empty. Every step falls through rather than stopping, which is the
+                    // whole shape of this: a source that is present but useless - a provider module
+                    // that wrote a lyricInfo it could not fill, an id the database does not have -
+                    // used to end the search, and the song played on with nothing on screen while a
+                    // perfectly good answer sat one step further down.
+                    if (r.lines.isEmpty() && info != null) {
+                        session(info, r);
+                    }
+                    // The bridge, when the session had nothing. Same standing as the session's own
+                    // payload and for the same reason - both are the player's lyric, handed over by
+                    // whoever managed to reach it.
+                    if (r.lines.isEmpty()) {
+                        lyricon(controller, r);
+                    }
+                    if (r.lines.isEmpty() && (id != null || q != null)) {
+                        race(gen, pkg, ctx, id, dir, q, r, true);
+                    }
+                    if (superseded(gen)) {
+                        Xp.log("[MCLyric] skipping Spicy Lyrics for superseded lookup " + spicyId);
+                    } else if (spicyId == null) {
+                        Xp.log("[MCLyric] Spicy Lyrics skipped: no Spotify track id in media metadata");
+                    } else if (!LockLyrics.sSpicyLyricsEnabled) {
+                        Xp.log("[MCLyric] Spicy Lyrics disabled");
+                    } else if (LockLyrics.sSpicyLyricsApiKey.isEmpty()) {
+                        Xp.log("[MCLyric] Spicy Lyrics skipped: API key is empty");
+                    } else if (!words(r.lines)) {
+                        try {
+                            List<LyricLine> spicy = SpicyLyrics.fetch(
+                                    spicyId, LockLyrics.sSpicyLyricsApiKey);
+                            if (!superseded(gen) && words(spicy)) {
+                                r.lines = spicy;
+                                r.source = SRC_SPICY;
+                                r.why = spicy.size() + " lines from Spicy Lyrics " + spicyId;
+                            } else {
+                                Xp.log("[MCLyric] Spicy Lyrics returned no word-timed lyrics for "
+                                        + spicyId);
+                            }
+                        } catch (Throwable t) {
+                            Xp.log("[MCLyric] Spicy Lyrics result was rejected: "
+                                    + t.getClass().getSimpleName());
+                        }
+                    }
+                    // A player/session or local file may provide usable line timing before the
+                    // online route runs. Still search every provider for a word-timed replacement.
+                    if (q != null && !r.lines.isEmpty() && !words(r.lines) && !superseded(gen)) {
+                        OnlineLyrics.Lookup lookup = OnlineLyrics.wordFirst(pkg, q);
+                        if (lookup != null && words(lookup.lines) && !superseded(gen)) {
+                            r.lines = lookup.lines;
+                            r.source = lookup.found.source();
+                            r.why = lookup.lines.size() + " lines from " + lookup.found.who() + " "
+                                    + lookup.found.id + " (word-timed; all provider/title variants checked)";
+                        }
+                    }
+                    // A catalogue that places the song and answers that it is instrumental has
+                    // answered: the song has no words, and the next catalogue is not asked for some.
+                    boolean instrumental = dropPlaceholder(r);
+                    Xp.log("[MCLyric] " + pkg + " -> " + r.why);
+                    onMainCurrent(gen, cb, r.lines, r.why, r.source);
+                    // The other two catalogues, in order, and only for a song the first three could
+                    // not place. Sequential rather than raced: this is the slow path by definition,
+                    // nothing above it is still running by the time it starts, and a song that
+                    // already works never reaches it, so what it costs is paid only by songs that
+                    // would otherwise show nothing at all.
+                    // The file, for a streaming player, when nothing else had the song - and not
+                    // when a catalogue placed it and said it has no words.
+                    if (r.lines.isEmpty() && !files && !instrumental) {
+                        local(ctx, controller, r);
+                    }
+                    onMain(cb, r.lines, r.why, r.source);
+                    // Translation enrichment is optional and must never terminate SystemUI.
+                    try {
+                        borrow(gen, pkg, ctx, id, dir, q, r, cb);
+                    } catch (Throwable t) {
+                        Xp.w("[MCLyric] borrowing a translation failed: " + t);
+                    }
+                } else {
+                    Rows r = new Rows();
+                    // A player of files is playing a file on this phone, and its lyric is the one
+                    // the person keeps with it: read first, and kept over whatever the session or a
+                    // module has, word-timed or not (#64 - a module's lyric was taking Salt's place).
+                    // A streaming player's song is its catalogue's recording, which a file of the
+                    // same name need not be; it reads the file only once everything else is empty.
+                    boolean files = !streaming(pkg);
+                    if (files) {
+                        local(ctx, controller, r);
+                    }
+                    // The sources after it, best first, each one asked only because the one before
+                    // it came up empty. Every step falls through rather than stopping, which is the
+                    // whole shape of this: a source that is present but useless - a provider module
+                    // that wrote a lyricInfo it could not fill, an id the database does not have -
+                    // used to end the search, and the song played on with nothing on screen while a
+                    // perfectly good answer sat one step further down.
+                    if (r.lines.isEmpty() && info != null) {
+                        session(info, r);
+                    }
+                    // The bridge, when the session had nothing. Same standing as the session's own
+                    // payload and for the same reason - both are the player's lyric, handed over by
+                    // whoever managed to reach it.
+                    if (r.lines.isEmpty()) {
+                        lyricon(controller, r);
+                    }
+                    if (r.lines.isEmpty() && (id != null || q != null)) {
+                        race(gen, pkg, ctx, id, dir, q, r, false);
+                    }
+                    // A catalogue that places the song and answers that it is instrumental has
+                    // answered: the song has no words, and the next catalogue is not asked for some.
+                    boolean instrumental = dropPlaceholder(r);
+                    // The other two catalogues, in order, and only for a song the first three could
+                    // not place. Sequential rather than raced: this is the slow path by definition,
+                    // nothing above it is still running by the time it starts, and a song that
+                    // already works never reaches it, so what it costs is paid only by songs that
+                    // would otherwise show nothing at all.
+                    if (r.lines.isEmpty() && q != null && !instrumental) {
+                        web(pkg, q, r);
+                        instrumental = dropPlaceholder(r);
+                    }
+                    // The file, for a streaming player, when nothing else had the song - and not
+                    // when a catalogue placed it and said it has no words.
+                    if (r.lines.isEmpty() && !files && !instrumental) {
+                        local(ctx, controller, r);
+                    }
+                    Xp.log("[MCLyric] " + pkg + " -> " + r.why);
+                    onMain(cb, r.lines, r.why, r.source);
+                    // Translation enrichment is optional and must never terminate SystemUI.
+                    try {
+                        borrow(gen, pkg, ctx, id, dir, q, r, cb);
+                    } catch (Throwable t) {
+                        Xp.w("[MCLyric] borrowing a translation failed: " + t);
+                    }
                 }
             }
         }, "MCLyricSource").start();
@@ -966,7 +1058,7 @@ final class LyricSource {
         }
         boolean[] finished = new boolean[lenders.size()];
         int next = 0;
-        long deadline = android.os.SystemClock.uptimeMillis() + RACE_BUDGET_MS;
+        long deadline = android.os.SystemClock.uptimeMillis() + (LockLyrics.sSearchMode == LockLyrics.SEARCH_EXTENDED ? RACE_BUDGET_MS : 8000L);
         while (next < lenders.size() && (want[0] || want[1])) {
             if (finished[next]) {
                 if (superseded(gen)) return;
@@ -1076,7 +1168,10 @@ final class LyricSource {
     }
 
     /** The whole lookup, including the mirrors and a miss. Nothing is waited for past this. */
-    private static final long RACE_BUDGET_MS = 8000L;
+    // The online route now spends its own budget checking all provider/title variants. Leave
+    // enough outer time for that worker to publish its result instead of treating an exact-budget
+    // completion as a miss.
+    private static final long RACE_BUDGET_MS = 12000L;
 
     /**
      * How long NetEase's answer waits for the database's, once it has one of its own.
@@ -1099,7 +1194,7 @@ final class LyricSource {
      */
     private static void race(final int gen, final String pkg, final android.content.Context ctx,
                              final String id, final String dir,
-                             final NcmLyrics.Query q, Rows out) {
+                             final NcmLyrics.Query q, Rows out, final boolean extended) {
         final Rows db = new Rows();
         final Rows ncm = new Rows();
         final Rows hub = new Rows();
@@ -1140,7 +1235,7 @@ final class LyricSource {
                 @Override
                 public void run() {
                     try {
-                        online(pkg, q, ncm);
+                        online(pkg, q, ncm, extended);
                     } finally {
                         done.offer(2);
                     }
@@ -1148,7 +1243,7 @@ final class LyricSource {
             }, "MCLyricNcm").start();
         }
         boolean haveNcm = false;
-        long deadline = android.os.SystemClock.uptimeMillis() + RACE_BUDGET_MS;
+        long deadline = android.os.SystemClock.uptimeMillis() + (extended ? RACE_BUDGET_MS : 8000L);
         while (pending > 0) {
             long left = deadline - android.os.SystemClock.uptimeMillis();
             if (left <= 0) {
@@ -1309,6 +1404,19 @@ final class LyricSource {
         }
     }
 
+    /** Whether a set of rows carries word timings, which is what the session route can add. */
+    private static boolean words(List<LyricLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return false;
+        }
+        for (LyricLine l : lines) {
+            if (l.hasWords()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * The lyric shipped with the file being played, when the session is playing a file.
      *
@@ -1386,11 +1494,8 @@ final class LyricSource {
         }
     }
 
-    /**
-     * By name, from the first two catalogues in this player's order - QQ Music and NetEase for
-     * most players. See OnlineLyrics.
-     */
-    private static void online(String pkg, NcmLyrics.Query q, Rows r) {
+    /** Original lookup: the first two catalogues in this player's source order. */
+    private static void onlineOriginal(String pkg, NcmLyrics.Query q, Rows r) {
         String before = r.why;
         try {
             OnlineLyrics.Found f = OnlineLyrics.first(pkg, q);
@@ -1400,6 +1505,29 @@ final class LyricSource {
                 return;
             }
             take(f, r, before);
+        } catch (Throwable t) {
+            Xp.w("[MCLyric] the by-name lookup failed: " + t);
+            r.why = join(before, "by-name error");
+        }
+    }
+
+    private static void online(String pkg, NcmLyrics.Query q, Rows r, boolean extended) {
+        if (!extended) {
+            onlineOriginal(pkg, q, r);
+            return;
+        }
+        String before = r.why;
+        try {
+            OnlineLyrics.Lookup lookup = OnlineLyrics.wordFirst(pkg, q);
+            if (lookup == null) {
+                r.why = join(before, "no match on " + OnlineLyrics.describe(pkg));
+                return;
+            }
+            r.lines = lookup.lines;
+            r.source = lookup.found.source();
+            r.why = r.lines.size() + " lines from " + lookup.found.who() + " "
+                    + lookup.found.id + " (" + (lookup.found.words ? "word-timed" : "line-timed")
+                    + "; all provider/title variants checked)";
         } catch (Throwable t) {
             Xp.w("[MCLyric] the by-name lookup failed: " + t);
             r.why = join(before, "by-name error");
@@ -1484,6 +1612,17 @@ final class LyricSource {
                 onMain(cb, r.lines, r.why, r.source);
             }
         }, "MCLyricSource").start();
+    }
+
+    private static void onMainCurrent(final int gen, final Callback cb,
+                                      final List<LyricLine> lines, final String why,
+                                      final int source) {
+        Main.main().post(new Runnable() {
+            @Override
+            public void run() {
+                if (!superseded(gen)) cb.onLines(lines, why, source);
+            }
+        });
     }
 
     private static void onMain(final Callback cb, final List<LyricLine> lines,

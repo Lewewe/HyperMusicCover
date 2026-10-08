@@ -126,11 +126,34 @@ object ModuleBridge {
         val lyricsHdr: Boolean = false,
         /** Draw each line's translation under it. On unless the user turns it off. */
         val lyricsTrans: Boolean = true,
+        /** Online translation mode: 0 off, 1 original + translation (2 reserved). */
+        val lyricOnlineMode: Int = 0,
+        /** Missing IDs migrate to the existing custom LibreTranslate-compatible backend. */
+        val lyricTranslateProvider: String = TranslationProvider.CUSTOM,
+        /** Custom LibreTranslate-compatible endpoint; ignored by official providers. */
+        val lyricTranslateEndpoint: String = "",
+        /** User-owned API key: optional for custom, required for Google/DeepL. */
+        val lyricTranslateApiKey: String = "",
+        val spicyLyricsApiKey: String = "",
+        /** Source language for online translation ("auto" by default). */
+        val lyricTranslateSource: String = "auto",
+        /** Target language for online translation ("en" by default). */
+        val lyricTranslateTarget: String = "en",
+        /** Alive lyric effects: 0 off, 1 subtle, 2 dramatic, 3 eye-candy. */
+        val lyricsAliveFx: Int = 0,
+        val spicyLyricsEnabled: Boolean = true,
+        val providerQq: Boolean = true,
+        val providerNetease: Boolean = true,
+        val providerKuwo: Boolean = true,
+        val providerKugou: Boolean = true,
+        val providerLrcLib: Boolean = true,
+        val providerVariants: Boolean = true,
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
         /** Keep fast lyrics together in small groups instead of scrolling on every line. */
         val lyricsGroups: Boolean = false,
         /** Where the lines settle in their column: 0 left, 1 centre, 2 right. */
+        val lyricsSearchMode: Int = 0,
         val lyricsAlign: Int = 0,
         /** The lyric band's height as a share of the room between the clock and the card. */
         val lyricFill: Float = 1f,
@@ -452,14 +475,60 @@ object ModuleBridge {
     fun setLyricsTrans(context: Context, on: Boolean) =
         send(context, "lyrictrans") { putExtra("on", on) }
 
+    fun setLyricTranslateConfig(
+        context: Context,
+        endpoint: String,
+        apiKey: String,
+        source: String,
+        target: String,
+        mode: Int,
+        provider: String = TranslationProvider.CUSTOM,
+    ) = send(context, "lyrictrcfg") {
+        putExtra("provider", TranslationProvider.normalize(provider))
+        putExtra("endpoint", endpoint)
+        putExtra("apikey", apiKey)
+        putExtra("source", source)
+        putExtra("target", target)
+        putExtra("mode", mode)
+    }
+
+    fun setSpicyLyricsApiKey(context: Context, apiKey: String) =
+        send(context, "spicylyricscfg") { putExtra("apikey", apiKey.trim()) }
     fun setLyricsRoma(context: Context, on: Boolean) =
         send(context, "lyricroma") { putExtra("on", on) }
 
     fun setLyricsGroups(context: Context, on: Boolean) =
         send(context, "lyricgroups") { putExtra("on", on) }
 
+    fun setLyricsSearchMode(context: Context, mode: Int) =
+        send(context, "lyricsearch") { putExtra("v", mode) }
+
     fun setLyricsAlign(context: Context, mode: Int) =
         send(context, "lyricalign") { putExtra("v", mode) }
+
+    fun setLyricsAliveFx(context: Context, mode: Int) =
+        send(context, "lyricalive") { putExtra("v", mode) }
+
+    fun setSpicyLyrics(context: Context, on: Boolean) =
+        send(context, "spicylyricscfg") { putExtra("on", on) }
+
+    fun setLyricProviders(context: Context, state: State) =
+        setLyricProviders(context, mapOf(
+            "qq" to state.providerQq,
+            "netease" to state.providerNetease,
+            "kuwo" to state.providerKuwo,
+            "kugou" to state.providerKugou,
+            "lrclib" to state.providerLrcLib,
+            "variants" to state.providerVariants,
+        ))
+
+    /** Partial restores change only the provider fields present in the backup. */
+    fun setLyricProviders(context: Context, values: Map<String, Boolean>) =
+        send(context, "lyricproviders") {
+            for (key in listOf("qq", "netease", "kuwo", "kugou", "lrclib", "variants")) {
+                values[key]?.let { putExtra(key, it) }
+            }
+        }
 
     /**
      * One of the five values the lyric band and its type are made of. All five are fixed now and
@@ -772,8 +841,24 @@ object ModuleBridge {
             lyricsHdr = b.getBoolean("lyrichdr", false),
             // Defaults the other way: this one is on for anyone whose module predates the key.
             lyricsTrans = b.getBoolean("lyrictrans", true),
+            lyricOnlineMode = b.getInt("lyrictrmode", 0),
+            lyricTranslateProvider = TranslationProvider.normalize(b.getString("lyrictrprovider")),
+            lyricTranslateEndpoint = b.getString("lyrictrendpoint") ?: "",
+            lyricTranslateApiKey = b.getString("lyrictrkey") ?: "",
+            spicyLyricsApiKey = b.getString("spicylyricskey") ?: "",
+            lyricTranslateSource = b.getString("lyrictrsource") ?: "auto",
+            lyricTranslateTarget = b.getString("lyrictrtarget") ?: "en",
+            lyricsAliveFx = b.getInt("lyricalive", 0),
+            spicyLyricsEnabled = b.getBoolean("spicylyrics", true),
+            providerQq = b.getBoolean("providerqq", true),
+            providerNetease = b.getBoolean("providernetease", true),
+            providerKuwo = b.getBoolean("providerkuwo", true),
+            providerKugou = b.getBoolean("providerkugou", true),
+            providerLrcLib = b.getBoolean("providerlrclib", true),
+            providerVariants = b.getBoolean("providervariants", true),
             lyricsRoma = b.getBoolean("lyricroma", false),
             lyricsGroups = b.getBoolean("lyricgroups", false),
+            lyricsSearchMode = b.getInt("lyricsearch", 0),
             lyricsAlign = b.getInt("lyricalign", 0),
             lyricFill = b.getFloat("lyricfill", 1f),
             lyricPos = b.getFloat("lyricpos", 0.5f),

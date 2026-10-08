@@ -18,22 +18,22 @@ import java.util.Locale;
  *
  * Every by-name source used to carry a matcher of its own, and they drifted: NetEase and KuGou
  * gated on a duration window and ranked the rest, QQ and Kuwo had none. This is HyperLyrics
- * Enhanced's weights, with strict identity guards before the remaining evidence is scored:
+ * Enhanced's, so that the two modules agree on what a match is when they run side by side, and
+ * it scores rather than gates:
  *
- *   title  +50  exact normalized core title (catalogue annotations removed)
- *   artist +30  an exact normalized credited name in common
- *   length +15 within 1.5s, +10 within 5s; reject beyond that
+ *   title  +50  one cleaned title equal to or containing the other
+ *   artist +30  a credited name in common, either containing the other
+ *   length +15 within 1.5s, +10 within 5s, -30 beyond - the live take is 25s off its studio one
  *   album  +10  the same album, +5 the same once edition words are stripped from the end
  *   tag    +20  "live" / "remastered" / "cover" / 翻唱 on both sides
  *
- * Title/artist equality and a known duration difference no greater than 5s are hard guards.
- * The remaining evidence must score 85. A right title by the right artist is 80 on its own: it has
- * to have supporting length, album or recording-tag evidence as well. Another singer's song of
- * the same name never passes, regardless of bonuses.
+ * and a candidate is the song at 85. A right title by the right artist is 80 on its own: it has
+ * to be the right length or on the right album as well. Another singer's song of the same name is
+ * 50 + 15 + 10 = 75 at best and never passes.
  */
-final class LyricMatch {
+final class OriginalLyricMatch {
 
-    private LyricMatch() {
+    private OriginalLyricMatch() {
     }
 
     static final int PASS_SCORE = 85;
@@ -82,7 +82,6 @@ final class LyricMatch {
 
     /** What the session says, cleaned once for every candidate it is compared with. */
     static final class Wanted {
-        final OriginalLyricMatch.Wanted original;
         final String title;
         final List<String> artists;
         final String album;
@@ -92,7 +91,6 @@ final class LyricMatch {
         private final int credits;
 
         Wanted(NcmLyrics.Query q) {
-            original = new OriginalLyricMatch.Wanted(q);
             title = clean(q.title);
             artists = new ArrayList<>();
             int n = 0;
@@ -112,20 +110,12 @@ final class LyricMatch {
 
         /** Two or more credited names: "A / B" gets a second, album-keyed search. */
         boolean multiCredit() {
-            if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) return original.multiCredit();
             return credits >= 2;
         }
     }
 
     /** The highest scorer, passing or not; null candidate for an empty list. */
     static Pick best(List<Candidate> candidates, Wanted w) {
-        if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) {
-            List<OriginalLyricMatch.Candidate> originals = new ArrayList<>();
-            for (Candidate c : candidates) originals.add(originalCandidate(c));
-            OriginalLyricMatch.Pick pick = OriginalLyricMatch.best(originals, w.original);
-            int index = originals.indexOf(pick.candidate);
-            return new Pick(index < 0 ? null : candidates.get(index), pick.score, pick.artistMatched);
-        }
         Candidate best = null;
         int bestScore = -1;
         boolean bestArtist = false;
@@ -140,21 +130,17 @@ final class LyricMatch {
         return new Pick(best, bestScore, bestArtist);
     }
 
-    private static OriginalLyricMatch.Candidate originalCandidate(Candidate c) {
-        return new OriginalLyricMatch.Candidate(c.id, c.title, c.artist, c.album, c.durationMs, c.extra);
-    }
-
     static int score(Candidate c, Wanted w) {
-        if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) {
-            return OriginalLyricMatch.score(originalCandidate(c), w.original);
-        }
-        String t = clean(c.title);
-        if (w.title.isEmpty() || !w.title.equals(t)
-                || !hasCommonArtist(w.artists, cleanedArtists(c.artist))) return 0;
-        if (w.durationMs > 0 && c.durationMs > 0
-                && Math.abs(w.durationMs - c.durationMs) > 5000L) return 0;
-        int score = 80;
+        int score = 0;
         if (w.durationMs > 0 && c.durationMs > 0) score += durationScore(w.durationMs, c.durationMs);
+        String t = clean(c.title);
+        // Both sides non-empty: a result whose title was all brackets cleans to "", and every
+        // title contains "".
+        if (!w.title.isEmpty() && !t.isEmpty()
+                && (w.title.equals(t) || t.contains(w.title) || w.title.contains(t))) {
+            score += 50;
+        }
+        if (hasCommonArtist(w.artists, cleanedArtists(c.artist))) score += 30;
         score += albumScore(w.album, normalizeAlbum(c.album));
         if (!w.features.isEmpty()) {
             for (String f : features(c.title)) {
@@ -184,24 +170,36 @@ final class LyricMatch {
     }
 
     private static List<String> cleanedArtists(String artist) {
-        return LyricSearchAliases.artistKeys(NcmLyrics.folded(artist));
+        List<String> out = new ArrayList<>();
+        for (String a : splitArtists(artist)) out.add(clean(a));
+        return out;
     }
 
     private static boolean hasCommonArtist(List<String> local, List<String> remote) {
-        return LyricSearchAliases.keysOverlap(local, remote);
+        for (String l : local) {
+            if (l.isEmpty()) continue;
+            for (String r : remote) {
+                if (r.isEmpty()) continue;
+                if (l.equals(r) || r.contains(l) || l.contains(r)) return true;
+            }
+        }
+        return false;
     }
 
     static List<String> splitArtists(String value) {
-        return LyricSearchAliases.splitArtists(value);
+        if (value == null) return new ArrayList<>();
+        return new ArrayList<>(Arrays.asList(value.split("[&,，、/／]")));
     }
 
     private static final java.util.regex.Pattern BRACKETS =
             java.util.regex.Pattern.compile("\\(.*?\\)|\\[.*?]|\\{.*?\\}");
     private static final java.util.regex.Pattern SPACE = java.util.regex.Pattern.compile("\\s+");
 
-    /** Catalogue/feature annotations out; recording labels remain part of the exact title. */
+    /** Brackets out, lower case, simplified script, no whitespace at all. */
     static String clean(String input) {
-        return LyricSearchAliases.compact(NcmLyrics.folded(LyricSearchAliases.coreTitle(input)));
+        if (input == null) return "";
+        String s = BRACKETS.matcher(input).replaceAll("").trim().toLowerCase(Locale.ROOT);
+        return SPACE.matcher(NcmLyrics.folded(s)).replaceAll("");
     }
 
     /** The album the same way, but word boundaries kept until the scoring strips suffixes. */

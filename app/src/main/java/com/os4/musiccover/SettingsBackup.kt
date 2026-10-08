@@ -30,8 +30,41 @@ object SettingsBackup {
     private const val KEY_LYRICS_KEEP_ON = "lyricsKeepOn"
     private const val KEY_LYRICS_HDR = "lyricsHdr"
     private const val KEY_LYRICS_TRANS = "lyricsTranslation"
+    private const val KEY_LYRICS_TRANSLATE_MODE = "lyricsTranslateMode"
+    private const val KEY_LYRICS_TRANSLATE_PROVIDER = "lyricsTranslateProvider"
+    private const val KEY_LYRICS_TRANSLATE_ENDPOINT = "lyricsTranslateEndpoint"
+    private const val KEY_LYRICS_TRANSLATE_SOURCE = "lyricsTranslateSource"
+    private const val KEY_LYRICS_TRANSLATE_TARGET = "lyricsTranslateTarget"
+    private const val KEY_LYRICS_ALIVE_FX = "lyricsAliveEffects"
     private const val KEY_LYRICS_ROMA = "lyricsRomanisation"
     private const val KEY_LYRICS_GROUPS = "lyricsGentleFlow"
+    private const val KEY_LYRICS_SEARCH = "lyricsSearchMode"
+    private const val KEY_SPICY_LYRICS = "spicyLyricsEnabled"
+    private val LYRIC_PROVIDER_KEYS = linkedMapOf(
+        "lyricsProviderQq" to "qq",
+        "lyricsProviderNetease" to "netease",
+        "lyricsProviderKuwo" to "kuwo",
+        "lyricsProviderKugou" to "kugou",
+        "lyricsProviderLrcLib" to "lrclib",
+        "lyricsProviderVariants" to "variants",
+    )
+
+    /** Export preferences only; provider and translation credentials stay on the device. */
+    internal fun writeLyricProviders(json: JSONObject, module: ModuleBridge.State) {
+        val values = listOf(module.providerQq, module.providerNetease, module.providerKuwo,
+            module.providerKugou, module.providerLrcLib, module.providerVariants)
+        LYRIC_PROVIDER_KEYS.keys.forEachIndexed { index, key -> json.put(key, values[index]) }
+        json.put(KEY_SPICY_LYRICS, module.spicyLyricsEnabled)
+    }
+
+    /** Missing or malformed fields must not reset preferences when restoring older backups. */
+    internal fun readLyricProviders(json: JSONObject): Map<String, Boolean> = buildMap {
+        for ((key, extra) in LYRIC_PROVIDER_KEYS) {
+            if (!json.has(key)) continue
+            val value = runCatching { json.getBoolean(key) }.getOrNull() ?: continue
+            put(extra, value)
+        }
+    }
     private const val KEY_LYRICS_ALIGN = "lyricsAlignment"
     private const val KEY_FP_AVOID = "fingerprintAvoid"
     /** The whole notification-shade page, as one object keyed the way the module names them. */
@@ -62,8 +95,17 @@ object SettingsBackup {
             json.put(KEY_LYRICS_KEEP_ON, module.lyricsKeepOn)
             json.put(KEY_LYRICS_HDR, module.lyricsHdr)
             json.put(KEY_LYRICS_TRANS, module.lyricsTrans)
+            json.put(KEY_LYRICS_TRANSLATE_MODE, module.lyricOnlineMode)
+            json.put(KEY_LYRICS_TRANSLATE_PROVIDER, module.lyricTranslateProvider)
+            // Credentials deliberately stay on-device, never in exported JSON.
+            json.put(KEY_LYRICS_TRANSLATE_ENDPOINT, module.lyricTranslateEndpoint)
+            json.put(KEY_LYRICS_TRANSLATE_SOURCE, module.lyricTranslateSource)
+            json.put(KEY_LYRICS_TRANSLATE_TARGET, module.lyricTranslateTarget)
+            json.put(KEY_LYRICS_ALIVE_FX, module.lyricsAliveFx)
             json.put(KEY_LYRICS_ROMA, module.lyricsRoma)
             json.put(KEY_LYRICS_GROUPS, module.lyricsGroups)
+            json.put(KEY_LYRICS_SEARCH, module.lyricsSearchMode)
+            writeLyricProviders(json, module)
             json.put(KEY_LYRICS_ALIGN, module.lyricsAlign)
             json.put(KEY_FP_AVOID, module.fpAvoid)
             // Written whole rather than key by key, because the map is built from the module's
@@ -77,7 +119,7 @@ object SettingsBackup {
     }
 
     /** Applies both halves. Returns the app settings so the caller can restart the UI with them. */
-    fun import(context: Context, json: String): AppSettings {
+    suspend fun import(context: Context, json: String): AppSettings {
         val settings = AppSettings.importFromJson(context, json)
         try {
             val obj = JSONObject(json)
@@ -114,14 +156,53 @@ object SettingsBackup {
             if (obj.has(KEY_LYRICS_TRANS)) {
                 ModuleBridge.setLyricsTrans(context, obj.getBoolean(KEY_LYRICS_TRANS))
             }
+            if (obj.has(KEY_LYRICS_TRANSLATE_MODE)
+                || obj.has(KEY_LYRICS_TRANSLATE_PROVIDER)
+                || obj.has(KEY_LYRICS_TRANSLATE_ENDPOINT)
+                || obj.has(KEY_LYRICS_TRANSLATE_SOURCE)
+                || obj.has(KEY_LYRICS_TRANSLATE_TARGET)
+            ) {
+                val now = ModuleBridge.query(context)
+                val provider = TranslationProvider.normalize(
+                    obj.optString(KEY_LYRICS_TRANSLATE_PROVIDER,
+                        if (obj.has(KEY_LYRICS_TRANSLATE_ENDPOINT)) TranslationProvider.CUSTOM
+                        else now.lyricTranslateProvider)
+                )
+                val endpoint = obj.optString(KEY_LYRICS_TRANSLATE_ENDPOINT, now.lyricTranslateEndpoint)
+                // Never hand an existing credential to a different backend or custom host.
+                val keepKey = provider == now.lyricTranslateProvider &&
+                    (provider != TranslationProvider.CUSTOM || endpoint == now.lyricTranslateEndpoint)
+                ModuleBridge.setLyricTranslateConfig(
+                    context,
+                    endpoint,
+                    if (keepKey) now.lyricTranslateApiKey else "",
+                    obj.optString(KEY_LYRICS_TRANSLATE_SOURCE, now.lyricTranslateSource),
+                    obj.optString(KEY_LYRICS_TRANSLATE_TARGET, now.lyricTranslateTarget),
+                    obj.optInt(KEY_LYRICS_TRANSLATE_MODE, now.lyricOnlineMode),
+                    provider,
+                )
+            }
             if (obj.has(KEY_LYRICS_ROMA)) {
                 ModuleBridge.setLyricsRoma(context, obj.getBoolean(KEY_LYRICS_ROMA))
             }
             if (obj.has(KEY_LYRICS_GROUPS)) {
                 ModuleBridge.setLyricsGroups(context, obj.getBoolean(KEY_LYRICS_GROUPS))
             }
+            val providers = readLyricProviders(obj)
+            if (providers.isNotEmpty()) ModuleBridge.setLyricProviders(context, providers)
+            if (obj.has(KEY_SPICY_LYRICS)) {
+                runCatching { obj.getBoolean(KEY_SPICY_LYRICS) }.getOrNull()?.let {
+                    ModuleBridge.setSpicyLyrics(context, it)
+                }
+            }
+            if (obj.has(KEY_LYRICS_SEARCH)) {
+                ModuleBridge.setLyricsSearchMode(context, obj.optInt(KEY_LYRICS_SEARCH, 0))
+            }
             if (obj.has(KEY_LYRICS_ALIGN)) {
                 ModuleBridge.setLyricsAlign(context, obj.getInt(KEY_LYRICS_ALIGN))
+            }
+            if (obj.has(KEY_LYRICS_ALIVE_FX)) {
+                ModuleBridge.setLyricsAliveFx(context, obj.getInt(KEY_LYRICS_ALIVE_FX))
             }
             if (obj.has(KEY_FP_AVOID)) {
                 ModuleBridge.setFingerprintAvoid(context, obj.getInt(KEY_FP_AVOID))

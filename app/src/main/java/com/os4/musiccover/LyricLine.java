@@ -8,8 +8,10 @@ package com.os4.musiccover;
  */
 public final class LyricLine {
     final String text;
-    /** Null when the file has none for this line. */
+    /** Null when the file has no native translation or romanisation for this line. */
     final String translation;
+    /** The selected online translation, rendered separately below any native secondary line. */
+    String onlineTranslation;
     /**
      * How the line is said in Latin letters - romaji, jyutping, a Korean romanisation - or null.
      * Kept apart from the translation because it has a switch of its own (LockLyrics.sRoma);
@@ -75,6 +77,35 @@ public final class LyricLine {
      * all-or-nothing.
      */
     float sungChars(int ms) {
+        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) return originalSungChars(ms);
+        int n = text.length();
+        if (sylStart == null) return ms >= start ? n : 0f;
+        int count = sylStart.length;
+        float progress = 0f;
+        for (int k = 0; k < count; k++) {
+            int from = k == 0 ? 0 : charEnd[k - 1];
+            int to = Math.max(from, Math.min(n, charEnd[k]));
+            int effectiveStart = sylStart[k];
+            // Repaired tokens with tied starts occupy consecutive spans, not simultaneous fills.
+            if (k > 0 && sylStart[k] == sylStart[k - 1] && sylEnd[k] > sylEnd[k - 1]) {
+                effectiveStart = Math.max(effectiveStart, sylEnd[k - 1]);
+            }
+            if (ms < effectiveStart) continue;
+            if (sylEnd[k] <= effectiveStart) {
+                if (ms >= sylEnd[k]) progress = Math.max(progress, to);
+                continue;
+            }
+            if (ms < sylEnd[k]) {
+                float f = (ms - effectiveStart) / (float) (sylEnd[k] - effectiveStart);
+                progress = Math.max(progress, from + f * (to - from));
+            } else {
+                progress = Math.max(progress, to);
+            }
+        }
+        return Math.min(n, progress);
+    }
+
+    private float originalSungChars(int ms) {
         int n = text.length();
         if (sylStart == null) return ms >= start ? n : 0f;
         if (ms <= sylStart[0]) return 0f;
@@ -92,6 +123,18 @@ public final class LyricLine {
 
     boolean hasWords() {
         return sylStart != null;
+    }
+
+    boolean hasDisplayWords() {
+        return hasWords() && !usesRomaAsMain();
+    }
+
+    boolean usesRomaAsMain() {
+        return false;
+    }
+
+    String displayText() {
+        return usesRomaAsMain() ? roma : text;
     }
 
     /**

@@ -69,9 +69,20 @@ final class NcmLyrics {
             this.qqId = qqId;
         }
 
+        /** A search alias changes names only, never the recording's other evidence. */
+        Query withNames(String title, String artist) {
+            return new Query(title, artist, album, durationMs);
+        }
+
+        /** Pure bounded hints; callers remain responsible for validating provider results. */
+        java.util.List<Query> aliases() {
+            return LyricSearchAliases.variants(this);
+        }
+
         /** Stable across a track's lifetime, so it can key a cache. */
         String key() {
-            return title + '|' + artist + '|' + album + '|' + durationMs + '|' + qqId;
+            return title + '|' + artist + '|' + album + '|' + durationMs + '|' + qqId
+                    + "|search=" + LockLyrics.sSearchMode;
         }
 
         @Override
@@ -387,7 +398,7 @@ final class NcmLyrics {
      * The search response for one set of terms, so it can be fetched before it is needed.
      *
      * This is the half of the lookup that can be done early, and the only one. The search takes
-     * the song's name and its first artist and nothing else - see terms() - which is exactly what
+     * the song's name and its complete artist credit and nothing else - see terms() - which is exactly what
      * a play queue's item carries, while the choosing below needs the duration, which no queue
      * here publishes. So the prefetch asks the question and the real lookup, which by then has
      * the duration, answers it: the matching runs at full strength on results that are already
@@ -669,13 +680,16 @@ final class NcmLyrics {
     /**
      * The first credited name out of a session's artist string.
      *
-     * Only the first, for a search: "LAUV/Troye Sivan" as a whole matches nothing, and the search
-     * ranks on the primary artist anyway. Whether a result is by this artist is a different
-     * question and is asked of the whole string - see byArtist.
+     * Used by the album fallback; song searches retain the complete credit, with individual
+     * artists searched separately through aliases. Album ownership still checks all credits.
      */
     static String firstArtist(String artist) {
-        int slash = artist.indexOf('/');
-        return (slash > 0 ? artist.substring(0, slash) : artist).trim();
+        if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) {
+            int slash = artist.indexOf('/');
+            return (slash > 0 ? artist.substring(0, slash) : artist).trim();
+        }
+        java.util.List<String> artists = LyricSearchAliases.splitArtists(artist);
+        return artists.isEmpty() ? "" : artists.get(0);
     }
 
     /** The songs out of a search response, matched - or null when the response holds none. */
@@ -856,26 +870,19 @@ final class NcmLyrics {
      * so the screen stayed empty; the copy 158ms from the session was a cover, and it would have
      * been shown had the ranking put it first. Another singer's name is not a near miss.
      *
-     * Compared with the latitude the titles get - everything that varies between catalogues
-     * removed, and either name containing the other - which is what lets a session's
-     * "LAUV/Troye Sivan" match a catalogue crediting only one of them.
-     *
-     * With nothing on either side to compare, the answer is yes: this can rule a candidate out,
-     * it cannot find one, and a player publishing no artist should not lose its lyrics to it.
+     * Use the same exact normalized artist tokens as song matching. A partial name or missing
+     * credit cannot prove an album belongs to this artist.
      */
     private static boolean byArtist(String wanted, org.json.JSONObject s) {
-        String want = norm(wanted);
+        if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) return byArtistOriginal(wanted, s);
         org.json.JSONArray ar = s.optJSONArray("artists");
-        if (want.isEmpty() || ar == null || ar.length() == 0) {
-            return true;
-        }
+        if (ar == null || ar.length() == 0) return false;
         for (int i = 0; i < ar.length(); i++) {
             org.json.JSONObject a = ar.optJSONObject(i);
             if (a == null) {
                 continue;
             }
-            String got = norm(str(a, "name"));
-            if (!got.isEmpty() && (got.contains(want) || want.contains(got))) {
+            if (LyricSearchAliases.artistsOverlap(folded(wanted), folded(str(a, "name")))) {
                 return true;
             }
         }
@@ -924,6 +931,7 @@ final class NcmLyrics {
      * is a better failure than every song with a character variant losing its lyrics.
      */
     static String folded(String s) {
+        if (s == null) return "";
         android.icu.text.Transliterator t = TRANSLIT;
         if (t == null) {
             return s;
@@ -1017,4 +1025,23 @@ final class NcmLyrics {
         }
         return sb.toString();
     }
+    private static boolean byArtistOriginal(String wanted, org.json.JSONObject s) {
+        String want = norm(wanted);
+        org.json.JSONArray ar = s.optJSONArray("artists");
+        if (want.isEmpty() || ar == null || ar.length() == 0) {
+            return true;
+        }
+        for (int i = 0; i < ar.length(); i++) {
+            org.json.JSONObject a = ar.optJSONObject(i);
+            if (a == null) {
+                continue;
+            }
+            String got = norm(str(a, "name"));
+            if (!got.isEmpty() && (got.contains(want) || want.contains(got))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

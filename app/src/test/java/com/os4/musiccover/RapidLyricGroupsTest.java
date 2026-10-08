@@ -74,4 +74,18 @@ public class RapidLyricGroupsTest {
         assertEquals(2401, timed.get(1).end);
         assertFalse(new RapidLyricGroups(new ArrayList<>()).grouped(0));
     }
+
+    @Test public void overlappingWordTimedLinesKeepTheOriginalLayout() {
+        List<LyricLine> timed = new ArrayList<>();
+        timed.add(new LyricLine("Run", null, 0, 1500, false,
+                new int[] {0}, new int[] {1500}, new int[] {3}));
+        timed.add(new LyricLine("Run", null, 500, 2000, false,
+                new int[] {500}, new int[] {2000}, new int[] {3}));
+        timed.add(new LyricLine("Runaway", null, 1000, 2500, false,
+                new int[] {1000}, new int[] {2500}, new int[] {7}));
+        timed.add(new LyricLine("Baby", null, 1500, 3000, false,
+                new int[] {1500}, new int[] {3000}, new int[] {4}));
+        RapidLyricGroups groups = new RapidLyricGroups(timed);
+        for (int i = 0; i < timed.size(); i++) assertFalse(groups.grouped(i));
+    }
 }

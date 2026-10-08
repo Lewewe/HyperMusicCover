@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +100,49 @@ final class LockLyrics {
      * than leaving a gap where it was.
      */
     static volatile boolean sTrans = true;
+    static final int TR_MODE_OFF = 0;
+    static final int TR_MODE_ORIGINAL_AND_TRANSLATION = 1;
+    // Translation-only is intentionally not used in this MVP: the renderer's karaoke timing and
+    // focus path are owned by the primary text, so this mode currently falls back to dual-line.
+    static final int TR_MODE_TRANSLATION_ONLY = 2;
+    static volatile int sOnlineTranslateMode = TR_MODE_OFF;
+    static volatile String sTranslateProvider = TranslationProvider.CUSTOM;
+    static volatile String sTranslateEndpoint = "";
+    static volatile String sTranslateApiKey = "";
+    static volatile String sTranslateSourceLang = "auto";
+    static volatile String sTranslateTargetLang = "en";
+    /** User-supplied Spicy Lyrics API key; never included in exported settings. */
+    static volatile String sSpicyLyricsApiKey = "";
+    static volatile boolean sSpicyLyricsEnabled = true;
+    private static volatile int sTranslateRevision;
+    /** Optional motion/effect level for lyric rendering; see AliveLyricsEffects constants. */
+    static volatile int sAliveFx = AliveLyricsEffects.OFF;
+    static volatile boolean sProviderQq = true;
+    static volatile boolean sProviderNetease = true;
+    static volatile boolean sProviderKuwo = true;
+    static volatile boolean sProviderKugou = true;
+    static volatile boolean sProviderLrcLib = true;
+    static volatile boolean sProviderVariants = true;
+    static final int SEARCH_ORIGINAL = 0, SEARCH_EXTENDED = 1;
+    static volatile int sSearchMode = SEARCH_ORIGINAL;
+
+    static boolean setSearchMode(int mode) {
+        int next = mode == SEARCH_EXTENDED ? SEARCH_EXTENDED : SEARCH_ORIGINAL;
+        if (sSearchMode == next) return false;
+        sSearchMode = next;
+        return true;
+    }
+
+    static void searchModeChanged() {
+        CACHE.clear();
+        unpark();
+        Main.main().removeCallbacks(SETTLED_LOOKUP);
+        if (sDemo || !sEnabled || sKey.isEmpty() || sController == null) return;
+        sInfoSeen = LyricSource.infoFor(sController);
+        sInfoTries = 0;
+        // Keep the current lyrics visible while the selected strategy reads them again.
+        lookup(sKey, sController, true);
+    }
     /**
      * The fifth: whether a line's romanisation is drawn under it, over the translation. Off by
      * default and apart from the translation's switch - either can be shown alone (#64). Like
@@ -109,6 +153,84 @@ final class LockLyrics {
     static volatile boolean sRapidGroups = false;
     /** The two switches together, as LyricLine.under() and the layout read them. */
     static final int BELOW_TRANS = 1, BELOW_ROMA = 2;
+
+    static boolean setTranslateConfig(String provider, String endpoint, String apiKey,
+                                      String sourceLang, String targetLang, int mode) {
+        String backend = TranslationProvider.normalize(provider);
+        String ep = endpoint == null ? "" : endpoint.trim();
+        String key = apiKey == null ? "" : apiKey.trim();
+        String src = sourceLang == null ? "auto" : sourceLang.trim();
+        String dst = targetLang == null ? "en" : targetLang.trim();
+        if (src.isEmpty()) src = "auto";
+        if (dst.isEmpty()) dst = "en";
+        int nextMode = mode <= TR_MODE_OFF ? TR_MODE_OFF : TR_MODE_ORIGINAL_AND_TRANSLATION;
+        boolean changed = !backend.equals(sTranslateProvider)
+                || !ep.equals(sTranslateEndpoint) || !key.equals(sTranslateApiKey)
+                || !src.equals(sTranslateSourceLang) || !dst.equals(sTranslateTargetLang)
+                || nextMode != sOnlineTranslateMode;
+        sTranslateProvider = backend;
+        sTranslateEndpoint = ep;
+        sTranslateApiKey = key;
+        sTranslateSourceLang = src;
+        sTranslateTargetLang = dst;
+        sOnlineTranslateMode = nextMode;
+        if (changed) sTranslateRevision++;
+        return changed;
+    }
+
+    private static LyricTranslator.Config translationConfig() {
+        return new LyricTranslator.Config(sTranslateProvider, sTranslateEndpoint, sTranslateApiKey,
+                sTranslateSourceLang, sTranslateTargetLang, sOnlineTranslateMode);
+    }
+
+    static void translationConfigChanged() {
+        if (sDemo || sKey.isEmpty()) return;
+        Cached nativeLyrics = CACHE.get(sKey);
+        if (nativeLyrics == null) return;
+        setLines(nativeLyrics.lines, "translation settings changed");
+        translateAsync(sKey, nativeLyrics.lines, sGen);
+    }
+
+    private static void translateAsync(final String key, final List<LyricLine> lines,
+                                       final int generation) {
+        if (lines == null || lines.isEmpty()) return;
+        final LyricTranslator.Config cfg = translationConfig();
+        if (!cfg.enabled()) return;
+        final int revision = sTranslateRevision;
+        final List<LyricLine> displayedBase = sLines;
+        final List<LyricLine> base = new ArrayList<>(lines);
+        TranslationProvider.translator(cfg.provider).translate(key, base, cfg,
+                new LyricTranslator.Callback() {
+                    @Override
+                    public boolean isCurrent() {
+                        return revision == sTranslateRevision && generation == sGen
+                                && key.equals(sKey) && sLines == displayedBase
+                                && !sDemo && cfg.sameSettings(translationConfig());
+                    }
+
+                    @Override
+                    public void onTranslated(String cacheKey, final List<LyricLine> merged,
+                                             boolean fromCache) {
+                        if (merged == null || merged.isEmpty()) return;
+                        Main.main().post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (generation != sGen || !key.equals(sKey) || sDemo
+                                        || revision != sTranslateRevision
+                                        || sLines != displayedBase
+                                        || !cfg.sameSettings(translationConfig())) return;
+                                setLines(merged, fromCache ? "cached + online translation"
+                                        : "online translation");
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onFailed(String why) {
+                        Xp.log(TAG + "online translation failed: " + why);
+                    }
+                });
+    }
 
     static int below() {
         return (sTrans ? BELOW_TRANS : 0) | (sRoma ? BELOW_ROMA : 0);
@@ -146,6 +268,32 @@ final class LockLyrics {
         sStyle = next;
         LyricView view = sView;
         if (view != null) view.kick();
+        return true;
+    }
+
+    static boolean setAliveFx(int mode) {
+        int next = AliveLyricsEffects.clampMode(mode);
+        if (next == sAliveFx) return false;
+        sAliveFx = next;
+        LyricView view = sView;
+        if (!AliveLyricsEffects.enabled(next)) {
+            if (view != null) view.kick();
+        } else if (view != null) {
+            view.kick();
+        }
+        if (sStill) {
+            cancelStillWake();
+            scheduleStillWake();
+        }
+        return true;
+    }
+
+    static boolean setTranslateMode(int mode) {
+        int m = mode <= TR_MODE_OFF ? TR_MODE_OFF : mode;
+        if (m == TR_MODE_TRANSLATION_ONLY) m = TR_MODE_ORIGINAL_AND_TRANSLATION;
+        if (m > TR_MODE_ORIGINAL_AND_TRANSLATION) m = TR_MODE_ORIGINAL_AND_TRANSLATION;
+        if (sOnlineTranslateMode == m) return false;
+        sOnlineTranslateMode = m;
         return true;
     }
 
@@ -832,6 +980,14 @@ final class LockLyrics {
         return pos < 0 ? 0 : (int) Math.min(pos, Integer.MAX_VALUE);
     }
 
+    static String activePlayerPackage() {
+        if (sDemo) return "";
+        MediaController controller = sController;
+        if (controller == null) return "";
+        String pkg = controller.getPackageName();
+        return pkg == null ? "" : pkg;
+    }
+
     static boolean playing() {
         if (sDemo) return true;
         PlaybackState s = sState;
@@ -900,6 +1056,7 @@ final class LockLyrics {
             sLoading = false;
             sSource = hit.source;
             setLines(hit.lines, "cached");
+            translateAsync(key, hit.lines, sGen);
             return;
         }
         // What the lookup about to start will read the session as, so a payload that turns up
@@ -955,6 +1112,7 @@ final class LockLyrics {
                 sLoading = false;
                 sSource = hit.source;
                 setLines(hit.lines, "cached");
+                translateAsync(key, hit.lines, sGen);
                 return;
             }
             sInfoSeen = LyricSource.infoFor(c);
@@ -1005,6 +1163,7 @@ final class LockLyrics {
 
     /** How many times one song may be re-read because the session published something new. */
     private static final int MAX_INFO_TRIES = 3;
+    private static final long LOOKUP_TIMEOUT_MS = 25000L;
     /** The payload the lookup for sKey was started against, so the next one can be recognised. */
     private static String sInfoSeen;
     /** How much of MAX_INFO_TRIES this song has spent. */
@@ -1022,6 +1181,8 @@ final class LockLyrics {
     private static void lookup(final String want, MediaController c, final boolean keepCurrent) {
         final int gen = ++sGen;
         sLoading = true;
+        Main.main().removeCallbacks(LOOKUP_WATCHDOG);
+        Main.main().postDelayed(LOOKUP_WATCHDOG, LOOKUP_TIMEOUT_MS);
         LyricSource.load(c, new LyricSource.Callback() {
             @Override
             public void onLines(List<LyricLine> lines, String why, int source) {
@@ -1029,6 +1190,7 @@ final class LockLyrics {
                     Xp.log(TAG + "lyrics for " + want + " arrived after the track changed");
                     return;
                 }
+                Main.main().removeCallbacks(LOOKUP_WATCHDOG);
                 Parked parked = sParked;
                 if (parked != null && parked.rereading) {
                     // The re-read the parked answer was waiting for. Whatever it found goes up in
@@ -1070,6 +1232,7 @@ final class LockLyrics {
 
     /** Puts a lookup's answer up: the one place lines found for `want` reach the screen. */
     private static void settle(String want, List<LyricLine> lines, String why, int source) {
+        Main.main().removeCallbacks(LOOKUP_WATCHDOG);
         sLoading = false;
         sSource = source;
         // What the LAST lookup found, not what any lookup ever found.
@@ -1097,9 +1260,26 @@ final class LockLyrics {
         if (source == LyricSource.SRC_LYRIC_INFO) sSessionPkg = pkgOf(want);
         if (!lines.isEmpty()) CACHE.put(want, new Cached(lines, source));
         setLines(lines, why);
+        translateAsync(want, lines, sGen);
         // A payload that turned up while this was looking. See rereadIfNewPayload().
         rereadIfNewPayload(want, sController);
     }
+
+    /**
+     * A network lookup is allowed to outlive its result, but never the cover transition.
+     * Individual providers have their own budgets; this is the final guard for a worker or
+     * callback that gets stuck outside those budgets.
+     */
+    private static final Runnable LOOKUP_WATCHDOG = new Runnable() {
+        @Override
+        public void run() {
+            if (!sLoading || sKey.isEmpty() || sDemo) return;
+            sLoading = false;
+            Xp.log(TAG + "lyric lookup watchdog released the cover after "
+                    + LOOKUP_TIMEOUT_MS + "ms");
+            refresh();
+        }
+    };
 
     /*
      * Waiting for the session's lyric instead of swapping to it.
@@ -1444,6 +1624,8 @@ final class LockLyrics {
                 return "kuwo";
             case LyricSource.SRC_HUB:
                 return "ttmlhub";
+            case LyricSource.SRC_SPICY:
+                return "spicy_lyrics";
             default:
                 return "none";
         }
@@ -1457,6 +1639,7 @@ final class LockLyrics {
                 + " demo=" + sDemo + " key=" + sKey + " lines=" + sLines.size()
                 + " has=" + hasLyrics() + " loading=" + sLoading
                 + " (" + sWhy + ") src=" + srcName(sSource)
+                + " compact=" + compactWithoutLyrics()
                 + " sessionHasLyric=" + LyricSource.hasLyricInfo(sController)
                 + " pos=" + positionMs() + " playing=" + playing()
                 + " cover=" + Main.coverModeOn() + " screen=" + Main.screenOnCached()
@@ -1486,6 +1669,35 @@ final class LockLyrics {
                 + " hooks=" + hooks()
                 + " " + LyricWindow.describe()
                 + " view={" + (v == null ? "none" : v.describe()) + "}";
+    }
+
+    /** Bounded parsed-lyric dump for diagnosing provider timing and character mapping. */
+    static String dumpLines(int from, int count) {
+        int start = Math.max(0, from);
+        int end = Math.min(sLines.size(), start + Math.max(1, Math.min(count, 20)));
+        StringBuilder out = new StringBuilder(256);
+        out.append("source=").append(srcName(sSource))
+                .append(" total=").append(sLines.size())
+                .append(" range=").append(start).append("..").append(end).append('\n');
+        for (int i = start; i < end; i++) {
+            LyricLine line = sLines.get(i);
+            out.append('#').append(i)
+                    .append(" [").append(line.start).append(',').append(line.end).append("] ")
+                    .append('{').append(line.text).append('}')
+                    .append(" starts=").append(java.util.Arrays.toString(line.sylStart))
+                    .append(" ends=").append(java.util.Arrays.toString(line.sylEnd))
+                    .append(" chars=").append(java.util.Arrays.toString(line.charEnd));
+            if (line.bg != null) {
+                out.append(" bg=[")
+                        .append(line.bg.start).append(',').append(line.bg.end).append("] {")
+                        .append(line.bg.text).append('}')
+                        .append(" starts=").append(java.util.Arrays.toString(line.bg.sylStart))
+                        .append(" ends=").append(java.util.Arrays.toString(line.bg.sylEnd))
+                        .append(" chars=").append(java.util.Arrays.toString(line.bg.charEnd));
+            }
+            out.append('\n');
+        }
+        return out.toString();
     }
 
     /**
@@ -1603,10 +1815,9 @@ final class LockLyrics {
             updateHdr();
             updateStill();
             if (sStill) {
-                // The alarm draws in the still mode, and only the alarm: a frame from here is
-                // drawn with the display held down, where it never reaches the panel - and
-                // re-arming from here moved the alarm on to the next line before it could fire,
-                // so every line was drawn that way (measured: one draw lock in a whole song).
+                // The AOD alarm owns still-mode redraws. It acquires the draw wake lock and
+                // advances word-timed lyrics before releasing it; a Handler tick cannot do that
+                // reliably while the panel is in DOZE_SUSPEND.
                 if (!sStillWakeSet && !sLines.isEmpty()) {
                     readState(false);
                     scheduleStillWake();
@@ -1628,8 +1839,9 @@ final class LockLyrics {
     // ------------------------------------------------------------------ the AOD's still mode
 
     /**
-     * The full-screen AOD has put the panel into its low-power still mode, and the lyrics are
-     * drawn the way that mode allows: one settled picture per line, cut to, nothing animated.
+     * The full-screen AOD has put the panel into its low-power still mode. Normal lyric modes draw
+     * one settled picture at a time; Eye-candy may request throttled karaoke-step redraws, never a
+     * continuous animation loop.
      *
      * How the AOD refreshes, read off com.miui.aod (DozeMachine.State.screenState and
      * DozeScreenState): the doze starts with the display ON for about 6s, then the plugin asks for
@@ -1719,7 +1931,7 @@ final class LockLyrics {
         return s == android.view.Display.STATE_DOZE || s == android.view.Display.STATE_DOZE_SUSPEND;
     }
 
-    /** Whether the lyrics are in the AOD's still mode. The view settles instead of animating. */
+    /** Whether AOD still mode is active; the view uses scheduled redraws instead of a frame loop. */
     static boolean still() {
         return sStill;
     }
@@ -1896,7 +2108,7 @@ final class LockLyrics {
         }
     };
 
-    /** A wake at the next moment the stack moves, or none if it will not. See STILL_WAKE. */
+    /** A wake at the next line/dot move or Eye-candy karaoke step. See STILL_WAKE. */
     private static void scheduleStillWake() {
         LyricView v = sView;
         if (!sStill || sStillOff || v == null || sLines.isEmpty() || !playing()
