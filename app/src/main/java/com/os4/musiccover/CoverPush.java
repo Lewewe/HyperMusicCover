@@ -53,7 +53,7 @@ final class CoverPush {
             sThumbJpg = jpg;
             return jpg;
         } catch (Throwable t) {
-            Xp.log(Main.TAG + "art thumbnail failed: " + t);
+            Xp.w(Main.TAG + "art thumbnail failed: " + t);
             return null;
         }
     }
@@ -233,7 +233,7 @@ final class CoverPush {
                 src = CoverCompose.prepareSource(art, w);
                 shared = writeSharedSource(src, w, h, Main.sBias);
             } catch (Throwable t) {
-                Xp.log(Main.TAG + "source hand-over failed, sending the composed JPEG instead: " + t);
+                Xp.w(Main.TAG + "source hand-over failed, sending the composed JPEG instead: " + t);
             } finally {
                 android.os.Trace.endSection();
             }
@@ -265,7 +265,7 @@ final class CoverPush {
                     try {
                         full = composeWallpaper(src, w, h, Main.sBias);
                     } catch (Throwable t) {
-                        Xp.log(Main.TAG + "composeWallpaper failed after the hand-over: " + t);
+                        Xp.w(Main.TAG + "composeWallpaper failed after the hand-over: " + t);
                         return;
                     } finally {
                         android.os.Trace.endSection();
@@ -313,7 +313,7 @@ final class CoverPush {
             // took SystemUI down with it. The shade's copy is what raises the steady-state
             // heap, which narrows the window rather than creating it; catching is cheap next
             // to a dead process, and the cost of catching is one track without a cover.
-            Xp.log(Main.TAG + "composeWallpaper failed, no cover this round: " + t);
+            Xp.w(Main.TAG + "composeWallpaper failed, no cover this round: " + t);
             return;
         }
         Main.measureCover(full);
@@ -325,7 +325,7 @@ final class CoverPush {
             try {
                 frosted = frostTask.get();
             } catch (Throwable t) {
-                Xp.log(Main.TAG + "frosted video cover failed: " + t);
+                Xp.w(Main.TAG + "frosted video cover failed: " + t);
             }
             showVideoCover(ctx, true, full, frosted, artPrint(art), gen, key);
         }
@@ -507,7 +507,7 @@ final class CoverPush {
                             + (wantBlur ? " (frosted)" : " (sharp)")
                             + ", fade " + (sCoverFadeWaitMs > 0 ? "owed" : "not owed"));
                 } catch (Throwable t) {
-                    Xp.log(Main.TAG + "video cover failed: " + Log.getStackTraceString(t));
+                    Xp.w(Main.TAG + "video cover failed: " + Log.getStackTraceString(t));
                 }
             }
         });
@@ -546,7 +546,7 @@ final class CoverPush {
                                     }
                                 });
                             } catch (Throwable t) {
-                                Xp.log(Main.TAG + "generate frosted on demand failed: " + t);
+                                Xp.w(Main.TAG + "generate frosted on demand failed: " + t);
                             }
                         }
                     }, "mc-cover-blur").start();
@@ -578,7 +578,7 @@ final class CoverPush {
             Xp.log(Main.TAG + "video cover crossfading to " + (blur ? "blurred" : "sharp")
                     + " over " + dur + "ms");
         } catch (Throwable t) {
-            Xp.log(Main.TAG + "video cover blur crossfade failed: " + t);
+            Xp.w(Main.TAG + "video cover blur crossfade failed: " + t);
             iv.setImageBitmap(to);
         }
     }
@@ -1440,7 +1440,7 @@ final class CoverPush {
             if (!tmp.renameTo(f)) throw new java.io.IOException("rename " + tmp + " -> " + f);
             return f.getAbsolutePath();
         } catch (Throwable t) {
-            Xp.log(Main.TAG + "shared art write failed, carrying it in the broadcast: " + t);
+            Xp.w(Main.TAG + "shared art write failed, carrying it in the broadcast: " + t);
             return null;
         }
     }
@@ -2312,7 +2312,7 @@ final class CoverPush {
             sWallpaperDiag = report;
             Xp.log(Main.TAG + "[diag] wallpaper (" + why + ")\n  " + report);
         } catch (Throwable t) {
-            Xp.log(Main.TAG + "[diag] wallpaper report failed: " + t);
+            Xp.w(Main.TAG + "[diag] wallpaper report failed: " + t);
         }
     }
 
@@ -2380,7 +2380,7 @@ final class CoverPush {
                 }
             }
         } catch (Throwable t) {
-            Xp.log(Main.TAG + "reading the home wallpaper file failed: " + t);
+            Xp.w(Main.TAG + "reading the home wallpaper file failed: " + t);
         }
         // A live or default home wallpaper has no file; render whatever is showing instead.
         try {
@@ -2435,7 +2435,7 @@ final class CoverPush {
             wm.clear(android.app.WallpaperManager.FLAG_LOCK);
             Xp.log(Main.TAG + "lock wallpaper cleared, back to following the home one");
         } catch (Throwable t) {
-            Xp.log(Main.TAG + "clearLockWallpaper failed: " + t);
+            Xp.w(Main.TAG + "clearLockWallpaper failed: " + t);
         }
     }
 

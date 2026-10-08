@@ -166,7 +166,7 @@ final class Prefetch {
                     fetchAround();
                     warmLyricAhead();
                 } catch (Throwable t) {
-                    Xp.log(TAG + "queue read failed: " + t);
+                    Xp.w(TAG + "queue read failed: " + t);
                 }
             }
         });
@@ -496,7 +496,7 @@ final class Prefetch {
                     LyricSource.warm(it.mediaId, dir, byName ? it.title : null,
                             byName ? it.artist : null);
                 } catch (Throwable t) {
-                    Xp.log(TAG + "reading ahead failed: " + t);
+                    Xp.w(TAG + "reading ahead failed: " + t);
                 }
             }
         });

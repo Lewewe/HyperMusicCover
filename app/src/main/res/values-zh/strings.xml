@@ -175,6 +175,7 @@
     <string name="update_close">关闭</string>
     <string name="update_failed">更新失败：%1$s</string>
     <string name="update_status_title">更新</string>
+    <string name="update_saved_to_downloads">没有应用能直接打开安装包，已保存到「下载/%1$s」，请在文件管理器里安装</string>
     <string name="update_no_installer">没有找到可以安装 APK 的应用，请在文件管理器里手动安装</string>
     <string name="update_confirm">更新</string>
     <string name="update_not_ours">更新包的签名不是本项目的，已丢弃</string>
@@ -236,4 +237,12 @@
     <string name="lyrics_groups_summary">将快速切换的歌词分组显示，每组最多四行，让每一句都更从容易读。</string>
     <string name="mini_status_at_date">状态显示在日期后面</string>
     <string name="mini_status_at_date_summary">勿扰、充电等锁屏底部的常驻状态改到日期后面显示，不被胶囊挡住；指纹等临时提示仍在底部</string>
+    <string name="settings_debug">调试</string>
+    <string name="log_level">日志等级</string>
+    <string name="log_level_summary">反馈问题前切到「详细」，再复现一次</string>
+    <string name="log_level_normal">普通</string>
+    <string name="log_level_verbose">详细</string>
+    <string name="restart_confirm_summary">确认重启吗？</string>
+    <string name="home_stale_title">模块已更新</string>
+    <string name="home_stale_summary">%1$d 个进程还在运行旧版本，点按重启生效</string>
 </resources>

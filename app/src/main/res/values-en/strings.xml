@@ -22,6 +22,7 @@
     <string name="restart_menu">Restart</string>
     <string name="restart_systemui">Restart System UI</string>
     <string name="restart_wallpaper">Restart wallpaper</string>
+    <string name="restart_confirm_summary">Restart now?</string>
 
     <string name="tab_home">Home</string>
     <string name="tab_settings">Settings</string>
@@ -53,6 +54,11 @@
     <string name="export_settings_summary">Save current settings as JSON file</string>
     <string name="import_settings">Import Settings</string>
     <string name="import_settings_summary">Import settings from JSON file</string>
+    <string name="settings_debug">Debugging</string>
+    <string name="log_level">Log level</string>
+    <string name="log_level_summary">Switch to Verbose and reproduce the problem before reporting it</string>
+    <string name="log_level_normal">Normal</string>
+    <string name="log_level_verbose">Verbose</string>
     <string name="import_success">Import successful, restarting app</string>
     <string name="import_failed">Import failed, invalid file format</string>
     <string name="export_success">Export successful</string>
@@ -101,6 +107,8 @@
     <string name="home_status_active">Module active</string>
     <string name="home_status_inactive">Module not active</string>
     <string name="home_status_inactive_hint">Enable it in LSPosed and restart System UI</string>
+    <string name="home_stale_title">Module updated</string>
+    <string name="home_stale_summary">%1$d processes are still running the old version. Tap to restart them</string>
     <string name="home_device_name">Device name</string>
     <string name="home_device_model">Model</string>
     <string name="home_hyperos_version">HyperOS</string>
@@ -171,6 +179,7 @@
     <string name="update_failed">Update failed: %1$s</string>
     <string name="update_status_title">Update</string>
     <string name="update_no_installer">No app on this device can install an APK - install it from a file manager</string>
+    <string name="update_saved_to_downloads">Nothing could open the package, so it was saved as Download/%1$s - install it from a file manager</string>
     <string name="update_confirm">Update</string>
     <string name="update_not_ours">The download was not signed by this project; discarded</string>
     <string name="update_latest">Already on the latest version</string>

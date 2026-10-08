@@ -170,6 +170,7 @@
     <string name="update_close">Close</string>
     <string name="update_failed">Update failed: %1$s</string>
     <string name="update_status_title">Update</string>
+    <string name="update_saved_to_downloads">Nothing could open the package, so it was saved as Download/%1$s - install it from a file manager</string>
     <string name="update_no_installer">No app on this device can install an APK - install it from a file manager</string>
     <string name="update_confirm">Update</string>
     <string name="update_not_ours">The download was not signed by this project; discarded</string>
@@ -228,4 +229,12 @@
     <string name="demo_island_stack_title">The stack island</string>
     <string name="mini_status_at_date">Status beside the date</string>
     <string name="mini_status_at_date_summary">Move Do Not Disturb and charging status beside the date. Temporary hints stay at the bottom.</string>
+    <string name="settings_debug">Debugging</string>
+    <string name="log_level">Log level</string>
+    <string name="log_level_summary">Switch to Verbose and reproduce the problem before reporting it</string>
+    <string name="log_level_normal">Normal</string>
+    <string name="log_level_verbose">Verbose</string>
+    <string name="restart_confirm_summary">Restart now?</string>
+    <string name="home_stale_title">Module updated</string>
+    <string name="home_stale_summary">%1$d processes are still running the old version. Tap to restart them</string>
 </resources>

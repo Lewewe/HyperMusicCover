@@ -1815,7 +1815,7 @@ final class ClockCollapse {
             try {
                 frame();
             } catch (Throwable t) {
-                Xp.log(TAG + "clock: frame failed: " + t);
+                Xp.w(TAG + "clock: frame failed: " + t);
             }
             if (sFrame != null) {
                 long d = System.nanoTime() - t0;
@@ -1871,7 +1871,7 @@ final class ClockCollapse {
         try {
             frame();
         } catch (Throwable t) {
-            Xp.log(TAG + "clock: re-place failed: " + t);
+            Xp.w(TAG + "clock: re-place failed: " + t);
         } finally {
             sRedoing = false;
         }

@@ -76,7 +76,7 @@ internal object AmapImmerse {
                 out
             }
         } catch (t: Throwable) {
-            Xp.log(TAG + "application hook failed: " + t)
+            Xp.w(TAG + "application hook failed: " + t)
         }
         try {
             val module = Xp.findClass(MODULE, cl)
@@ -113,11 +113,11 @@ internal object AmapImmerse {
                         chain.proceed()
                     }
                 } catch (t: Throwable) {
-                    Xp.log(TAG + name + " hook failed: " + t)
+                    Xp.w(TAG + name + " hook failed: " + t)
                 }
             }
         } catch (t: Throwable) {
-            Xp.log(TAG + "immerse module hooks failed: " + t)
+            Xp.w(TAG + "immerse module hooks failed: " + t)
         }
         try {
             // The service's sendPreviewCommandToAjx: the one static (boolean) method on it.
@@ -135,7 +135,7 @@ internal object AmapImmerse {
             }
             if (preview.isEmpty()) Xp.log(TAG + "no sendPreviewCommandToAjx on " + SERVICE)
         } catch (t: Throwable) {
-            Xp.log(TAG + "service hooks failed: " + t)
+            Xp.w(TAG + "service hooks failed: " + t)
         }
     }
 
@@ -156,7 +156,7 @@ internal object AmapImmerse {
                 .putExtra("src", "amap"))
             Xp.log(TAG + "told SystemUI " + (if (on) "arm" else "disarm"))
         } catch (t: Throwable) {
-            Xp.log(TAG + "tell failed: " + t)
+            Xp.w(TAG + "tell failed: " + t)
         }
     }
 

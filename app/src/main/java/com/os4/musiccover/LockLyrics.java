@@ -1238,7 +1238,7 @@ final class LockLyrics {
             startTick();
             watch();
         } catch (Throwable t) {
-            Xp.log(TAG + "attach failed: " + Log.getStackTraceString(t));
+            Xp.w(TAG + "attach failed: " + Log.getStackTraceString(t));
         }
     }
 
@@ -1798,7 +1798,7 @@ final class LockLyrics {
             }, Main.main());
             sDisplayWatched = true;
         } catch (Throwable t) {
-            Xp.log(TAG + "display listener failed: " + t);
+            Xp.w(TAG + "display listener failed: " + t);
         }
     }
 
@@ -1839,7 +1839,7 @@ final class LockLyrics {
             sDrawLock.acquire(STILL_LOCK_MAX_MS);
             noteStill("acq");
         } catch (Throwable t) {
-            Xp.log(TAG + "draw wake lock failed: " + t);
+            Xp.w(TAG + "draw wake lock failed: " + t);
         }
         readState(true);
         sStillDrawnUp = false;
@@ -1924,7 +1924,7 @@ final class LockLyrics {
                     Main.main());
             sStillWakeSet = true;
         } catch (Throwable t) {
-            Xp.log(TAG + "still wake failed: " + t);
+            Xp.w(TAG + "still wake failed: " + t);
         }
     }
 
