@@ -952,31 +952,42 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
      * two shapes read as two different pictures (2026-09-28). A bare one (a focus template's,
      * already round where LockIslands.roundIcon left it) is that size already and is not cut.
      */
+    private var compactScale = 1f
+
+    /** Scale the pill content with its actual frame rather than changing shortcut buttons. */
+    fun setCompactScale(scale: Float) {
+        if (kotlin.math.abs(compactScale - scale) < 0.001f) return
+        compactScale = scale.coerceIn(0.7f, 1f)
+        title.textSize = 12.8f * compactScale
+        artist.textSize = 12f * compactScale
+        updateGeometry(lastHeightRadiusDp)
+    }
+
     private fun updateGeometry(heightRadiusDp: Float) {
         lastHeightRadiusDp = heightRadiusDp
-        val height = dp(heightRadiusDp * 2f).coerceAtLeast(dp(48))
-        val verticalPadding = max(dp(7), height / 9)
-        val artworkSize = (height * ShortcutDisc.ICON_SHARE).toInt().coerceAtLeast(dp(24))
-        val horizontalPadding = max(dp(10), height / 7)
+        val height = (dp(heightRadiusDp * 2f).coerceAtLeast(dp(48)) * compactScale).roundToInt()
+        val verticalPadding = max(dp(7f * compactScale), height / 9)
+        val artworkSize = (height * ShortcutDisc.ICON_SHARE).toInt().coerceAtLeast(dp(24f * compactScale))
+        val horizontalPadding = max(dp(10f * compactScale), height / 7)
         slot.layoutParams = LayoutParams(artworkSize, artworkSize, Gravity.CENTER_VERTICAL).apply {
             leftMargin = horizontalPadding
         }
-        val toggleSize = dp(40).coerceAtMost((height - verticalPadding * 2).coerceAtLeast(dp(34)))
+        val toggleSize = dp(40f * compactScale).coerceAtMost((height - verticalPadding * 2).coerceAtLeast(dp(34f * compactScale)))
         val toggleW = max(toggleSize, toggleWidePx)
         val toggle2W = max(toggleSize, toggle2WidePx)
         toggle.layoutParams = LayoutParams(toggleW, toggleSize, Gravity.CENTER_VERTICAL or Gravity.END).apply {
-            rightMargin = max(dp(8), verticalPadding)
+            rightMargin = max(dp(8f * compactScale), verticalPadding)
         }
         // The second button's own width: what the text gives up for it as it comes in.
         toggleSizePx = toggle2W
         // Two shells side by side, as the row sets them (2026-09-25: 6dp read as too far apart).
         toggleGapPx = dp(FACE_GAP_DP)
         toggle2.layoutParams = LayoutParams(toggle2W, toggleSize, Gravity.CENTER_VERTICAL or Gravity.END).apply {
-            rightMargin = max(dp(8), verticalPadding) + toggleW + toggleGapPx
+            rightMargin = max(dp(8f * compactScale), verticalPadding) + toggleW + toggleGapPx
         }
-        textRightBase = if (toggleShown) toggleW + max(dp(10), verticalPadding) else horizontalPadding
+        textRightBase = if (toggleShown) toggleW + max(dp(10f * compactScale), verticalPadding) else horizontalPadding
         textColumn.layoutParams = LayoutParams(-1, -1, Gravity.CENTER_VERTICAL).apply {
-            leftMargin = horizontalPadding + artworkSize + max(dp(10), height / 8)
+            leftMargin = horizontalPadding + artworkSize + max(dp(10f * compactScale), height / 8)
             rightMargin = textRightBase + ((toggle2W + toggleGapPx) * secondShown).toInt()
         }
         val radius = artworkSize / 2f

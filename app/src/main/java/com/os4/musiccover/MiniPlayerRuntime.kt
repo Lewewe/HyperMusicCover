@@ -220,7 +220,26 @@ object MiniPlayerRuntime {
         return fodRead
     }
 
-    private fun readFingerprintArea(context: Context): android.graphics.Rect? {
+    private var fingerprintPlacementReadAt = 0L
+    private var fingerprintPlacement: android.graphics.Rect? = null
+
+    @JvmStatic fun notificationCompactingAvailable(context: Context): Boolean {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (fingerprintPlacementReadAt == 0L || now - fingerprintPlacementReadAt >= 5000L) {
+            fingerprintPlacementReadAt = now
+            fingerprintPlacement = runCatching { readFingerprintArea(context, false) }.getOrNull()
+        }
+        val area = fingerprintPlacement ?: return false
+        val high = live().firstNotNullOfOrNull { it.highFingerprint(area) } ?: run {
+            // Before a controller is laid out, use the normal row's bottom-screen placement.
+            val rowTop = context.resources.displayMetrics.heightPixels -
+                80f * context.resources.displayMetrics.density
+            NotificationPillPolicy.highSensor(area.bottom.toFloat(), rowTop)
+        }
+        return !high
+    }
+
+    private fun readFingerprintArea(context: Context, requireEnrolled: Boolean = true): android.graphics.Rect? {
         val props = Class.forName(listOf("android", "os", "SystemProperties").joinToString("."))
         val fod = props.getMethod("getBoolean", String::class.java, Boolean::class.javaPrimitiveType)
             .invoke(null, "ro.hardware.fp.fod", false) as Boolean
@@ -231,7 +250,7 @@ object MiniPlayerRuntime {
             context.getSystemService("fingerprint")
                 ?.let { Xp.callMethod(it, "hasEnrolledFingerprints") as Boolean }
         }.getOrNull() ?: true
-        if (!enrolled) return null
+        if (requireEnrolled && !enrolled) return null
         val utils = Xp.findClass("com.miui.keyguard.biometrics.fod.MiuiGxzwUtils",
             loader ?: context.classLoader)
         val rect = utils.getMethod("getFodPosition", Context::class.java)
@@ -8258,6 +8277,8 @@ private class MiniPlayerController(
     }
 
     fun destroy() {
+        compactAnimator?.cancel()
+        compactAnimator = null
         destroyed = true
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
         runCatching { host.viewTreeObserver.removeOnPreDrawListener(preDraw) }
@@ -10159,9 +10180,9 @@ private class MiniPlayerController(
         val config = this.config
         val requestedWidth = dp(config.getDouble(MiniPlayerConfig.WIDTH).toFloat())
         val height = dp(MiniPlayerConfig.visibleHeightDp(config.toString()))
-        val centerY = clearOfFingerprint(rowCentreY(l, r, height), height, l, r)
+        val centerY = rowCentreY(l, r, height)
         if ((l == null || r == null) && config.optBoolean(MiniPlayerConfig.ADAPTIVE_WIDTH)) {
-            widenedRest(l, r, small, height, centerY)?.let { return it }
+            widenedRest(l, r, small, height, centerY)?.let { return compactRest(it) }
         }
         // Clear of the discs, a circle as tall as the pill on each button. Laid out rather than
         // shown: the buttons are put away in the doze, and the pill must not widen for it.
@@ -10179,7 +10200,7 @@ private class MiniPlayerController(
                 MiniPlayerGeometry.widthPx(host.width, host.width, centerX, dp(12f)),
                 centerX, l?.get(0), r?.get(0), height.toFloat(), gap.toFloat(), 0),
             height, gap, dp(MiniPlayerGeometry.MIN_PILL_DP))
-        return PillRest(pillWidth, height, centerX, centerY)
+        return compactRest(PillRest(pillWidth, height, centerX, centerY))
     }
 
     /**
@@ -10223,33 +10244,6 @@ private class MiniPlayerController(
         return (host.height - inset - dp(12f) - height / 2f).coerceAtLeast(height / 2f)
     }
 
-    /**
-     * The row's centre moved up off the fingerprint sensor where the two would meet
-     * (MiniPlayerRuntime.fingerprintArea, #66); the torch and camera stay where they are. Only
-     * the span between the buttons counts across: the row never reaches past them. Under a
-     * switch (MiniPlayerConfig.FOD_LIFT); off, the row stays put and only the touches that start
-     * on the sensor are still left to it.
-     */
-    private fun clearOfFingerprint(centerY: Float, height: Int, l: FloatArray?, r: FloatArray?): Float {
-        if (!config.optBoolean(MiniPlayerConfig.FOD_LIFT, true)) return centerY
-        val fod = fingerprintInHost() ?: return centerY
-        val from = l?.get(0) ?: 0f
-        val to = r?.get(0) ?: host.width.toFloat()
-        if (fod.right <= from || fod.left >= to) return centerY
-        val margin = dp(FOD_MARGIN_DP)
-        val top = centerY - height / 2f
-        val bottom = centerY + height / 2f
-        if (bottom + margin <= fod.top || top - margin >= fod.bottom) return centerY
-        val lifted = fod.top - margin - height / 2f
-        if (lifted != fodLiftedTo) {
-            fodLiftedTo = lifted
-            Xp.log("MCMini: row lifted off the fingerprint sensor $fod: centre $centerY -> $lifted")
-        }
-        return min(centerY, lifted)
-    }
-
-    private var fodLiftedTo = Float.NaN
-
     /** The sensor in the host's coordinates, or null. */
     private fun fingerprintInHost(): android.graphics.Rect? {
         val fod = MiniPlayerRuntime.fingerprintArea(context) ?: return null
@@ -10257,12 +10251,27 @@ private class MiniPlayerController(
         return android.graphics.Rect(fod).apply { offset(-at[0], -at[1]) }
     }
 
+    /** Compare the physical sensor with the unmodified pill row, independent of enrollment. */
+    fun highFingerprint(area: android.graphics.Rect): Boolean? {
+        if (host.width <= 0 || host.height <= 0) return null
+        val l = if (placesRow(left)) restCentre(left) else null
+        val r = if (placesRow(right)) restCentre(right) else null
+        val height = dp(MiniPlayerConfig.visibleHeightDp(config.toString()))
+        val rowTop = rowCentreY(l, r, height) - height / 2f +
+            IntArray(2).also(host::getLocationOnScreen)[1]
+        return NotificationPillPolicy.highSensor(area.bottom.toFloat(), rowTop)
+    }
+
     /** For `op fod`: the sensor as the row sees it, and where the row is. */
     fun describeFingerprint(): String {
         val fod = fingerprintInHost()
         val rest = pillRest(smallKey != null)
         return "sensor(host)=${fod ?: "none"} row centre=${rest?.centerY} height=${rest?.height}" +
-            " lifted=${if (fodLiftedTo.isNaN()) "never" else fodLiftedTo}"
+            " compactAvailable=${MiniPlayerRuntime.notificationCompactingAvailable(context)} compact=$compactProgress" +
+            " enabled=${config.optBoolean(MiniPlayerConfig.COMPACT_NOTIFICATIONS)}" +
+            " size=${config.optDouble(MiniPlayerConfig.NOTIFICATION_SIZE, 80.0)}" +
+            " drop=${config.optDouble(MiniPlayerConfig.NOTIFICATION_DROP, 16.0)}" +
+            " expanded=${musicExpanded(includeCover = true)}"
     }
 
     /**
@@ -10289,11 +10298,58 @@ private class MiniPlayerController(
         return PillRest(pillWidth, height, (start + end) / 2f, centerY)
     }
 
+    private var compactProgress = 0f
+    private var compactTarget = 0f
+    private var compactAnimator: android.animation.ValueAnimator? = null
+
+    private fun updateNotificationCompacting() {
+        val enabled = config.optBoolean(MiniPlayerConfig.COMPACT_NOTIFICATIONS)
+        val target = if (NotificationPillPolicy.active(
+            enabled,
+            enabled && MiniPlayerRuntime.notificationCompactingAvailable(context),
+            musicExpanded(includeCover = true),
+            selectedIsland != null && selectedIsland != MUSIC_ISLAND,
+            MiniPlayerScene.aodActive || !Main.keyguardLocked())) 1f else 0f
+        if (target == compactTarget) return
+        compactTarget = target
+        compactAnimator?.cancel()
+        if (player?.visibility != View.VISIBLE) {
+            compactProgress = target
+            return
+        }
+        compactAnimator = android.animation.ValueAnimator.ofFloat(compactProgress, target).apply {
+            duration = 240L
+            interpolator = android.view.animation.PathInterpolator(0.2f, 0f, 0.2f, 1f)
+            addUpdateListener {
+                compactProgress = it.animatedValue as Float
+                schedulePosition()
+            }
+            start()
+        }
+    }
+
+    private fun compactScale(): Float = 1f - compactProgress *
+        (1f - MiniPlayerConfig.notificationSize(config.optDouble(MiniPlayerConfig.NOTIFICATION_SIZE, 80.0)) / 100f)
+
+    /** The pill alone changes; the shortcut buttons retain their original geometry. */
+    private fun compactRest(rest: PillRest): PillRest {
+        if (compactProgress == 0f) return rest
+        val scale = compactScale()
+        val height = (rest.height * scale).roundToInt().coerceAtLeast(1)
+        // The overlay can use the navigation inset; reserve only its screen-edge margin.
+        val y = NotificationPillPolicy.loweredCenter(rest.centerY, height.toFloat(),
+            host.height.toFloat(), dp(4f).toFloat(), dp(MiniPlayerConfig.notificationDrop(
+                config.optDouble(MiniPlayerConfig.NOTIFICATION_DROP, 16.0))).toFloat(), compactProgress)
+        return PillRest((rest.width * scale).roundToInt().coerceAtLeast(1), height, rest.centerX, y)
+    }
+
     private fun position() {
+        updateNotificationCompacting()
         val view = player ?: return
         if (view.visibility != View.VISIBLE || spread != null) return
         val small = smallKey != null
         val rest = pillRest(small) ?: return
+        view.setCompactScale(compactScale())
         val pillWidth = rest.width
         val height = rest.height
         val centerY = rest.centerY
@@ -10367,7 +10423,6 @@ private const val SMALL_NUDGE_RESPONSE = 0.32f
 private const val SMALL_NUDGE_DAMPING = 0.8f
 
 /** Between the row of islands and the fingerprint sensor it is lifted above (#66). */
-private const val FOD_MARGIN_DP = 12f
 
 /** How long the pill waits, down, for a scene its morph has just landed into. */
 private const val SCENE_WAIT_MS = 1000L

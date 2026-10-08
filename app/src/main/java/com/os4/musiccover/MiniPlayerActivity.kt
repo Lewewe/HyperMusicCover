@@ -61,6 +61,7 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
     val context = LocalContext.current
     var configText by remember { mutableStateOf(MiniPlayerConfig.defaultJson()) }
     var alive by remember { mutableStateOf(false) }
+    var compactAvailable by remember { mutableStateOf(false) }
     val config = remember(configText) { JSONObject(configText) }
     // See ShadePageView: a setting the module did not take greys the page until it answers again.
     val lost by ModuleBridge.lost.collectAsState()
@@ -68,6 +69,7 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
     LaunchedEffect(refreshKey, lost) {
         val reply = ModuleBridge.queryAlive(context)
         alive = reply.alive
+        compactAvailable = reply.notificationCompactingAvailable
         if (reply.alive) configText = reply.miniConfig
     }
     fun push(key: String, value: Any) {
@@ -108,11 +110,28 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
                         checked = config.optBoolean(MiniPlayerConfig.STATUS_AT_DATE),
                         enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
                         onCheckedChange = { push(MiniPlayerConfig.STATUS_AT_DATE, it) })
-                    SwitchPreference(title = stringResource(R.string.mini_fod_lift),
-                        summary = stringResource(R.string.mini_fod_lift_summary),
-                        checked = config.optBoolean(MiniPlayerConfig.FOD_LIFT, true),
-                        enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onCheckedChange = { push(MiniPlayerConfig.FOD_LIFT, it) })
+                    SwitchPreference(title = stringResource(R.string.mini_notification_compact),
+                        summary = stringResource(when {
+                            compactAvailable -> R.string.mini_notification_compact_summary
+                            else -> R.string.mini_notification_compact_unavailable
+                        }),
+                        checked = compactAvailable && config.optBoolean(MiniPlayerConfig.COMPACT_NOTIFICATIONS),
+                        enabled = alive && compactAvailable && config.optBoolean(MiniPlayerConfig.ENABLED),
+                        onCheckedChange = { push(MiniPlayerConfig.COMPACT_NOTIFICATIONS, it) })
+                    if (compactAvailable && config.optBoolean(MiniPlayerConfig.COMPACT_NOTIFICATIONS)) {
+                        ValueSlider(title = stringResource(R.string.mini_notification_size),
+                            value = config.optDouble(MiniPlayerConfig.NOTIFICATION_SIZE, 80.0).toFloat(),
+                            valueRange = 70f..100f, detent = 80f,
+                            enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
+                            label = { "${it.toInt()}%" },
+                            onValueChange = { push(MiniPlayerConfig.NOTIFICATION_SIZE, it) })
+                        ValueSlider(title = stringResource(R.string.mini_notification_drop),
+                            value = config.optDouble(MiniPlayerConfig.NOTIFICATION_DROP, 16.0).toFloat(),
+                            valueRange = 0f..32f, detent = 16f,
+                            enabled = alive && config.optBoolean(MiniPlayerConfig.ENABLED),
+                            label = { "${it.toInt()} dp" },
+                            onValueChange = { push(MiniPlayerConfig.NOTIFICATION_DROP, it) })
+                    }
                     SwitchPreference(title = stringResource(R.string.islands_background_blur),
                         summary = stringResource(R.string.islands_background_blur_summary),
                         checked = config.optBoolean(MiniPlayerConfig.BACKGROUND_BLUR),

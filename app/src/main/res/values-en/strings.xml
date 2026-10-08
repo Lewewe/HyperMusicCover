@@ -219,8 +219,6 @@
     <string name="demo_island_stack_title">The stack island</string>
     <string name="mini_status_at_date">Status beside the date</string>
     <string name="mini_status_at_date_summary">Keeps Do Not Disturb and charging beside the date, clear of the pill</string>
-    <string name="mini_fod_lift">Clear of the fingerprint sensor</string>
-    <string name="mini_fod_lift_summary">On phones with a low optical sensor, lifts the pill above it</string>
     <string name="extras_lyric_effects">Lyric Effects</string>
     <string name="extras_lyric_providers">Lyric Providers</string>
     <string name="extras_online_translation">Online translation</string>
@@ -283,4 +281,9 @@
     <string name="lyrics_search_extended_summary">Uses extended source search and enhanced parsing, with provider settings below.</string>
     <string name="lyrics_display_section">Display</string>
     <string name="lyrics_behavior_section">Behavior</string>
+    <string name="mini_notification_compact">Compact notification pill</string>
+    <string name="mini_notification_compact_summary">Shrink and lower the notification pill while the media player is expanded, keeping shortcut buttons in place.</string>
+    <string name="mini_notification_compact_unavailable">Requires a low under-display fingerprint sensor. High or side-mounted sensors are not supported.</string>
+    <string name="mini_notification_size">Notification pill size</string>
+    <string name="mini_notification_drop">Notification pill downward offset</string>
 </resources>

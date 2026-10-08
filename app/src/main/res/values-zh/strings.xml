@@ -227,8 +227,6 @@
     <string name="restart_confirm_summary">确认重启吗？</string>
     <string name="home_stale_title">模块已更新</string>
     <string name="home_stale_summary">%1$d 个进程还在运行旧版本，点按重启生效</string>
-    <string name="mini_fod_lift">避开屏下指纹</string>
-    <string name="mini_fod_lift_summary">光学短焦指纹位置较低的机型，把胶囊抬到指纹区上方</string>
     <string name="extras_lyric_effects">歌词效果</string>
     <string name="extras_lyric_providers">歌词来源</string>
     <string name="extras_online_translation">在线翻译</string>
@@ -291,4 +289,9 @@
     <string name="lyrics_search_extended_summary">使用扩展来源搜索与增强解析，可在下方设置歌词来源。</string>
     <string name="lyrics_display_section">显示</string>
     <string name="lyrics_behavior_section">行为</string>
+    <string name="mini_notification_compact">缩小通知胶囊</string>
+    <string name="mini_notification_compact_summary">音乐播放器展开时缩小并下移通知胶囊，快捷按钮保持原位。</string>
+    <string name="mini_notification_compact_unavailable">仅支持位置较低的屏下指纹，较高的屏下指纹及侧边指纹无法启用。</string>
+    <string name="mini_notification_size">通知胶囊大小</string>
+    <string name="mini_notification_drop">通知胶囊下移距离</string>
 </resources>

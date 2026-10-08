@@ -39,8 +39,15 @@ object MiniPlayerConfig {
     /** Move lasting lock screen status beside the date while islands are enabled. */
     const val STATUS_AT_DATE = "statusAtDate"
 
-    /** Lift the pill row clear of a low under-display fingerprint sensor. */
-    const val FOD_LIFT = "fodLift"
+    const val COMPACT_NOTIFICATIONS = "compactNotifications"
+    const val NOTIFICATION_SIZE = "notificationSizePercent"
+    const val NOTIFICATION_DROP = "notificationDropDp"
+
+    @JvmStatic fun notificationSize(value: Double): Float =
+        if (value.isFinite()) value.toFloat().coerceIn(70f, 100f) else 80f
+
+    @JvmStatic fun notificationDrop(value: Double): Float =
+        if (value.isFinite()) value.toFloat().coerceIn(0f, 32f) else 16f
 
     private val defaults = linkedMapOf<String, Any>(
         ENABLED to false,
@@ -49,7 +56,9 @@ object MiniPlayerConfig {
         ART_RADIUS to 12f,
         ADAPTIVE_WIDTH to false,
         STATUS_AT_DATE to true,
-        FOD_LIFT to true,
+        COMPACT_NOTIFICATIONS to false,
+        NOTIFICATION_SIZE to 80f,
+        NOTIFICATION_DROP to 16f,
         BACKGROUND_BLUR to false,
         BACKGROUND_BLUR_RADIUS to 30f,
         BACKGROUND_BLUR_BRIGHTNESS to 80f,
@@ -79,8 +88,12 @@ object MiniPlayerConfig {
         val input = runCatching { JSONObject(raw.orEmpty()) }.getOrDefault(JSONObject())
         val out = JSONObject()
         defaults.forEach { (key, fallback) ->
-            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH || key == BACKGROUND_BLUR || key == STATUS_AT_DATE || key == FOD_LIFT) {
+            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH || key == BACKGROUND_BLUR || key == STATUS_AT_DATE || key == COMPACT_NOTIFICATIONS) {
                 runCatching { input.getBoolean(key) }.getOrDefault(fallback)
+            } else if (key == NOTIFICATION_SIZE) {
+                notificationSize(input.optDouble(key, 80.0))
+            } else if (key == NOTIFICATION_DROP) {
+                notificationDrop(input.optDouble(key, 16.0))
             } else if (key == BACKGROUND_BLUR_RADIUS) {
                 blurRadius(input.optDouble(key, 30.0))
             } else if (key == BACKGROUND_BLUR_BRIGHTNESS) {

@@ -200,6 +200,7 @@ object ModuleBridge {
          */
         val shade: Map<String, Int> = emptyMap(),
         val miniConfig: String = MiniPlayerConfig.defaultJson(),
+        val notificationCompactingAvailable: Boolean = false,
         /** The lock screen's torch and camera, in px; see MiniPlayerRuntime.shortcutGeometry. */
         val miniShortcuts: FloatArray? = null,
         val geometry: Geometry = Geometry(),
@@ -873,6 +874,7 @@ object ModuleBridge {
                 .filter { it.startsWith("shade_") }
                 .associate { it.removePrefix("shade_") to b.getInt(it, 0) },
             miniConfig = MiniPlayerConfig.normalizedJson(b.getString("minicfg")),
+            notificationCompactingAvailable = b.getBoolean("notificationcompactavailable", false),
             miniShortcuts = b.getFloatArray("minishortcuts")?.takeIf { it.size == 9 },
             geometry = Geometry(
                 screenW = b.getInt("sw", 0),
