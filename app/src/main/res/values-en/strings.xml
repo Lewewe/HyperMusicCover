@@ -194,7 +194,7 @@
     <string name="features_shade_title">Shade and control centre (experimental)</string>
     <string name="features_shade_summary">Flowing light</string>
     <string name="features_mini_title">Lock screen super island</string>
-    <string name="features_mini_summary">Media controls, gestures, size and material</string>
+    <string name="features_mini_summary">Music, notifications, blur and brightness</string>
 
     <string name="shade_enabled">Enable flowing light</string>
     <string name="shade_section_behaviour">Behaviour</string>
@@ -221,7 +221,7 @@
     <string name="demo_island_notifications_title">Grouped notifications</string>
     <string name="demo_island_notifications_summary">Regular notifications share one island. Tap or swipe up to open the list; the islands expand into cards and the clock shrinks. Swipe down on the list to collapse them.</string>
     <string name="islands_background_blur">Blur background</string>
-    <string name="islands_background_blur_summary">Blur behind the pill and shortcut buttons instead of using a solid color</string>
+    <string name="islands_background_blur_summary">Blur behind the pill and shortcut buttons. When off, Frosted Glass uses a solid color, Soft Glass uses HyperOS 4 glass.</string>
     <string name="islands_background_blur_radius">Background blur strength</string>
     <string name="islands_background_blur_brightness">Blur background brightness</string>
 
@@ -229,12 +229,14 @@
     <string name="mini_enabled">Enable the lock screen super island</string>
     <string name="mini_enabled_waiting">Waiting for the SystemUI module to answer</string>
     <string name="mini_widen">Widen when a shortcut is off</string>
-    <string name="mini_widen_summary">When the flashlight or the camera is turned off in system settings, the island takes the space it leaves</string>
+    <string name="mini_widen_summary">Fills the space left by a disabled flashlight or camera shortcut</string>
     <string name="demo_cover_takeover_title">The cover takes the lock screen</string>
     <string name="demo_cover_lyrics_title">Lyrics on the lock screen</string>
     <string name="demo_cover_aod_title">Kept on the always-on display</string>
     <string name="demo_island_immersive_title">Immersive pages</string>
     <string name="demo_island_stack_title">The stack island</string>
     <string name="mini_status_at_date">Status beside the date</string>
-    <string name="mini_status_at_date_summary">Move Do Not Disturb and charging status beside the date. Temporary hints stay at the bottom.</string>
+    <string name="mini_status_at_date_summary">Keeps Do Not Disturb and charging beside the date, clear of the pill</string>
+    <string name="mini_fod_lift">Clear of the fingerprint sensor</string>
+    <string name="mini_fod_lift_summary">On phones with a low optical sensor, lifts the pill above it</string>
 </resources>

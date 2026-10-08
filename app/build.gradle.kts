@@ -162,4 +162,6 @@ dependencies {
     implementation(libs.material.icons.extended)
 
     testImplementation("junit:junit:4.13.2")
+    // Use a real JSON implementation for settings migration tests instead of android.jar stubs.
+    testImplementation("org.json:json:20231013")
 }

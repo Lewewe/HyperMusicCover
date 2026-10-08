@@ -191,7 +191,7 @@
     <string name="features_shade_title">通控中心（实验性功能）</string>
     <string name="features_shade_summary">动态流光</string>
     <string name="features_mini_title">锁屏超级岛</string>
-    <string name="features_mini_summary">媒体控制、手势、尺寸与材质</string>
+    <string name="features_mini_summary">音乐、通知、背景模糊与亮度</string>
 
     <string name="shade_enabled">启用流光效果</string>
     <string name="shade_section_behaviour">行为</string>
@@ -218,7 +218,7 @@
     <string name="demo_island_notifications_title">聚合岛</string>
     <string name="demo_island_notifications_summary">普通通知收进一个岛，点按或上滑展开成列表，整排岛一起变成卡片、时钟跟着缩小；在列表上下滑全部收回。</string>
     <string name="islands_background_blur">背景模糊</string>
-    <string name="islands_background_blur_summary">为超级岛和底部快捷按钮使用模糊背景，替代纯色背景</string>
+    <string name="islands_background_blur_summary">为超级岛和快捷按钮添加模糊背景。关闭后，Frosted Glass 使用纯色背景，Soft Glass 使用 HyperOS 4 原生玻璃效果。</string>
     <string name="islands_background_blur_radius">背景模糊强度</string>
     <string name="islands_background_blur_brightness">模糊背景亮度</string>
 
@@ -226,7 +226,7 @@
     <string name="mini_enabled">启用锁屏超级岛</string>
     <string name="mini_enabled_waiting">等待 SystemUI 模块响应</string>
     <string name="mini_widen">快捷方式关闭时加宽</string>
-    <string name="mini_widen_summary">手电筒或相机在系统设置里关掉后，超级岛占用空出的位置</string>
+    <string name="mini_widen_summary">手电筒或相机快捷方式关闭后占用空位</string>
     <string name="demo_cover_takeover_title">封面接管锁屏</string>
     <string name="demo_cover_lyrics_title">锁屏歌词</string>
     <string name="demo_cover_aod_title">息屏保持</string>
@@ -236,7 +236,7 @@
     <string name="lyrics_groups">舒缓歌词</string>
     <string name="lyrics_groups_summary">将快速切换的歌词分组显示，每组最多四行，让每一句都更从容易读。</string>
     <string name="mini_status_at_date">状态显示在日期后面</string>
-    <string name="mini_status_at_date_summary">勿扰、充电等锁屏底部的常驻状态改到日期后面显示，不被胶囊挡住；指纹等临时提示仍在底部</string>
+    <string name="mini_status_at_date_summary">勿扰、充电显示在日期后，避免被胶囊遮挡</string>
     <string name="settings_debug">调试</string>
     <string name="log_level">日志等级</string>
     <string name="log_level_summary">反馈问题前切到「详细」，再复现一次</string>
@@ -245,4 +245,6 @@
     <string name="restart_confirm_summary">确认重启吗？</string>
     <string name="home_stale_title">模块已更新</string>
     <string name="home_stale_summary">%1$d 个进程还在运行旧版本，点按重启生效</string>
+    <string name="mini_fod_lift">避开屏下指纹</string>
+    <string name="mini_fod_lift_summary">光学短焦指纹位置较低的机型，把胶囊抬到指纹区上方</string>
 </resources>
