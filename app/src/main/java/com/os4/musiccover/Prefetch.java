@@ -118,6 +118,17 @@ final class Prefetch {
             this.translated = translated;
         }
 
+        Lyrics(String pkg, String mediaId, List<LyricLine> lines, int source,
+               boolean translated) {
+            this.pkg = pkg;
+            this.mediaId = mediaId;
+            this.title = null;
+            this.artist = null;
+            this.lines = lines;
+            this.source = source;
+            this.translated = translated;
+        }
+
         boolean matches(MediaController controller) {
             if (controller == null || !pkg.equals(controller.getPackageName())) return false;
             MediaMetadata metadata = controller.getMetadata();
@@ -561,13 +572,22 @@ final class Prefetch {
         for (MediaSession.QueueItem qi : q) {
             MediaDescription d = qi.getDescription();
             Bundle extras = d == null ? null : d.getExtras();
-            // MediaDescription.description is presentation text, not reliably an album name.
-            // Use album only when the player explicitly publishes it as metadata.
+            String title = d == null || d.getTitle() == null ? null : d.getTitle().toString();
             String album = extraString(extras, MediaMetadata.METADATA_KEY_ALBUM, "album");
+            // A queue description is normally display text, not canonical metadata. Some
+            // players (including Cider) use it for the album, though, and publish neither an
+            // album extra nor duration. It is only supplemental matching evidence: a distinct
+            // description can raise an already exact title/artist match, never replace it.
+            if (album == null) {
+                String description = str(d == null ? null : d.getDescription());
+                if (description != null && !description.isEmpty() && !description.equals(title)) {
+                    album = description;
+                }
+            }
             long duration = extraLong(extras, MediaMetadata.METADATA_KEY_DURATION,
                     "duration", "duration_ms");
             items.add(new Item(qi.getQueueId(),
-                    d == null || d.getTitle() == null ? null : d.getTitle().toString(),
+                    title,
                     d == null ? null : d.getIconUri(),
                     d == null ? null : d.getMediaId(),
                     str(d == null ? null : d.getSubtitle()), album, duration));
@@ -803,7 +823,19 @@ final class Prefetch {
     /** Stores a successful live result so a later queue warm can use the same exact track. */
     static void persistReady(String pkg, String mediaId, List<LyricLine> lines, int source,
                              boolean translated) {
+        if (pkg == null || pkg.isEmpty() || mediaId == null || mediaId.isEmpty()
+                || lines == null || lines.isEmpty()) return;
         QueuedLyricCache.write(pkg, mediaId, lines, source, translated);
+        // A failed warm must not keep hiding a later successful live lookup for this exact item.
+        // This update is RAM-only as well, so disabling the offline switch never disables the
+        // current session's three-track handoff.
+        String key = pkg + '|' + mediaId;
+        synchronized (LYRIC_READY) {
+            Lyrics old = LYRIC_READY.get(key);
+            if (old == null || !LyricSource.words(old.lines) || LyricSource.words(lines)) {
+                LYRIC_READY.put(key, new Lyrics(pkg, mediaId, lines, source, translated));
+            }
+        }
     }
 
     private static String lyricKey(String pkg, Item item) {
