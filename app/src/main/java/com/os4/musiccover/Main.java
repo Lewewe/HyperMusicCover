@@ -10334,15 +10334,7 @@ public class Main extends XposedModule {
         }
         if (y < top || y > bottom) return;
         if (sCoverMode) {
-            if (LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
-                // Keep the media player and clock in place; this is not a scene exit to pill.
-                if (!LockLyrics.compactWithoutLyrics()) {
-                    beginCompactArtworkMorph(false);
-                    LockLyrics.setArtworkCompact(true);
-                }
-            } else {
-                exitFromTap("tap at y=" + y);
-            }
+            exitFromTap("tap at y=" + y);
         } else if (sTapSuppressed) {
             enterFromTap("tap at y=" + y);
         }
