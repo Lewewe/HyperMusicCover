@@ -16,7 +16,6 @@ import android.view.Gravity
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.ImageButton

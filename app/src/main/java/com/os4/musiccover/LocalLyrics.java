@@ -399,7 +399,7 @@ final class LocalLyrics {
 
     /** The lyric inside the audio file, for the formats that carry one where we can find it. */
     private static Found embedded(String path) {
-        String lower = path.toLowerCase();
+        String lower = path.toLowerCase(java.util.Locale.ROOT);
         if (lower.endsWith(".flac")) {
             String body = flac(path);
             return usable(body) ? new Found(body, "the file's own FLAC tag", path) : null;
@@ -667,7 +667,7 @@ final class LocalLyrics {
             }
             if (eq > p) {
                 try {
-                    String name = new String(b, p, eq - p, "UTF-8").toUpperCase();
+                    String name = new String(b, p, eq - p, "UTF-8").toUpperCase(java.util.Locale.ROOT);
                     for (int k = 0; k < bestKey; k++) {
                         if (FLAC_KEYS[k].equals(name)) {
                             best = new String(b, eq + 1, p + len - eq - 1, "UTF-8");

@@ -345,7 +345,7 @@ object MiniPlayerRuntime {
                             materialSignature = signature
                             cardRecipe = recorded
                             cardBackground = bg?.background?.constantState
-                            runCatching { keepRecipe(target!!.context, recorded, bg?.background) }
+                            runCatching { keepRecipe(target.context, recorded, bg?.background) }
                                 .onFailure { Xp.log("MCMini: recipe not kept: $it") }
                             if (cardEffect != cls.simpleName) Xp.log("MCMini: card material -> ${cls.simpleName}")
                             cardEffect = cls.simpleName
@@ -953,7 +953,7 @@ object MiniPlayerRuntime {
             routedSmall = pillOwner?.smallIslandAt(ev.rawX, ev.rawY) == true
             if (routedSmall && pillOwner != null && !routedMorph) {
                 // Taken where it is, the pill's nudge left alone.
-                pill?.springNudgeBack(0f, 0f)
+                pill.springNudgeBack(0f, 0f)
                 pillOwner.holdSmallNudge()
                 pillOwner.smallNudgeNow.let { (x, y) -> routedBaseX = x; routedBaseY = y }
             }
@@ -2780,12 +2780,12 @@ private class MiniPlayerController(
         val fromSmall = oldSmall != null && selectedIsland == oldSmall
         // The stand-in shrinking into the small place is the one growing into the pill now:
         // it grows from where it has got to.
-        val fromGhost = fromSmall && ghostNow != null && selectedIsland == ghosting?.ghostKey
+        val fromGhost = fromSmall && ghostNow != null && selectedIsland == ghosting.ghostKey
         val from = when {
             pillStays -> pillFrom ?: rest
             // Out of hiding, the super island's HiddenToBigIsland: out of the middle.
             kind == SWAP_PREV -> cutoutBox(rest)
-            fromGhost -> ghostNow!!
+            fromGhost -> ghostNow
             fromSmall -> oldSmallBox
             else -> CoverMorphMotion.Box(rest.x, rest.y, d, rest.h)
         }
@@ -2823,7 +2823,7 @@ private class MiniPlayerController(
                 kotlin.math.sign(dx) * flingPx / 2f, kotlin.math.sign(dw) * flingPx), from, rest)
         }
         if (keepGhost) {
-            val g = ghosting!!
+            val g = ghosting
             s.ghostFrom = g.ghostFrom
             s.ghostSmall = g.ghostSmall
             s.ghostKey = g.ghostKey
@@ -2843,7 +2843,7 @@ private class MiniPlayerController(
             s.ghostFrom = oldRest
             s.ghost = true
         }
-        if (ghostToSmall && startGhost(oldBig!!, oldRest!!)) {
+        if (ghostToSmall && startGhost(oldBig, oldRest)) {
             s.ghostFrom = oldRest
             s.ghostSmall = true
             s.ghostKey = oldBig
@@ -3980,7 +3980,7 @@ private class MiniPlayerController(
             if (g != null && key == g.other && g.follower != null) continue
             val row = (if (g != null && key == g.other) keep else wholeRowFor(key, keep)) ?: continue
             // Another notification of the app the morph is taking: the same row, which is the morph's.
-            if (row === keep && (g == null || key != g.other)) continue
+            if (row === keep && key != g.other) continue
             if (!done.add(row)) continue
             if (!holding) {
                 if (row !in hiddenRows) hideRowUntilGone(row, key)
@@ -3988,7 +3988,7 @@ private class MiniPlayerController(
             }
             hideRow(row)
             val folds = g != null && key != g.other
-            val ta = if (folds) (hiddenRows[row] ?: 1f) * g!!.foldAlpha.value.coerceIn(0f, 1f) else 0f
+            val ta = if (folds) (hiddenRows[row] ?: 1f) * g.foldAlpha.value.coerceIn(0f, 1f) else 0f
             if (kotlin.math.abs(row.transitionAlpha - ta) > 0.002f) row.transitionAlpha = ta
             if (folds) pile += row
         }
@@ -5571,7 +5571,7 @@ private class MiniPlayerController(
             if (android.os.SystemClock.uptimeMillis() - x.waitSince > ROW_WAIT_MS) {
                 abandonUp(x, key, when {
                     native == null -> "no card"
-                    !outReady -> "card out not ready: " + (out?.let(::nativeFor)?.let { "attached=${it.isAttachedToWindow} " +
+                    !outReady -> "card out not ready: " + (out.let(::nativeFor)?.let { "attached=${it.isAttachedToWindow} " +
                         "laid=${it.isLaidOut} w=${it.width} kept=${kept.values.any { k -> k.row === it }}" } ?: "none")
                     else -> "card not on screen: " + offScreenWhy(native)
                 })
@@ -9003,7 +9003,7 @@ private class MiniPlayerController(
         // From TakeKazeX's PR #15.
         val showsMusic = selected == MUSIC_ISLAND && music != null
         traced("MC r.bind") {
-            if (showsMusic) bindMusic(view, music!!, config)
+            if (showsMusic) bindMusic(view, music, config)
             else if (note != null) bindNote(view, note, config)
         }
         pillShowsMusic = showsMusic
@@ -9542,7 +9542,7 @@ private class MiniPlayerController(
             color = spec?.color ?: android.graphics.Color.WHITE,
             colorEnd = spec?.colorEnd,
             ccw = spec?.ccw == true,
-            progress = if (auto) ({ timer!!.progress() }) else ({ (spec?.value ?: 0).toFloat() }),
+            progress = if (auto) ({ timer.progress() }) else ({ (spec?.value ?: 0).toFloat() }),
         )
         if (auto) autoRings[ring] = true
         val icon = buttonIcon(b)

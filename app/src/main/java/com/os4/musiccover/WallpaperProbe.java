@@ -4183,7 +4183,7 @@ public class WallpaperProbe {
             return;
         }
         Xp.log(TAG + "=== " + c.getName());
-        String g = grep == null ? null : grep.toLowerCase();
+        String g = grep == null ? null : grep.toLowerCase(java.util.Locale.ROOT);
         for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
             for (Method m : k.getDeclaredMethods()) {
                 StringBuilder sb = new StringBuilder(m.getReturnType().getSimpleName())
@@ -4194,13 +4194,13 @@ public class WallpaperProbe {
                     sb.append(ps[j].getSimpleName());
                 }
                 sb.append(')');
-                if (g == null || sb.toString().toLowerCase().contains(g)) {
+                if (g == null || sb.toString().toLowerCase(java.util.Locale.ROOT).contains(g)) {
                     Xp.log(TAG + "  " + sb);
                 }
             }
             for (java.lang.reflect.Field f : k.getDeclaredFields()) {
                 String line = f.getType().getSimpleName() + " ." + f.getName();
-                if (g == null || line.toLowerCase().contains(g)) {
+                if (g == null || line.toLowerCase(java.util.Locale.ROOT).contains(g)) {
                     Xp.log(TAG + "  " + line);
                 }
             }

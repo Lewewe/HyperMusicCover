@@ -469,101 +469,101 @@ internal class MiniCardMorph(
         val m = lerp(box.w / miniRest.w, box.w / laidW, round)
         val mix = pieceMix(c)
         val bridged = listener.artBridged()
-        android.os.Trace.beginSection("MC m.pieces")
-        pieces.forEach { piece ->
-            val v = piece.view
-            val layoutX = offsetX(v)
-            val layoutY = offsetY(v)
-            val ax = anchorX(v, piece.text)
-            val ay = anchorY(v, piece.text)
-            // Where the anchor sits in the container, and at what scale, if it only followed it.
-            var tx = (layoutX + piece.baseTx + ax) * m
-            var ty = (layoutY + piece.baseTy + ay) * m
-            var kx = m
-            var ky = m
-            if (round > 0f && piece.art) {
-                // The small island's picture: its share of the circle, in the middle of it -
-                // growing with the container's height as the circle becomes the row.
-                val side = box.h * CIRCLE_ICON_SHARE
-                kx = lerp(kx, side / max(1, v.width), round)
-                ky = lerp(ky, side / max(1, v.height), round)
-                tx = lerp(tx, (min(box.w, box.h) - side) / 2f, round)
-                ty = lerp(ty, (box.h - side) / 2f, round)
-            }
-            if (piece.paired) {
-                val n = piece.native!!
-                val nx = (offsetIn(n, header, true) + anchorX(n, piece.text)) * s
-                val ny = (offsetIn(n, header, false) + anchorY(n, piece.text)) * s
-                val nky = if (piece.text) (n as TextView).textSize * s / (v as TextView).textSize
-                    else n.width * s / max(1, v.width)
-                val nkx = if (piece.text) textWidthScale(v as TextView, n as TextView, s, nky)
-                    else nky
-                tx = lerp(tx, nx, mix)
-                ty = lerp(ty, ny, mix)
-                kx = lerp(kx, nkx, mix)
-                ky = lerp(ky, nky, mix)
-                // The card's own line stays hidden until the pill's leaves it: the two faces
-                // differ in weight, and both drawn in full read as a doubled title.
-                if (piece.text) {
-                    // Under the pill's line fading off it, the card's is whole well before the
-                    // pill's is gone: two equal lines at a and 1 - a composite to 1 - a + a*a,
-                    // and the time dipped to three quarters on every crossing (2026-09-26).
-                    n.transitionAlpha = piece.nativeTransitionAlpha * min(1f, NATIVE_TEXT_LEAD * (1f - pairedOut(c)))
-                    // The card's colour and words by the time the two lines meet: a focus row's
-                    // grey under the pill's white, and a timer's two clocks a second apart,
-                    // crossed over on every open and close - a flash each time (2026-09-26).
-                    val tv = v as TextView
-                    val nt = n as TextView
-                    val colour = androidx.core.graphics.ColorUtils.blendARGB(piece.ownColor, nt.currentTextColor, mix)
-                    if (tv.currentTextColor != colour) tv.setTextColor(colour)
-                    if (mix >= 0.5f && !piece.textRefused &&
-                        !android.text.TextUtils.equals(tv.text, nt.text)) {
-                        // The words, not the card's text object: that is a PrecomputedText laid
-                        // out for the card's size, typeface and hyphenation, and setText throws on
-                        // a TextView whose own differ - from a frame callback, so the whole of
-                        // SystemUI went down with it (issue #11, 2026-09-26).
-                        val words = nt.text
-                        val copy = if (words is android.text.Spanned) android.text.SpannedString(words)
-                            else words.toString()
-                        try {
-                            tv.text = copy
-                            piece.tookText = true
-                        } catch (t: IllegalArgumentException) {
-                            piece.textRefused = true
-                            Xp.log("MCMini: morph kept its own words: $t")
+        traced("MC m.pieces") {
+            pieces.forEach { piece ->
+                val v = piece.view
+                val layoutX = offsetX(v)
+                val layoutY = offsetY(v)
+                val ax = anchorX(v, piece.text)
+                val ay = anchorY(v, piece.text)
+                // Where the anchor sits in the container, and at what scale, if it only followed it.
+                var tx = (layoutX + piece.baseTx + ax) * m
+                var ty = (layoutY + piece.baseTy + ay) * m
+                var kx = m
+                var ky = m
+                if (round > 0f && piece.art) {
+                    // The small island's picture: its share of the circle, in the middle of it -
+                    // growing with the container's height as the circle becomes the row.
+                    val side = box.h * CIRCLE_ICON_SHARE
+                    kx = lerp(kx, side / max(1, v.width), round)
+                    ky = lerp(ky, side / max(1, v.height), round)
+                    tx = lerp(tx, (min(box.w, box.h) - side) / 2f, round)
+                    ty = lerp(ty, (box.h - side) / 2f, round)
+                }
+                if (piece.paired) {
+                    val n = piece.native!!
+                    val nx = (offsetIn(n, header, true) + anchorX(n, piece.text)) * s
+                    val ny = (offsetIn(n, header, false) + anchorY(n, piece.text)) * s
+                    val nky = if (piece.text) (n as TextView).textSize * s / (v as TextView).textSize
+                        else n.width * s / max(1, v.width)
+                    val nkx = if (piece.text) textWidthScale(v as TextView, n as TextView, s, nky)
+                        else nky
+                    tx = lerp(tx, nx, mix)
+                    ty = lerp(ty, ny, mix)
+                    kx = lerp(kx, nkx, mix)
+                    ky = lerp(ky, nky, mix)
+                    // The card's own line stays hidden until the pill's leaves it: the two faces
+                    // differ in weight, and both drawn in full read as a doubled title.
+                    if (piece.text) {
+                        // Under the pill's line fading off it, the card's is whole well before the
+                        // pill's is gone: two equal lines at a and 1 - a composite to 1 - a + a*a,
+                        // and the time dipped to three quarters on every crossing (2026-09-26).
+                        n.transitionAlpha = piece.nativeTransitionAlpha * min(1f, NATIVE_TEXT_LEAD * (1f - pairedOut(c)))
+                        // The card's colour and words by the time the two lines meet: a focus row's
+                        // grey under the pill's white, and a timer's two clocks a second apart,
+                        // crossed over on every open and close - a flash each time (2026-09-26).
+                        val tv = v as TextView
+                        val nt = n as TextView
+                        val colour = androidx.core.graphics.ColorUtils.blendARGB(piece.ownColor, nt.currentTextColor, mix)
+                        if (tv.currentTextColor != colour) tv.setTextColor(colour)
+                        if (mix >= 0.5f && !piece.textRefused &&
+                            !android.text.TextUtils.equals(tv.text, nt.text)) {
+                            // The words, not the card's text object: that is a PrecomputedText laid
+                            // out for the card's size, typeface and hyphenation, and setText throws on
+                            // a TextView whose own differ - from a frame callback, so the whole of
+                            // SystemUI went down with it (issue #11, 2026-09-26).
+                            val words = nt.text
+                            val copy = if (words is android.text.Spanned) android.text.SpannedString(words)
+                                else words.toString()
+                            try {
+                                tv.text = copy
+                                piece.tookText = true
+                            } catch (t: IllegalArgumentException) {
+                                piece.textRefused = true
+                                Xp.log("MCMini: morph kept its own words: $t")
+                            }
                         }
                     }
                 }
-            }
-            v.pivotX = 0f
-            v.pivotY = 0f
-            v.scaleX = kx
-            v.scaleY = ky
-            v.translationX = tx - layoutX - ax * kx
-            v.translationY = ty - layoutY - ay * ky
-            val asPill = if (piece.paired) pairedOut(c) else earlyOut(c)
-            // The blur is on the two ends' whole content (blurCard, setMorphContentBlur), not the
-            // pieces: per piece (2d269db, 2026-09-26) the unpaired buttons, rings and pictures
-            // showed sharp through it, and it was taken out.
-            v.alpha = when {
-                piece.art && bridged -> 0f
-                piece.art -> asPill
-                // Out of a circle, only the picture is there at first; the lines join it once
-                // the shape has room for them.
-                else -> lerp(asPill, if (piece.paired) circleIn(c) * pairedOut(c) else 0f, round)
-            }
-            if (piece.art) {
-                artDrawn = CoverMorphMotion.Box(box.x + tx - ax * kx, box.y + ty - ay * ky,
-                    v.width * kx, v.height * ky)
-                // Round in the card's own corner by the time it lies on the card's artwork.
-                val landed = if (piece.paired) nativeArtRadius * s / max(0.01f, kx)
-                    else mini.artworkRestRadius()
-                // A small island's picture is round.
-                val home = lerp(mini.artworkRestRadius(), min(v.width, v.height) / 2f, round)
-                mini.setArtworkMorphRadius(lerp(home, landed, mix))
+                v.pivotX = 0f
+                v.pivotY = 0f
+                v.scaleX = kx
+                v.scaleY = ky
+                v.translationX = tx - layoutX - ax * kx
+                v.translationY = ty - layoutY - ay * ky
+                val asPill = if (piece.paired) pairedOut(c) else earlyOut(c)
+                // The blur is on the two ends' whole content (blurCard, setMorphContentBlur), not the
+                // pieces: per piece (2d269db, 2026-09-26) the unpaired buttons, rings and pictures
+                // showed sharp through it, and it was taken out.
+                v.alpha = when {
+                    piece.art && bridged -> 0f
+                    piece.art -> asPill
+                    // Out of a circle, only the picture is there at first; the lines join it once
+                    // the shape has room for them.
+                    else -> lerp(asPill, if (piece.paired) circleIn(c) * pairedOut(c) else 0f, round)
+                }
+                if (piece.art) {
+                    artDrawn = CoverMorphMotion.Box(box.x + tx - ax * kx, box.y + ty - ay * ky,
+                        v.width * kx, v.height * ky)
+                    // Round in the card's own corner by the time it lies on the card's artwork.
+                    val landed = if (piece.paired) nativeArtRadius * s / max(0.01f, kx)
+                        else mini.artworkRestRadius()
+                    // A small island's picture is round.
+                    val home = lerp(mini.artworkRestRadius(), min(v.width, v.height) / 2f, round)
+                    mini.setArtworkMorphRadius(lerp(home, landed, mix))
+                }
             }
         }
-        android.os.Trace.endSection()
         traced("MC m.onFrame") { listener.onFrame(this, c) }
         return true
     }

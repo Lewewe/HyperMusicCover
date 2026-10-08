@@ -71,6 +71,11 @@ fun CreditsPageContent(
             "https://github.com/Lewewe/HyperMusicCover-Enhanced",
         ),
         Credit(
+            "@puhboo",
+            stringResource(R.string.credits_puhboo),
+            "https://github.com/puhboo/HyperMusicCover-Extra",
+        ),
+        Credit(
             "@CialloUM",
             stringResource(R.string.credits_cialloum),
             "https://www.coolapk.com/u/37608778",

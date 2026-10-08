@@ -242,7 +242,7 @@ object LyriconSource {
                 synchronized(sSongLock) {
                     while (true) {
                         song = sSong
-                        if (song != null && isTrack(song!!, title, artist)) break
+                        if (song != null && isTrack(song, title, artist)) break
                         val left = until - android.os.SystemClock.uptimeMillis()
                         if (left <= 0) break
                         sSongLock.wait(left)
@@ -258,7 +258,7 @@ object LyriconSource {
                 return null
             }
         }
-        val rich = song!!.lyrics
+        val rich = song.lyrics
         if (rich.isNullOrEmpty()) return null
         val out = ArrayList<LyricLine>(rich.size)
         // Where the tail of a line may run to when the bridge gave its last word no end of its

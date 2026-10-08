@@ -238,11 +238,11 @@ final class WebLyrics {
             return null;
         }
         long started = android.os.SystemClock.uptimeMillis();
-        Http.Reply songs = ask.get(String.format(KG_SONGS, enc(terms)));
+        Http.Reply songs = ask.get(String.format(java.util.Locale.ROOT, KG_SONGS, enc(terms)));
         String hash = songs.ok() ? hashOf(songs.body, q) : null;
         Found f = null;
         if (hash != null) {
-            Http.Reply by = ask.get(String.format(KG_BY_HASH, hash));
+            Http.Reply by = ask.get(String.format(java.util.Locale.ROOT, KG_BY_HASH, hash));
             f = by.ok() ? download(by.body, q, true, ask) : null;
         }
         if (f == null) {
@@ -251,7 +251,7 @@ final class WebLyrics {
             // length directly, and its candidates carry their own durations, so the same proof
             // can be asked of them. Two ways in rather than one, for the same reason NcmLyrics
             // has the album route: the expensive part is already spent by the time we get here.
-            Http.Reply by = ask.get(String.format(KG_BY_NAME, q.durationMs, enc(terms)));
+            Http.Reply by = ask.get(String.format(java.util.Locale.ROOT, KG_BY_NAME, q.durationMs, enc(terms)));
             f = by.ok() ? download(by.body, q, false, ask) : null;
         }
         if (f != null) {
@@ -345,14 +345,14 @@ final class WebLyrics {
 
     /** One candidate's file: the word-timed one if it decrypts, the plain one if it does not. */
     private static Found file(String id, String accessKey, Ask ask) {
-        Http.Reply krc = ask.get(String.format(KG_FILE, "krc", id, accessKey));
+        Http.Reply krc = ask.get(String.format(java.util.Locale.ROOT, KG_FILE, "krc", id, accessKey));
         String body = krc.ok() ? krc(contentOf(krc.body)) : null;
         if (body != null) {
             return new Found(id, body, true, LyricSource.SRC_KUGOU);
         }
         // A candidate with no KRC still has an LRC, and a line-timed lyric is worth far more
         // than none. Both come base64'd in the same envelope.
-        Http.Reply lrc = ask.get(String.format(KG_FILE, "lrc", id, accessKey));
+        Http.Reply lrc = ask.get(String.format(java.util.Locale.ROOT, KG_FILE, "lrc", id, accessKey));
         String plain = lrc.ok() ? text(contentOf(lrc.body)) : null;
         if (plain == null || !plain.contains("[")) {
             return null;
@@ -456,11 +456,11 @@ final class WebLyrics {
         }
         long started = android.os.SystemClock.uptimeMillis();
         String artist = NcmLyrics.firstArtist(q.artist);
-        Http.Reply got = ask.get(String.format(LL_GET, enc(q.title), enc(artist),
+        Http.Reply got = ask.get(String.format(java.util.Locale.ROOT, LL_GET, enc(q.title), enc(artist),
                 enc(q.album), Math.round(q.durationMs / 1000.0)));
         Found f = got.ok() ? synced(got.body, "exact") : null;
         if (f == null) {
-            Http.Reply found = ask.get(String.format(LL_SEARCH, enc(q.title), enc(artist)));
+            Http.Reply found = ask.get(String.format(java.util.Locale.ROOT, LL_SEARCH, enc(q.title), enc(artist)));
             f = found.ok() ? search(found.body, q) : null;
         }
         if (f != null) {

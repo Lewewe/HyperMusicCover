@@ -1976,15 +1976,6 @@ final class LyricView extends View {
         kick();
     }
 
-    /** How far in the borrowed translations have faded, 1 once they have or when none were. */
-    private float transReveal() {
-        if (transRevealAt == 0L) return 1f;
-        float p = (now() - transRevealAt) / (float) TRANS_REVEAL_MS;
-        if (p >= 1f) return 1f;
-        float q = 1f - Math.max(0f, p);
-        return 1f - q * q * q;
-    }
-
     private static android.os.Handler sLayoutHandler;
 
     /**

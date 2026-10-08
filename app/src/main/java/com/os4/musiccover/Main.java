@@ -1,7 +1,6 @@
 package com.os4.musiccover;
 
 import android.animation.ValueAnimator;
-import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -31,8 +30,6 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
-import android.view.animation.Interpolator;
-import android.view.animation.PathInterpolator;
 
 import java.lang.reflect.Method;
 
@@ -3427,8 +3424,9 @@ public class Main extends XposedModule {
                 StringBuilder ms = new StringBuilder();
                 for (Method m : c.getDeclaredMethods()) {
                     String n = m.getName();
-                    if (n.toLowerCase().contains("effect") || n.toLowerCase().contains("blend")
-                            || n.toLowerCase().contains("color")) ms.append(n).append(' ');
+                    String lower = n.toLowerCase(java.util.Locale.ROOT);
+                    if (lower.contains("effect") || lower.contains("blend")
+                            || lower.contains("color")) ms.append(n).append(' ');
                 }
                 if (ms.length() > 0) Xp.log(TAG + "  " + c.getSimpleName() + " methods: " + ms);
             }
@@ -3448,7 +3446,7 @@ public class Main extends XposedModule {
             return;
         }
         Xp.log(TAG + "=== " + c.getName());
-        String g = grep == null ? null : grep.toLowerCase();
+        String g = grep == null ? null : grep.toLowerCase(java.util.Locale.ROOT);
         for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
             for (Method m : k.getDeclaredMethods()) {
                 StringBuilder sb = new StringBuilder(m.getReturnType().getSimpleName())
@@ -3460,13 +3458,13 @@ public class Main extends XposedModule {
                 }
                 sb.append(')');
                 String line = sb.toString();
-                if (g == null || line.toLowerCase().contains(g)) {
+                if (g == null || line.toLowerCase(java.util.Locale.ROOT).contains(g)) {
                     Xp.log(TAG + "  " + line);
                 }
             }
             for (java.lang.reflect.Field f : k.getDeclaredFields()) {
                 String line = f.getType().getSimpleName() + " ." + f.getName();
-                if (g == null || line.toLowerCase().contains(g)) {
+                if (g == null || line.toLowerCase(java.util.Locale.ROOT).contains(g)) {
                     Xp.log(TAG + "  " + line);
                 }
             }

@@ -1,5 +1,7 @@
 package com.os4.musiccover;
 
+import android.annotation.SuppressLint;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -184,6 +186,8 @@ final class Prefetch {
     }
 
     /** Resolve the current song's URI independently of queue predictions. */
+    // Spotify publishes its artwork URL under a custom metadata key.
+    @SuppressLint("WrongConstant")
     static Bitmap currentArtwork(MediaMetadata metadata, String pkg) {
         String spotifyUrl = "com.spotify.music".equals(pkg)
                 ? metadata.getString("com.spotify.music.extra.ART_HTTPS_URI") : null;

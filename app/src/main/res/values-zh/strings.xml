@@ -15,7 +15,6 @@
     <string name="cover_style_full">全屏封面</string>
     <string name="cover_style_card">方形卡片</string>
     <string name="cover_clock_section">封面与时钟</string>
-    <string name="lyrics_section">锁屏歌词</string>
     <string name="clock_size">时钟大小</string>
     <string name="clock_force_colon">时钟强制显示冒号</string>
     <string name="clock_force_colon_summary">部分样式不生效</string>
@@ -69,6 +68,7 @@
     <string name="credits_group_lyrics">锁屏</string>
     <string name="credits_group_tools">运行与分发</string>
     <string name="credits_lewewe">维护面向 HyperOS 4 的 Enhanced 分支，改进封面、歌词、状态栏图标、通知手势、息屏显示和播放器自定义。</string>
+    <string name="credits_puhboo">贡献了基于 LibreTranslate、Google Cloud 和 DeepL 的歌词在线翻译，支持歌曲名和歌手别名的 Extended 歌词搜索，以及 Spicy Lyrics 接入和歌词源缓存。还贡献了歌词解析与逐字时间轴改进、原生翻译与罗马音整合，以及可选的 Alive 歌词效果，包括 Eye-Candy 暂停时保留已显示文字的修复。</string>
     <string name="credits_hypernavbar">整套界面骨架：主题、悬浮导航栏、液态玻璃、背景模糊、关于页和多语言</string>
     <string name="credits_miuix">这个界面用到的全部组件</string>
     <string name="credits_liquid_glass">液态玻璃的透镜、内阴影和鲜艳度</string>
@@ -105,7 +105,6 @@
     <string name="home_device_model">设备型号</string>
     <string name="home_hyperos_version">HyperOS 版本</string>
     <string name="home_android_version">Android 版本</string>
-    <string name="home_module_version">模块版本</string>
     <string name="home_unknown">未知</string>
     <string name="home_loading">加载中…</string>
     <string name="donate_title">捐赠支持</string>
@@ -199,24 +198,7 @@
     <string name="shade_mode_restore">系统默认</string>
     <string name="shade_mode_keep">保持音乐封面</string>
 
-    <string name="islands_page_title">锁屏超级岛</string>
-    <string name="islands_enable">启用锁屏超级岛</string>
-    <string name="islands_location_summary">普通锁屏的底部快捷按钮之间显示</string>
-    <string name="islands_waiting_summary">等待 SystemUI 模块响应</string>
-    <string name="islands_adaptive_width">快捷方式关闭时加宽</string>
-    <string name="islands_adaptive_width_summary">手电筒或相机在系统设置里关掉后，超级岛占用空出的位置</string>
-    <string name="demo_cover_title">封面接管锁屏</string>
-    <string name="demo_cover_summary">点按胶囊展开成媒体卡片，专辑封面随之接管锁屏，时钟缩小让出位置；卡片下滑收回胶囊，封面退出。</string>
-    <string name="demo_lyrics_title">锁屏歌词</string>
-    <string name="demo_lyrics_summary">有歌词时，双指单击可切换歌词和封面。没有歌词时，单击大封面可将其收回媒体播放器。</string>
-    <string name="demo_aod_title">息屏保持</string>
-    <string name="demo_aod_summary">开启全屏息屏显示时，息屏后仍保留封面的小时钟和歌词，亮屏接着唱。</string>
     <string name="demo_island_switch_title">切换与打断</string>
-    <string name="demo_island_switch_summary">左右滑动切换岛；点按岛展开成卡片，动画中途也可切换；在卡片上下滑收回岛里。</string>
-    <string name="demo_island_scene_title">沉浸页面</string>
-    <string name="demo_island_scene_summary">点按导航、倒计时或音乐的岛，锁屏换成地图、倒计时或专辑封面；点另一个岛直接切过去。</string>
-    <string name="demo_island_notifications_title">聚合岛</string>
-    <string name="demo_island_notifications_summary">普通通知收进一个岛，点按或上滑展开成列表，整排岛一起变成卡片、时钟跟着缩小；在列表上下滑全部收回。</string>
     <string name="islands_background_blur">背景模糊</string>
     <string name="islands_background_blur_summary">为超级岛和快捷按钮添加模糊背景。关闭后，Frosted Glass 使用纯色背景，Soft Glass 使用 HyperOS 4 原生玻璃效果。</string>
     <string name="islands_background_blur_radius">背景模糊强度</string>
