@@ -21,6 +21,7 @@ final class LyricDiskCache {
     private LyricDiskCache() {}
 
     static JSONObject read(String namespace, String key) {
+        if (!LockLyrics.sOfflineCache) return null;
         synchronized (LOCK) {
             File file = file(namespace, key);
             if (file == null || !file.isFile()) return null;
@@ -47,7 +48,7 @@ final class LyricDiskCache {
     }
 
     static void write(String namespace, String key, JSONObject value) {
-        if (value == null) return;
+        if (!LockLyrics.sOfflineCache || value == null) return;
         synchronized (LOCK) {
             File file = file(namespace, key);
             if (file == null) return;
@@ -59,6 +60,20 @@ final class LyricDiskCache {
                 file.delete();
             }
             trim(parent);
+        }
+    }
+
+    /** Removes only this module's persisted lyric/provider/translation results. */
+    static void clear() {
+        synchronized (LOCK) {
+            Context context;
+            try {
+                context = Main.appContext();
+            } catch (Throwable unavailable) {
+                return;
+            }
+            if (context == null) return;
+            deleteTree(new File(context.getCacheDir(), "lyrics"));
         }
     }
 
@@ -103,5 +118,14 @@ final class LyricDiskCache {
             files = dir.listFiles();
             if (files == null) return;
         }
+    }
+
+    private static void deleteTree(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteTree(child);
+        }
+        file.delete();
     }
 }

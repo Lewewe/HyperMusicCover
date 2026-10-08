@@ -408,7 +408,8 @@ final class NcmLyrics {
      * after the queue said it would - and short enough that a spell of the endpoint answering
      * with unrelated songs cannot be held over a song for long. See the re-ask in fetch().
      */
-    private static final int SEARCH_CACHE_MAX = 8;
+    /** Search responses warmed by the queue are useful only for previous/current/next. */
+    private static final int SEARCH_CACHE_MAX = 3;
     private static final long SEARCH_TTL_MS = 120000L;
 
     private static final class Searched {

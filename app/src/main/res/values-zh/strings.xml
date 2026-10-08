@@ -280,6 +280,8 @@
     <string name="lyrics_online_source_hint">原语言（默认 auto）</string>
     <string name="lyrics_online_target_hint">目标语言（默认 en）</string>
     <string name="extras_section">歌词设置</string>
+    <string name="lyrics_offline_cache">保留歌词以供离线播放</string>
+    <string name="lyrics_offline_cache_summary">将歌词和在线翻译保存在此设备上。网络信号较差或不稳定时很有用。找到更好的歌词时会更新缓存。关闭此选项将清除缓存。</string>
     <string name="extras_summary">歌词显示、翻译、动效与来源设置</string>
     <string name="lyrics_search_section">歌词搜索</string>
     <string name="lyrics_search_mode">搜索模式</string>

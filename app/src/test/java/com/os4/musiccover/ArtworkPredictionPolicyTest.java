@@ -4,8 +4,8 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ArtworkPredictionPolicyTest {
-    @Test public void spotifyMustConfirmTheSongBeforeShowingQueuedArtwork() {
-        assertFalse(ArtworkPredictionPolicy.canSpeculate("com.spotify.music"));
+    @Test public void spotifyCanPredictAfterItsQueueCurrentItemIsVerified() {
+        assertTrue(ArtworkPredictionPolicy.canSpeculate("com.spotify.music"));
         assertTrue(ArtworkPredictionPolicy.canSpeculate("com.apple.android.music"));
         assertTrue(ArtworkPredictionPolicy.canSpeculate("com.google.android.apps.youtube.music"));
     }

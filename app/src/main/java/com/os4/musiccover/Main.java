@@ -1947,6 +1947,7 @@ public class Main extends XposedModule {
                     + "\nproviderkugou=" + (LockLyrics.sProviderKugou ? 1 : 0)
                     + "\nproviderlrclib=" + (LockLyrics.sProviderLrcLib ? 1 : 0)
                     + "\nprovidervariants=" + (LockLyrics.sProviderVariants ? 1 : 0)
+                    + "\nlyricofflinecache=" + (LockLyrics.sOfflineCache ? 1 : 0)
                     // Off when absent, which is what every file from before it had.
                     + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
                     + "\nlyricsearch=" + LockLyrics.sSearchMode
@@ -2078,6 +2079,7 @@ public class Main extends XposedModule {
                         else if ("providerkugou".equals(k)) LockLyrics.sProviderKugou = "1".equals(v);
                         else if ("providerlrclib".equals(k)) LockLyrics.sProviderLrcLib = "1".equals(v);
                         else if ("providervariants".equals(k)) LockLyrics.sProviderVariants = "1".equals(v);
+                        else if ("lyricofflinecache".equals(k)) LockLyrics.sOfflineCache = "1".equals(v);
                         else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
                         else if ("lyricsearch".equals(k)) LockLyrics.setSearchMode(Integer.parseInt(v));
                         else if ("lyricgroups".equals(k)) LockLyrics.sRapidGroups = "1".equals(v);
@@ -2299,7 +2301,9 @@ public class Main extends XposedModule {
                     } else if ("mediabtn".equals(op)) {
                         setResultData(dumpClickables());
                     } else if ("queue".equals(op)) {
-                        setResultData(dumpQueues());
+                        setResultData(dumpQueues(i.getIntExtra("count", 2)));
+                    } else if ("queue3".equals(op)) {
+                        setResultData(Prefetch.describeTriplet(sWatched));
                     } else if ("wphello".equals(op)) {
                         // The wallpaper process, on its start or when asked, saying what it can
                         // take. See sWpComposes.
@@ -2414,6 +2418,11 @@ public class Main extends XposedModule {
                         LockLyrics.sProviderKugou = i.getBooleanExtra("kugou", LockLyrics.sProviderKugou);
                         LockLyrics.sProviderLrcLib = i.getBooleanExtra("lrclib", LockLyrics.sProviderLrcLib);
                         LockLyrics.sProviderVariants = i.getBooleanExtra("variants", LockLyrics.sProviderVariants);
+                        saveState();
+                    } else if ("lyricofflinecache".equals(op)) {
+                        boolean on = i.getBooleanExtra("on", LockLyrics.sOfflineCache);
+                        if (!on) LyricDiskCache.clear();
+                        LockLyrics.sOfflineCache = on;
                         saveState();
                     } else if ("lyricroma".equals(op)) {
                         LockLyrics.sRoma = i.getBooleanExtra("on", !LockLyrics.sRoma);
@@ -2926,6 +2935,7 @@ public class Main extends XposedModule {
                         out.putBoolean("providerkugou", LockLyrics.sProviderKugou);
                         out.putBoolean("providerlrclib", LockLyrics.sProviderLrcLib);
                         out.putBoolean("providervariants", LockLyrics.sProviderVariants);
+                        out.putBoolean("lyricofflinecache", LockLyrics.sOfflineCache);
                         out.putBoolean("lyricroma", LockLyrics.sRoma);
                         out.putInt("lyricsearch", LockLyrics.sSearchMode);
                         out.putBoolean("lyricgroups", LockLyrics.sRapidGroups);
@@ -9396,15 +9406,15 @@ public class Main extends XposedModule {
      * items is what makes that possible; a queue without one, or no queue at all, means a player
      * this can never help. Measured per player rather than assumed - see `op queue`.
      */
-    private static String dumpQueues() {
+    private static String dumpQueues(int count) {
         try {
-            return dumpQueuesInner();
+            return dumpQueuesInner(Math.max(1, count));
         } catch (Throwable t) {
             return "queue dump failed: " + Log.getStackTraceString(t);
         }
     }
 
-    private static String dumpQueuesInner() {
+    private static String dumpQueuesInner(int count) {
         List<MediaController> cs = activeSessions();
         if (cs == null) return "sessions could not be read";
         StringBuilder sb = new StringBuilder("=== play queues ===\nprefetch: "
@@ -9437,8 +9447,11 @@ public class Main extends XposedModule {
                 }
             }
             sb.append(" (index ").append(at).append(')');
-            // The current item and the one after it: what a prefetch would have to work from.
-            for (int n = Math.max(0, at); n < Math.min(q.size(), Math.max(0, at) + 2); n++) {
+            // The normal probe shows the current item and the next one. A larger requested count
+            // is a one-shot whole-queue diagnostic, starting at the first item so callers can
+            // inspect Spotify's complete published order.
+            int first = count > 2 ? 0 : Math.max(0, at);
+            for (int n = first; n < Math.min(q.size(), first + count); n++) {
                 android.media.MediaDescription d = q.get(n).getDescription();
                 sb.append("\n  [").append(n).append("] id=").append(q.get(n).getQueueId())
                         .append(' ');
@@ -9573,6 +9586,17 @@ public class Main extends XposedModule {
                         LockLyrics.onPlaybackState(state);
                         updateCoverCardPlayback(state);
                         MiniPlayerRuntime.refresh();
+                    }
+
+                    @Override
+                    public void onQueueChanged(List<android.media.session.MediaSession.QueueItem> queue) {
+                        if (sWatched == null
+                                || !watched.getSessionToken().equals(sWatched.getSessionToken())) {
+                            return;
+                        }
+                        // Spotify can reshuffle without changing the current metadata. Its queue
+                        // callback is still enough to refresh and warm the newly adjacent track.
+                        Prefetch.onTrack(watched);
                     }
 
                     @Override

@@ -907,6 +907,16 @@ private fun LyricBehaviorControls(
     SmallTitle(text = stringResource(R.string.lyrics_behavior_section))
     Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
         SwitchPreference(
+            title = stringResource(R.string.lyrics_offline_cache),
+            summary = stringResource(R.string.lyrics_offline_cache_summary),
+            checked = module.lyricOfflineCache,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(lyricOfflineCache = it))
+                ModuleBridge.setLyricOfflineCache(context, it)
+            },
+        )
+        SwitchPreference(
             title = stringResource(R.string.lyrics_keep_on),
             checked = module.lyricsKeepOn,
             enabled = enabled,

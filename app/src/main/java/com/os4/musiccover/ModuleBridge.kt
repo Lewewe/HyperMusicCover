@@ -148,6 +148,7 @@ object ModuleBridge {
         val providerKugou: Boolean = true,
         val providerLrcLib: Boolean = true,
         val providerVariants: Boolean = true,
+        val lyricOfflineCache: Boolean = true,
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
         /** Keep fast lyrics together in small groups instead of scrolling on every line. */
@@ -531,6 +532,9 @@ object ModuleBridge {
             }
         }
 
+    fun setLyricOfflineCache(context: Context, on: Boolean) =
+        send(context, "lyricofflinecache") { putExtra("on", on) }
+
     /**
      * One of the five values the lyric band and its type are made of. All five are fixed now and
      * no page offers them; the op still moves any of them for the rest of the session.
@@ -857,6 +861,7 @@ object ModuleBridge {
             providerKugou = b.getBoolean("providerkugou", true),
             providerLrcLib = b.getBoolean("providerlrclib", true),
             providerVariants = b.getBoolean("providervariants", true),
+            lyricOfflineCache = b.getBoolean("lyricofflinecache", true),
             lyricsRoma = b.getBoolean("lyricroma", false),
             lyricsGroups = b.getBoolean("lyricgroups", false),
             lyricsSearchMode = b.getInt("lyricsearch", 0),

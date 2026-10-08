@@ -5,8 +5,7 @@ final class ArtworkPredictionPolicy {
     private ArtworkPredictionPolicy() {}
 
     static boolean canSpeculate(String packageName) {
-        // Spotify can publish a queue whose active item still belongs to the previous song.
-        return !"com.spotify.music".equals(packageName);
+        return true;
     }
 
     static boolean canConfirm(int generation, int currentGeneration,
