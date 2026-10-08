@@ -122,6 +122,8 @@ object ModuleBridge {
         val lyrics: Boolean = true,
         /** Keep the screen lit while lock screen lyrics are playing. */
         val lyricsKeepOn: Boolean = false,
+        /** Let a cover tap close cover mode when this track has no lyrics. Off by default. */
+        val closeLyriclessCover: Boolean = false,
         /** Draw the singing words brighter than white on an HDR screen. */
         val lyricsHdr: Boolean = false,
         /** Draw each line's translation under it. On unless the user turns it off. */
@@ -472,6 +474,9 @@ object ModuleBridge {
 
     fun setLyricsKeepOn(context: Context, on: Boolean) =
         send(context, "lyrickeep") { putExtra("on", on) }
+
+    fun setCloseLyriclessCover(context: Context, on: Boolean) =
+        send(context, "lyriclessclose") { putExtra("on", on) }
 
     fun setLyricsTrans(context: Context, on: Boolean) =
         send(context, "lyrictrans") { putExtra("on", on) }
@@ -839,6 +844,7 @@ object ModuleBridge {
             mediaBarGlow = b.getBoolean("seekglow", true),
             lyrics = b.getBoolean("lyrics", true),
             lyricsKeepOn = b.getBoolean("lyrickeep", false),
+            closeLyriclessCover = b.getBoolean("lyriclessclose", false),
             lyricsHdr = b.getBoolean("lyrichdr", false),
             // Defaults the other way: this one is on for anyone whose module predates the key.
             lyricsTrans = b.getBoolean("lyrictrans", true),

@@ -915,6 +915,16 @@ private fun LyricBehaviorControls(
                 ModuleBridge.setLyricsKeepOn(context, it)
             },
         )
+        SwitchPreference(
+            title = stringResource(R.string.lyrics_close_without_lyrics),
+            summary = stringResource(R.string.lyrics_close_without_lyrics_summary),
+            checked = module.closeLyriclessCover,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(closeLyriclessCover = it))
+                ModuleBridge.setCloseLyriclessCover(context, it)
+            },
+        )
     }
 }
 
