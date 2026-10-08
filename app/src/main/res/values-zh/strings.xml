@@ -266,11 +266,11 @@
     <string name="lyrics_online_endpoint_hint">服务地址（兼容 LibreTranslate）</string>
     <string name="lyrics_online_google_note">歌词将发送至 Google Cloud。请在自己的项目中启用 Cloud Translation API 与结算，将密钥限制为此 API，并设置配额。使用可能产生费用，本模块不提供密钥。</string>
     <string name="lyrics_online_invalid_config">自定义服务需填写有效的 HTTP(S) 地址，Google 或 DeepL 需填写 API 密钥，同时请填写有效的语言代码。</string>
-    <string name="lyrics_online_language_note">请使用服务支持的语言代码，例如原语言 auto，目标语言 en、zh 或 ja。DeepL 也支持 EN-US 等变体。已有译文会保留，切换服务将清除 API 密钥，备份不包含密钥。</string>
+    <string name="lyrics_online_language_note">请使用服务支持的语言代码，例如原语言 auto，目标语言 en、zh 或 ja。DeepL 也支持 EN-US 等变体。在线模式会替换来源译文，切换服务将清除 API 密钥，备份不包含密钥。</string>
     <string name="lyrics_online_mode">在线翻译</string>
     <string name="lyrics_online_mode_dual">原文与译文</string>
     <string name="lyrics_online_mode_off">关闭</string>
-    <string name="lyrics_online_mode_summary">解析歌词后异步翻译，保留原有逐字时间轴。</string>
+    <string name="lyrics_online_mode_summary">解析歌词后异步翻译，用在线目标语言替换来源译文，并保留原有逐字时间轴。</string>
     <string name="lyrics_online_provider_custom">自定义 · LibreTranslate</string>
     <string name="lyrics_online_provider_deepl_free">DeepL API · Free</string>
     <string name="lyrics_online_provider_deepl_pro">DeepL API · Pro</string>

@@ -10,7 +10,7 @@ public final class LyricLine {
     final String text;
     /** Null when the file has no native translation or romanisation for this line. */
     final String translation;
-    /** The selected online translation, rendered separately below any native secondary line. */
+    /** The selected online translation, which replaces native secondary text in online mode. */
     String onlineTranslation;
     /**
      * How the line is said in Latin letters - romaji, jyutping, a Korean romanisation - or null.

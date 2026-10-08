@@ -91,13 +91,11 @@ final class LyricTranslationLogic {
         if (!likelyJapaneseRomaji(entries) && likelyLanguage(entries, target)) {
             return Collections.emptyList();
         }
-        List<Entry> missing = new ArrayList<>();
-        for (Entry entry : entries) {
-            LyricLine line = lines.get(entry.index);
-            // Keep native translations; do not pay to translate a line already supplied by a source.
-            if (line.translation == null || line.translation.trim().isEmpty()) missing.add(entry);
-        }
-        return missing;
+        // Online mode is an explicit replacement for a source's secondary text.  A catalogue
+        // translation may be in a different language from the configured target (Kuwo often
+        // supplies Chinese for Japanese lyrics), so it must not suppress the requested
+        // translation.  The renderer hides that native secondary text while online mode is on.
+        return entries;
     }
 
 private static boolean likelyJapaneseRomaji(List<Entry> entries) {

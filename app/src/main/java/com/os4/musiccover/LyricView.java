@@ -1808,10 +1808,14 @@ final class LyricView extends View {
             // skipped in the draw: the rows it would have taken are most of a line's height, and
             // a gap there would leave every line floating with a hole under it.
             if ((transOn & LockLyrics.BELOW_TRANS) != 0) {
-                String nativeSecondary = l.onlineTranslation == null ? l.under(transOn) : null;
+                boolean onlineMode = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF;
+                String nativeSecondary = onlineMode ? null
+                        : (l.onlineTranslation == null ? l.under(transOn) : null);
                 String onlineSecondary = l.onlineTranslation;
-                if (onlineSecondary != null && l.roma != null
-                        && (transOn & LockLyrics.BELOW_ROMA) != 0) {
+                // Online mode owns the translation row; optional provider romanisation is a
+                // supplement to that result, never a competing provider translation.
+                if (onlineMode && onlineSecondary != null && LockLyrics.sRoma
+                        && l.roma != null) {
                     onlineSecondary += "\n" + l.roma;
                 }
                 if (nativeSecondary != null) {
@@ -1839,7 +1843,8 @@ final class LyricView extends View {
                     h += TRANS_GAP_DP * density + b.trans[i].getHeight();
                 }
             }
-            String under = l.under(transOn);
+            String under = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF
+                    ? null : l.under(transOn);
             if (under != null && b.trans[i] == null && b.onlineTrans[i] == null) {
                 b.trans[i] = StaticLayout.Builder.obtain(under, 0, under.length(), tp, w)
                         .setAlignment(align)
@@ -2675,12 +2680,13 @@ final class LyricView extends View {
                 c.restoreToCount(save);
                 below += bgGap + bl.getHeight();
             }
-            String nativeSecondary = l.onlineTranslation == null
-                    ? l.under(LockLyrics.below()) : null;
+            boolean onlineMode = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF;
+            String nativeSecondary = onlineMode ? null
+                    : (l.onlineTranslation == null ? l.under(LockLyrics.below()) : null);
             String onlineSecondary = l.onlineTranslation;
             if (LockLyrics.sTrans) {
-                if (onlineSecondary != null && l.roma != null
-                        && (LockLyrics.below() & LockLyrics.BELOW_ROMA) != 0) {
+                if (onlineMode && onlineSecondary != null && LockLyrics.sRoma
+                        && l.roma != null) {
                     onlineSecondary += "\n" + l.roma;
                 }
                 if (nativeSecondary != null) {
@@ -2717,7 +2723,7 @@ final class LyricView extends View {
                     t.draw(c);
                 }
             }
-            String under = l.under(LockLyrics.below());
+            String under = onlineMode ? null : l.under(LockLyrics.below());
             boolean secondaryDrawn = nativeSecondary != null || onlineSecondary != null;
             if (under != null && !secondaryDrawn) {
                 tp.setAlpha(Math.round(255f * TRANS_ALPHA));
