@@ -18,9 +18,7 @@ import android.os.Bundle;
 
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * The cover of the track that has not been asked for yet.
@@ -59,10 +57,9 @@ final class Prefetch {
     private static final int REACH = 2;
     /** Artwork is ~1MB decoded; this is a handful of tracks, not a library. */
     private static final int CACHE_MAX = 6;
-    private static final int LYRIC_READY_MAX = 3;
 
     /** One queue item, reduced to what a cover and a lyric lookup need. */
-    private static final class Item {
+    static final class Item {
         final long id;
         final String title;
         final Uri icon;
@@ -100,58 +97,6 @@ final class Prefetch {
             if (mediaId != null && o.mediaId != null) return mediaId.equals(o.mediaId);
             return title != null && title.equals(o.title);
         }
-    }
-
-    /** Complete provider result for one of previous/current/next, held only in RAM. */
-    static final class Lyrics {
-        final String pkg, mediaId, title, artist;
-        final List<LyricLine> lines;
-        final int source;
-        final boolean translated;
-        Lyrics(String pkg, Item item, List<LyricLine> lines, int source, boolean translated) {
-            this.pkg = pkg;
-            this.mediaId = item.mediaId;
-            this.title = item.title;
-            this.artist = item.artist;
-            this.lines = lines;
-            this.source = source;
-            this.translated = translated;
-        }
-
-        Lyrics(String pkg, String mediaId, List<LyricLine> lines, int source,
-               boolean translated) {
-            this.pkg = pkg;
-            this.mediaId = mediaId;
-            this.title = null;
-            this.artist = null;
-            this.lines = lines;
-            this.source = source;
-            this.translated = translated;
-        }
-
-        boolean matches(MediaController controller) {
-            if (controller == null || !pkg.equals(controller.getPackageName())) return false;
-            MediaMetadata metadata = controller.getMetadata();
-            if (metadata == null) return false;
-            String id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
-            if (mediaId != null && id != null) return mediaId.equals(id);
-            return same(title, metadata.getString(MediaMetadata.METADATA_KEY_TITLE))
-                    && same(artist, metadata.getString(MediaMetadata.METADATA_KEY_ARTIST));
-        }
-    }
-
-    /** Three queue positions, not an offline library cache. Completed misses are retained too. */
-    private static final Map<String, Lyrics> LYRIC_READY =
-            new LinkedHashMap<String, Lyrics>(LYRIC_READY_MAX + 1, 0.75f, true) {
-                @Override protected boolean removeEldestEntry(Map.Entry<String, Lyrics> e) {
-                    return size() > LYRIC_READY_MAX;
-                }
-            };
-    private static final java.util.HashSet<String> LYRIC_LOADING = new java.util.HashSet<>();
-    private static final Map<String, List<LyricsCallback>> LYRIC_WAITERS = new java.util.HashMap<>();
-
-    interface LyricsCallback {
-        void onReady(Lyrics lyrics);
     }
 
     /**
@@ -228,6 +173,7 @@ final class Prefetch {
         if (c == null) {
             sItems = new ArrayList<>();
             sIndex = -1;
+            NextLyrics.setQueue(null, sItems, sIndex);
             return;
         }
         work().post(new Runnable() {
@@ -238,7 +184,7 @@ final class Prefetch {
                     if (coherent) cancelSpotifyQueueRetry();
                     else scheduleSpotifyQueueRetry(c);
                     fetchAround();
-                    warmLyricAhead();
+                    NextLyrics.warm(sPkg, sItems, sIndex);
                 } catch (Throwable t) {
                     Xp.w(TAG + "queue read failed: " + t);
                 }
@@ -376,7 +322,7 @@ final class Prefetch {
                 fetchAround();
             }
         });
-        warmLyricAhead();
+        NextLyrics.warm(sPkg, sItems, sIndex);
         return b;
     }
 
@@ -477,16 +423,9 @@ final class Prefetch {
         synchronized (sHistory) {
             back = sHistory.size();
         }
-        int ready;
-        int readyLines = 0;
-        synchronized (LYRIC_READY) {
-            ready = LYRIC_READY.size();
-            for (Lyrics lyric : LYRIC_READY.values()) if (!lyric.lines.isEmpty()) readyLines++;
-        }
         return "queue=" + items.size() + " at=" + sIndex + " history=" + back + " cached=" + n
                 + " predicted=" + sPredicted
-                + " lyricReady=" + ready + "(" + readyLines + " lyrics)"
-                + " " + NcmLyrics.describeSearches();
+                + " " + NextLyrics.describe();
     }
 
     /** The three tracks relevant to a previous/current/next prediction diagnostic. */
@@ -500,7 +439,7 @@ final class Prefetch {
                     work().post(new Runnable() {
                         @Override public void run() {
                             fetchAround();
-                            warmLyricAhead();
+                            NextLyrics.warm(sPkg, sItems, sIndex);
                         }
                     });
                 } else {
@@ -518,37 +457,9 @@ final class Prefetch {
         int at = sIndex;
         Item current = at >= 0 && at < items.size() ? items.get(at) : sCurrent;
         Item next = at >= 0 && at + 1 < items.size() ? items.get(at + 1) : null;
-        return "previous=" + tripletItem(previous)
-                + "\ncurrent=" + tripletItem(current)
-                + "\nnext=" + tripletItem(next);
+        return NextLyrics.describeTriplet(sPkg, previous, current, next);
     }
 
-    private static String tripletItem(Item item) {
-        if (item == null) return "none";
-        String key = lyricKey(sPkg, item);
-        Lyrics ready;
-        boolean loading;
-        synchronized (LYRIC_READY) {
-            ready = LYRIC_READY.get(key);
-            loading = LYRIC_LOADING.contains(key);
-        }
-        String state;
-        if (ready != null && !ready.lines.isEmpty()) {
-            state = "ready=" + ready.lines.size() + " src=" + LockLyrics.srcName(ready.source)
-                    + (ready.translated ? " +translation" : "");
-        } else if (loading) {
-            state = "prefetching";
-        } else if (ready != null) {
-            state = "prefetch-miss";
-        } else {
-            state = "none";
-        }
-        if (!"none".equals(state)) {
-            return "\"" + item.title + "\" by " + item.artist + " id=" + item.mediaId
-                    + " " + state;
-        }
-        return "\"" + item.title + "\" — " + item.artist + " id=" + item.mediaId;
-    }
 
     // ------------------------------------------------------------------ internals
 
@@ -566,6 +477,7 @@ final class Prefetch {
         if (q == null || q.isEmpty()) {
             sItems = new ArrayList<>();
             sIndex = -1;
+            NextLyrics.setQueue(sPkg, sItems, sIndex);
             return true;
         }
         List<Item> items = new ArrayList<>(q.size());
@@ -608,6 +520,7 @@ final class Prefetch {
         }
         sItems = items;
         sIndex = at;
+        NextLyrics.setQueue(sPkg, items, at);
         if (at >= 0) noteCurrent(items.get(at));
         return coherent;
     }
@@ -627,7 +540,7 @@ final class Prefetch {
                     if (readQueue(controller)) {
                         sSpotifyQueueRetryCount = 0;
                         fetchAround();
-                        warmLyricAhead();
+                        NextLyrics.warm(sPkg, sItems, sIndex);
                     } else {
                         scheduleSpotifyQueueRetry(controller);
                     }
@@ -697,183 +610,6 @@ final class Prefetch {
             } catch (Throwable ignored) { }
         }
         return 0L;
-    }
-
-    /**
-     * The lyric and translation for the track after this one, held ready for direct handoff.
-     *
-     * One ahead, where the artwork takes two either side. The cases are not the same shape: a
-     * cover has to be right the instant a press lands, and two presses in a burst is what that
-     * reach exists for, where nobody reads the lyrics of a song they skipped past in a second.
-     * Going only forward and only one deep also keeps the request rate close to what it was,
-     * which matters for the by-name half - NetEase answers a client it has decided is searching
-     * too much by quietly leaving the right song out of the results.
-     *
-     * Any player with a usable queue can use this. Spotify additionally supplies a stable track
-     * id for the optional Spicy route; it does not replace the normal providers.
-     */
-    private static void warmLyricAhead() {
-        String pkg = sPkg;
-        if (pkg == null) return;
-        List<Item> items = sItems;
-        int at = sIndex;
-        if (items.isEmpty() || at < 0 || at + 1 >= items.size()) return;
-        final Item it = items.get(at + 1);
-        final boolean byName = it.title != null && !it.title.isEmpty()
-                && it.artist != null && !it.artist.isEmpty();
-        if (!byName) return;
-        final String key = lyricKey(pkg, it);
-        synchronized (LYRIC_READY) {
-            if (LYRIC_READY.containsKey(key) || !LYRIC_LOADING.add(key)) return;
-        }
-        lyricWork().post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    // This is deliberately keyed by the session's media id, never a fuzzy
-                    // title search. It lets every player that publishes an id reuse a previous
-                    // ready result without risking lyrics from a similarly named track.
-                    QueuedLyricCache.Entry cached = QueuedLyricCache.read(pkg, it.mediaId);
-                    if (cached != null) {
-                        completeLyrics(key, new Lyrics(pkg, it, cached.lines, cached.source,
-                                cached.translated));
-                        Xp.log(TAG + "restored ready lyrics for \"" + it.title + "\": "
-                                + cached.lines.size() + " lines");
-                        return;
-                    }
-                    Xp.log(TAG + "preparing lyrics for \"" + it.title + "\"");
-                    LyricSource.loadAhead(pkg, it.title, it.artist, it.album, it.durationMs, it.mediaId,
-                            new LyricSource.AheadCallback() {
-                                @Override public void onLines(final List<LyricLine> lines,
-                                                              String why, final int source) {
-                                    LockLyrics.translateAhead(key, lines,
-                                            new LockLyrics.AheadTranslationCallback() {
-                                                @Override public void onReady(List<LyricLine> merged,
-                                                                              boolean translated) {
-                                                    List<LyricLine> ready = merged == null
-                                                            ? java.util.Collections.<LyricLine>emptyList()
-                                                            : merged;
-                                                    QueuedLyricCache.write(pkg, it.mediaId, ready,
-                                                            source, translated);
-                                                    completeLyrics(key, new Lyrics(pkg, it, ready,
-                                                            source, translated));
-                                                    Xp.log(TAG + "prepared \"" + it.title + "\": "
-                                                            + (merged == null ? 0 : merged.size())
-                                                            + " lines (" + why + ")");
-                                                }
-                                            });
-                                }
-                            });
-                } catch (Throwable t) {
-                    completeLyrics(key, null);
-                    Xp.w(TAG + "reading ahead failed: " + t);
-                }
-            }
-        });
-    }
-
-    /** A ready result only wins when the newly playing session is exactly that queue item. */
-    static Lyrics takeLyrics(MediaController controller) {
-        if (controller == null) return null;
-        synchronized (LYRIC_READY) {
-            for (Lyrics lyrics : LYRIC_READY.values()) {
-                // A queue item has no duration or session payload, so an empty queue result is
-                // never handed to the live view. Only this exact item's real lyric lines are.
-                if (!lyrics.lines.isEmpty() && lyrics.matches(controller)) {
-                    return lyrics;
-                }
-            }
-        }
-        return null;
-    }
-
-    /** Joins the exact queue request already in flight instead of issuing a duplicate lookup. */
-    static boolean awaitLyrics(MediaController controller, LyricsCallback callback) {
-        if (controller == null || callback == null) return false;
-        Item item = itemOf(controller);
-        if (item == null) return false;
-        String key = lyricKey(controller.getPackageName(), item);
-        synchronized (LYRIC_READY) {
-            if (!LYRIC_LOADING.contains(key)) return false;
-            List<LyricsCallback> waiters = LYRIC_WAITERS.get(key);
-            if (waiters == null) {
-                waiters = new ArrayList<>();
-                LYRIC_WAITERS.put(key, waiters);
-            }
-            waiters.add(callback);
-            return true;
-        }
-    }
-
-    private static void completeLyrics(String key, Lyrics lyrics) {
-        List<LyricsCallback> waiters;
-        synchronized (LYRIC_READY) {
-            LYRIC_LOADING.remove(key);
-            if (lyrics != null) LYRIC_READY.put(key, lyrics);
-            waiters = LYRIC_WAITERS.remove(key);
-        }
-        if (waiters != null) for (LyricsCallback waiter : waiters) waiter.onReady(lyrics);
-    }
-
-    /** The current track's full pipeline ended; ensure a queue update did not leave next unwarmed. */
-    static void onLyricsFinal() {
-        warmLyricAhead();
-    }
-
-    /** Stores a successful live result so a later queue warm can use the same exact track. */
-    static void persistReady(String pkg, String mediaId, List<LyricLine> lines, int source,
-                             boolean translated) {
-        if (pkg == null || pkg.isEmpty() || mediaId == null || mediaId.isEmpty()
-                || lines == null || lines.isEmpty()) return;
-        QueuedLyricCache.write(pkg, mediaId, lines, source, translated);
-        // A failed warm must not keep hiding a later successful live lookup for this exact item.
-        // This update is RAM-only as well, so disabling the offline switch never disables the
-        // current session's three-track handoff.
-        String key = pkg + '|' + mediaId;
-        synchronized (LYRIC_READY) {
-            Lyrics old = LYRIC_READY.get(key);
-            if (old == null || !LyricSource.words(old.lines) || LyricSource.words(lines)) {
-                LYRIC_READY.put(key, new Lyrics(pkg, mediaId, lines, source, translated));
-            }
-        }
-    }
-
-    private static String lyricKey(String pkg, Item item) {
-        return pkg + '|' + (item.mediaId != null && !item.mediaId.isEmpty()
-                ? item.mediaId : item.title + '|' + item.artist);
-    }
-
-    private static Item itemOf(MediaController controller) {
-        MediaMetadata metadata = controller.getMetadata();
-        if (metadata == null) return null;
-        String title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE);
-        if (title == null || title.isEmpty()) return null;
-        return new Item(-1, title, null,
-                metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
-                metadata.getString(MediaMetadata.METADATA_KEY_ARTIST));
-    }
-
-    private static boolean same(String a, String b) {
-        return a != null && a.equals(b);
-    }
-
-    /**
-     * Its own thread, not the artwork's.
-     *
-     * The mirrors are allowed seconds and the by-name search is three round trips, and the
-     * artwork prefetch is what makes a press answerable at all - sharing one thread would put
-     * the cover behind the lyric of a song that has not started.
-     */
-    private static Handler sLyricWork;
-
-    private static synchronized Handler lyricWork() {
-        if (sLyricWork == null) {
-            HandlerThread t = new HandlerThread("mc-lyricahead",
-                    android.os.Process.THREAD_PRIORITY_BACKGROUND);
-            t.start();
-            sLyricWork = new Handler(t.getLooper());
-        }
-        return sLyricWork;
     }
 
     /** Fetches the artwork either side of where we think we are, newest need first. */

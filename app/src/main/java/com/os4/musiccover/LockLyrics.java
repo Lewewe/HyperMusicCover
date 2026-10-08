@@ -258,7 +258,7 @@ final class LockLyrics {
                                         || !cfg.sameSettings(translationConfig())) return;
                                 setLines(merged, fromCache ? "cached + online translation"
                                         : "online translation");
-                                Prefetch.persistReady(readyPkg, readyMediaId, merged,
+                                NextLyrics.persistReady(readyPkg, readyMediaId, merged,
                                         readySource, true);
                             }
                         });
@@ -1093,15 +1093,15 @@ final class LockLyrics {
         sLoading = sEnabled && !key.isEmpty();
         setLines(Collections.<LyricLine>emptyList(), "track changed");
         if (!sEnabled || key.isEmpty()) return;
-        Prefetch.Lyrics ahead = Prefetch.takeLyrics(c);
+        NextLyrics.Lyrics ahead = NextLyrics.take(c);
         if (ahead != null) {
             settlePrefetched(key, ahead);
             return;
         }
         final String awaitedKey = key;
         final int waitingGen = sGen + 1;
-        if (Prefetch.awaitLyrics(c, new Prefetch.LyricsCallback() {
-            @Override public void onReady(final Prefetch.Lyrics result) {
+        if (NextLyrics.await(c, new NextLyrics.LyricsCallback() {
+            @Override public void onReady(final NextLyrics.Lyrics result) {
                 Main.main().post(new Runnable() {
                     @Override public void run() {
                         if (waitingGen != sGen || !awaitedKey.equals(sKey) || sDemo) return;
@@ -1127,7 +1127,7 @@ final class LockLyrics {
             sSource = hit.source;
             setLines(hit.lines, "cached");
             translateAsync(key, hit.lines, sGen);
-            Prefetch.onLyricsFinal();
+            NextLyrics.onLyricsFinal();
             return;
         }
         // What the lookup about to start will read the session as, so a payload that turns up
@@ -1184,7 +1184,7 @@ final class LockLyrics {
                 sSource = hit.source;
                 setLines(hit.lines, "cached");
                 translateAsync(key, hit.lines, sGen);
-                Prefetch.onLyricsFinal();
+                NextLyrics.onLyricsFinal();
                 return;
             }
             sInfoSeen = LyricSource.infoFor(c);
@@ -1302,7 +1302,7 @@ final class LockLyrics {
 
             @Override public void onFinished(boolean empty) {
                 if (gen != sGen || !want.equals(sKey) || sDemo) return;
-                Prefetch.onLyricsFinal();
+                NextLyrics.onLyricsFinal();
             }
         });
     }
@@ -1346,7 +1346,7 @@ final class LockLyrics {
     }
 
     /** Applies a complete queue result without starting a second provider or translation request. */
-    private static void settlePrefetched(String want, Prefetch.Lyrics ahead) {
+    private static void settlePrefetched(String want, NextLyrics.Lyrics ahead) {
         Main.main().removeCallbacks(LOOKUP_WATCHDOG);
         sLoading = false;
         sSource = ahead.source;
@@ -1354,7 +1354,7 @@ final class LockLyrics {
         persistReady(ahead.lines, ahead.source, ahead.translated);
         setLines(ahead.lines, ahead.translated ? "prefetched + online translation"
                 : "prefetched lyrics");
-        Prefetch.onLyricsFinal();
+        NextLyrics.onLyricsFinal();
         if (ahead.source == LyricSource.SRC_SPICY && !LyricSource.words(ahead.lines)) {
             // Spicy identified this Spotify item exactly but supplied line timing. Keep it visible
             // while the normal live path, with duration/album metadata, looks for word timing.
@@ -1466,7 +1466,7 @@ final class LockLyrics {
     }
 
     private static void persistReady(List<LyricLine> lines, int source, boolean translated) {
-        Prefetch.persistReady(sReadyPkg, sReadyMediaId, lines, source, translated);
+        NextLyrics.persistReady(sReadyPkg, sReadyMediaId, lines, source, translated);
     }
 
     /**
