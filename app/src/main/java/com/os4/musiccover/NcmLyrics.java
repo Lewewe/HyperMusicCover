@@ -81,7 +81,8 @@ final class NcmLyrics {
 
         /** Stable across a track's lifetime, so it can key a cache. */
         String key() {
-            return title + '|' + artist + '|' + album + '|' + durationMs + '|' + qqId;
+            return title + '|' + artist + '|' + album + '|' + durationMs + '|' + qqId
+                    + "|search=" + LockLyrics.sSearchMode;
         }
 
         @Override
@@ -283,7 +284,7 @@ final class NcmLyrics {
         try {
             got = fetch(q);
         } catch (Throwable t) {
-            Xp.log("[MCNcm] failed: " + t);
+            Xp.w("[MCNcm] failed: " + t);
         }
         if (got != null) {
             synchronized (CACHE) {
@@ -486,7 +487,7 @@ final class NcmLyrics {
             Xp.log("[MCNcm] searched \"" + terms + "\" ahead of time in "
                     + (android.os.SystemClock.uptimeMillis() - t0) + "ms");
         } catch (Throwable t) {
-            Xp.log("[MCNcm] searching ahead failed: " + t);
+            Xp.w("[MCNcm] searching ahead failed: " + t);
         }
     }
 
@@ -620,7 +621,7 @@ final class NcmLyrics {
             Xp.log("[MCNcm] \"" + line + "\" is sung by " + best + ", " + bestGap + "ms off");
             return lyricsOf(best, started);
         } catch (Throwable t) {
-            Xp.log("[MCNcm] lyric search failed: " + t);
+            Xp.w("[MCNcm] lyric search failed: " + t);
             return null;
         }
     }
@@ -683,6 +684,10 @@ final class NcmLyrics {
      * artists searched separately through aliases. Album ownership still checks all credits.
      */
     static String firstArtist(String artist) {
+        if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) {
+            int slash = artist.indexOf('/');
+            return (slash > 0 ? artist.substring(0, slash) : artist).trim();
+        }
         java.util.List<String> artists = LyricSearchAliases.splitArtists(artist);
         return artists.isEmpty() ? "" : artists.get(0);
     }
@@ -798,7 +803,7 @@ final class NcmLyrics {
             Xp.log("[MCNcm] album " + album + " (" + q.album + ") -> " + id);
             return id;
         } catch (Throwable t) {
-            Xp.log("[MCNcm] album lookup failed: " + t);
+            Xp.w("[MCNcm] album lookup failed: " + t);
             return null;
         }
     }
@@ -869,6 +874,7 @@ final class NcmLyrics {
      * credit cannot prove an album belongs to this artist.
      */
     private static boolean byArtist(String wanted, org.json.JSONObject s) {
+        if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) return byArtistOriginal(wanted, s);
         org.json.JSONArray ar = s.optJSONArray("artists");
         if (ar == null || ar.length() == 0) return false;
         for (int i = 0; i < ar.length(); i++) {
@@ -1019,4 +1025,23 @@ final class NcmLyrics {
         }
         return sb.toString();
     }
+    private static boolean byArtistOriginal(String wanted, org.json.JSONObject s) {
+        String want = norm(wanted);
+        org.json.JSONArray ar = s.optJSONArray("artists");
+        if (want.isEmpty() || ar == null || ar.length() == 0) {
+            return true;
+        }
+        for (int i = 0; i < ar.length(); i++) {
+            org.json.JSONObject a = ar.optJSONObject(i);
+            if (a == null) {
+                continue;
+            }
+            String got = norm(str(a, "name"));
+            if (!got.isEmpty() && (got.contains(want) || want.contains(got))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

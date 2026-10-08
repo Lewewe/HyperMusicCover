@@ -2,8 +2,23 @@ package com.os4.musiccover
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 
 class LyricParseTest {
+    private var previousMode = LockLyrics.SEARCH_ORIGINAL
+
+    @Before
+    fun useExtendedParser() {
+        previousMode = LockLyrics.sSearchMode
+        LockLyrics.setSearchMode(LockLyrics.SEARCH_EXTENDED)
+    }
+
+    @After
+    fun restoreParserMode() {
+        LockLyrics.setSearchMode(previousMode)
+    }
+
     private fun words(vararg chunks: String, translation: String? = null): LyricLine {
         var chars = 0
         return LyricLine(chunks.joinToString(""), translation, 1000, 6000, true,
@@ -26,7 +41,8 @@ class LyricParseTest {
             "[00:01.00]sutey (wizu mi)").single()
         assertEquals("Stay", line.text)
         assertEquals("with me", line.bg.text)
-        assertEquals("sutey (wizu mi)\n留下（陪我）", line.translation)
+        assertEquals("留下（陪我）", line.translation)
+        assertNull("English source lines do not receive provider romanisation", line.roma)
         timing(line, intArrayOf(1000), intArrayOf(2000), intArrayOf(4))
         timing(line.bg, intArrayOf(2000, 3000), intArrayOf(3000, 4000), intArrayOf(5, 7))
         assertEquals(1000, line.start)
@@ -47,7 +63,8 @@ class LyricParseTest {
         val line = LyricParse.parse(body, "[00:01.00]Separate translation").single()
         assertEquals("留下", line.text)
         assertEquals("陪我", line.bg.text)
-        assertEquals("liu xia (pei wo)\nStay (with me)\nSeparate translation", line.translation)
+        assertEquals("Stay (with me)\nSeparate translation", line.translation)
+        assertEquals("liu xia (pei wo)", line.roma)
         timing(line, intArrayOf(1000), intArrayOf(2000), intArrayOf(2))
         timing(line.bg, intArrayOf(2000, 3000), intArrayOf(3000, 4000), intArrayOf(1, 2))
     }
@@ -61,7 +78,8 @@ class LyricParseTest {
         val line = LyricParse.parse(body, "[00:01.00]Stay (with me)").single()
         assertEquals("留下", line.text)
         assertEquals("陪我", line.bg.text)
-        assertEquals("liu xia (pei wo)\nStay (with me)", line.translation)
+        assertEquals("Stay (with me)", line.translation)
+        assertEquals("liu xia (pei wo)", line.roma)
     }
 
     @Test
@@ -154,7 +172,8 @@ class LyricParseTest {
         assertEquals("留下", line.translation)
         timing(line, intArrayOf(1000), intArrayOf(1400), intArrayOf(4))
         timing(line.bg, intArrayOf(1000), intArrayOf(1400), intArrayOf(2))
-        assertEquals(line.sungChars(1200), line.bg.sungChars(1200), 0f)
+        assertEquals(line.sungChars(1200) / line.text.length,
+            line.bg.sungChars(1200) / line.bg.text.length, 0f)
     }
 
     @Test
@@ -163,7 +182,7 @@ class LyricParseTest {
         val line = LyricParse.parenthesizedBacking(original)
         assertEquals("Stay please", line.text)
         assertEquals("oh", line.bg.text)
-        timing(line, intArrayOf(1000, 1500), intArrayOf(1400, 1900), intArrayOf(4, 11))
+        timing(line, intArrayOf(1000, 1500), intArrayOf(1400, 1900), intArrayOf(5, 11))
         timing(line.bg, intArrayOf(1500), intArrayOf(1900), intArrayOf(2))
     }
 
@@ -257,7 +276,8 @@ class LyricParseTest {
         """.trimIndent())
         val line = LyricParse.parse(body).single()
         assertEquals("Stay (oh)", line.text)
-        assertEquals("source roma\nSource translation", line.translation)
+        assertEquals("Source translation", line.translation)
+        assertEquals("source roma", line.roma)
         assertEquals("Native", line.bg.text)
         assertEquals("Native translation", line.bg.translation)
         assertEquals(5000, line.end)
@@ -370,7 +390,7 @@ class LyricParseTest {
         timing(line, intArrayOf(1000, 1000, 1000), intArrayOf(1300, 1600, 1900),
             intArrayOf(4, 8, 13))
         assertEquals(1900, line.end)
-        assertEquals(7f, line.sungChars(1450), 0f)
+        assertEquals(6f, line.sungChars(1450), 0f)
     }
 
     @Test

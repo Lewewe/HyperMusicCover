@@ -63,7 +63,7 @@ public class LyricTranslatorEngineTest {
         assertNull(result.failure);
         assertEquals(1, translator.requests);
         assertSame(nativeLine, result.lines.get(0));
-        assertEquals("translated: bonjour", result.lines.get(1).translation);
+        assertEquals("translated: bonjour", result.lines.get(1).onlineTranslation);
     }
 
     @Test
@@ -83,7 +83,7 @@ public class LyricTranslatorEngineTest {
         b.await();
         assertFalse(a.cached);
         assertFalse(b.cached);
-        assertEquals("google: bonjour", b.lines.get(0).translation);
+        assertEquals("google: bonjour", b.lines.get(0).onlineTranslation);
         Result hit = new Result();
         google.translate("provider-cache-test", lines, googleConfig, hit);
         hit.await();

@@ -141,7 +141,6 @@ object ModuleBridge {
         val lyricTranslateTarget: String = "en",
         /** Alive lyric effects: 0 off, 1 subtle, 2 dramatic, 3 eye-candy. */
         val lyricsAliveFx: Int = 0,
-        val lyricsAudioReactive: Boolean = false,
         val spicyLyricsEnabled: Boolean = true,
         val providerQq: Boolean = true,
         val providerNetease: Boolean = true,
@@ -154,6 +153,7 @@ object ModuleBridge {
         /** Keep fast lyrics together in small groups instead of scrolling on every line. */
         val lyricsGroups: Boolean = false,
         /** Where the lines settle in their column: 0 left, 1 centre, 2 right. */
+        val lyricsSearchMode: Int = 0,
         val lyricsAlign: Int = 0,
         /** The lyric band's height as a share of the room between the clock and the card. */
         val lyricFill: Float = 1f,
@@ -500,26 +500,34 @@ object ModuleBridge {
     fun setLyricsGroups(context: Context, on: Boolean) =
         send(context, "lyricgroups") { putExtra("on", on) }
 
+    fun setLyricsSearchMode(context: Context, mode: Int) =
+        send(context, "lyricsearch") { putExtra("v", mode) }
+
     fun setLyricsAlign(context: Context, mode: Int) =
         send(context, "lyricalign") { putExtra("v", mode) }
 
     fun setLyricsAliveFx(context: Context, mode: Int) =
         send(context, "lyricalive") { putExtra("v", mode) }
 
-    fun setLyricsAudioReactive(context: Context, on: Boolean) =
-        send(context, "lyricaudio") { putExtra("on", on) }
-
     fun setSpicyLyrics(context: Context, on: Boolean) =
         send(context, "spicylyricscfg") { putExtra("on", on) }
 
     fun setLyricProviders(context: Context, state: State) =
+        setLyricProviders(context, mapOf(
+            "qq" to state.providerQq,
+            "netease" to state.providerNetease,
+            "kuwo" to state.providerKuwo,
+            "kugou" to state.providerKugou,
+            "lrclib" to state.providerLrcLib,
+            "variants" to state.providerVariants,
+        ))
+
+    /** Partial restores change only the provider fields present in the backup. */
+    fun setLyricProviders(context: Context, values: Map<String, Boolean>) =
         send(context, "lyricproviders") {
-            putExtra("qq", state.providerQq)
-            putExtra("netease", state.providerNetease)
-            putExtra("kuwo", state.providerKuwo)
-            putExtra("kugou", state.providerKugou)
-            putExtra("lrclib", state.providerLrcLib)
-            putExtra("variants", state.providerVariants)
+            for (key in listOf("qq", "netease", "kuwo", "kugou", "lrclib", "variants")) {
+                values[key]?.let { putExtra(key, it) }
+            }
         }
 
     /**
@@ -841,7 +849,6 @@ object ModuleBridge {
             lyricTranslateSource = b.getString("lyrictrsource") ?: "auto",
             lyricTranslateTarget = b.getString("lyrictrtarget") ?: "en",
             lyricsAliveFx = b.getInt("lyricalive", 0),
-            lyricsAudioReactive = b.getBoolean("lyricaudio", false),
             spicyLyricsEnabled = b.getBoolean("spicylyrics", true),
             providerQq = b.getBoolean("providerqq", true),
             providerNetease = b.getBoolean("providernetease", true),
@@ -851,6 +858,7 @@ object ModuleBridge {
             providerVariants = b.getBoolean("providervariants", true),
             lyricsRoma = b.getBoolean("lyricroma", false),
             lyricsGroups = b.getBoolean("lyricgroups", false),
+            lyricsSearchMode = b.getInt("lyricsearch", 0),
             lyricsAlign = b.getInt("lyricalign", 0),
             lyricFill = b.getFloat("lyricfill", 1f),
             lyricPos = b.getFloat("lyricpos", 0.5f),
@@ -903,10 +911,17 @@ object ModuleBridge {
     fun restartWallpaper(): Boolean = kill("com.miui.miwallpaper")
 
     /**
-     * Every process the module is scoped to, in one go.
+     * Every process the module is loaded into, in one go.
      *
-     * Read from the scope list the module ships rather than hard-coded, so this keeps meaning
-     * "everything the module touches" if that list ever grows.
+     * Asked of LSPosed first (LsposedService.runningTargets): the packages the user actually
+     * enabled, their sub-processes included, and nothing that is not running - a player or 高德
+     * the module is not enabled in is left alone.
+     *
+     * Without the service, the scope the APK ships, from META-INF/xposed/scope.list - the list
+     * LSPosed itself installs the module by. It was read from the legacy `xposedscope` array, which
+     * nothing kept in step: 高德 and 小爱建议 were added to scope.list only, so their processes went
+     * on running the old module after an update (2026-10-07). The array is the last fallback, and
+     * ScopeListTest holds the two equal.
      *
      * A package's own name is not enough any more. The lock screen editor runs as
      * `com.miui.aod:keyguardeditor`, and `pidof` matches a process name exactly - so the entry
@@ -915,11 +930,21 @@ object ModuleBridge {
      */
     fun restartScope(context: Context): Boolean {
         restartingSince = SystemClock.elapsedRealtime()
-        val scoped = context.resources.getStringArray(R.array.xposedscope)
+        val running = LsposedService.runningTargets()
+        if (!running.isNullOrEmpty()) return running.map { killPid(it.pid) }.all { it }
+        val scoped = shippedScope() ?: context.resources.getStringArray(R.array.xposedscope).toList()
         var all = true
         for (pkg in scoped) if (!killTree(pkg)) all = false
         return all
     }
+
+    /** The packages in the APK's own scope.list, one a line; null when it cannot be read. */
+    private fun shippedScope(): List<String>? = runCatching {
+        ModuleBridge::class.java.classLoader!!.getResourceAsStream("META-INF/xposed/scope.list")
+            .bufferedReader().useLines { lines ->
+                lines.map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toList()
+            }
+    }.getOrNull()?.takeIf { it.isNotEmpty() }
 
     /**
      * The package's process and every `package:name` process under it.
@@ -934,6 +959,12 @@ object ModuleBridge {
             arrayOf("su", "-c", "pkill -f '^$pkg(\$|:)' ; true"),
         )
         p.waitFor() == 0
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun killPid(pid: Int): Boolean = try {
+        Runtime.getRuntime().exec(arrayOf("su", "-c", "kill $pid")).waitFor() == 0
     } catch (_: Throwable) {
         false
     }

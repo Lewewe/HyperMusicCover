@@ -77,6 +77,7 @@ public final class LyricLine {
      * all-or-nothing.
      */
     float sungChars(int ms) {
+        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) return originalSungChars(ms);
         int n = text.length();
         if (sylStart == null) return ms >= start ? n : 0f;
         int count = sylStart.length;
@@ -84,19 +85,40 @@ public final class LyricLine {
         for (int k = 0; k < count; k++) {
             int from = k == 0 ? 0 : charEnd[k - 1];
             int to = Math.max(from, Math.min(n, charEnd[k]));
-            if (ms < sylStart[k]) continue;
-            if (sylEnd[k] <= sylStart[k]) {
+            int effectiveStart = sylStart[k];
+            // Repaired tokens with tied starts occupy consecutive spans, not simultaneous fills.
+            if (k > 0 && sylStart[k] == sylStart[k - 1] && sylEnd[k] > sylEnd[k - 1]) {
+                effectiveStart = Math.max(effectiveStart, sylEnd[k - 1]);
+            }
+            if (ms < effectiveStart) continue;
+            if (sylEnd[k] <= effectiveStart) {
                 if (ms >= sylEnd[k]) progress = Math.max(progress, to);
                 continue;
             }
             if (ms < sylEnd[k]) {
-                float f = (ms - sylStart[k]) / (float) (sylEnd[k] - sylStart[k]);
+                float f = (ms - effectiveStart) / (float) (sylEnd[k] - effectiveStart);
                 progress = Math.max(progress, from + f * (to - from));
             } else {
                 progress = Math.max(progress, to);
             }
         }
         return Math.min(n, progress);
+    }
+
+    private float originalSungChars(int ms) {
+        int n = text.length();
+        if (sylStart == null) return ms >= start ? n : 0f;
+        if (ms <= sylStart[0]) return 0f;
+        int count = sylStart.length;
+        for (int k = 0; k < count; k++) {
+            int from = k == 0 ? 0 : charEnd[k - 1];
+            if (ms < sylStart[k]) return from;
+            if (ms < sylEnd[k]) {
+                float f = (ms - sylStart[k]) / (float) Math.max(1, sylEnd[k] - sylStart[k]);
+                return from + f * (charEnd[k] - from);
+            }
+        }
+        return n;
     }
 
     boolean hasWords() {
@@ -120,12 +142,9 @@ public final class LyricLine {
      * romanisation over the translation, either alone, or null for nothing.
      */
     String under(int mode) {
-        String t = (mode & LockLyrics.BELOW_TRANS) != 0
-                && onlineTranslation == null
-                && (translation == null || LyricTranslationLogic.hasJapaneseScript(text))
-                ? translation : null;
         String r = (mode & LockLyrics.BELOW_ROMA) != 0 ? roma : null;
-        if (t == null) return r;
-        return r == null ? t : t + "\n" + r;
+        String t = (mode & LockLyrics.BELOW_TRANS) != 0 ? translation : null;
+        if (r == null) return t;
+        return t == null ? r : r + "\n" + t;
     }
 }

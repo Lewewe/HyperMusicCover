@@ -85,30 +85,20 @@ final class LyricTranslationLogic {
     }
 
     static List<Entry> entriesForTranslation(List<LyricLine> lines, String source, String target) {
-    List<Entry> entries = entriesOf(lines);
-    if (entries.isEmpty()) return entries;
-    boolean romajiSong = likelyJapaneseRomaji(entries);
-    if (romajiSong) {
-        // Romaji is Japanese written with Latin letters. Once the song is identified as
-        // Romaji, translate every line so mixed English/Japanese lines stay aligned and the
-        // complete result can be reused from the persistent translation cache.
-        return entries;
-    }
-    if (sameLanguage(source, target) || likelyLanguage(entries, target)) {
-        return Collections.emptyList();
-    }
-
-    // Provider Romaji has no Japanese Unicode characters, so script-only filtering would
-    // incorrectly treat it as English and skip translation.
-    List<Entry> japaneseOnly = new ArrayList<>();
-    for (Entry entry : entries) {
-        if (hasJapaneseScript(entry.text)
-                || (romajiSong && likelyJapaneseRomaji(entry.text))) {
-            japaneseOnly.add(entry);
+        List<Entry> entries = entriesOf(lines);
+        if (entries.isEmpty() || sameLanguage(source, target)) return Collections.emptyList();
+        // Romaji is Japanese even when its Latin letters resemble the target language.
+        if (!likelyJapaneseRomaji(entries) && likelyLanguage(entries, target)) {
+            return Collections.emptyList();
         }
+        List<Entry> missing = new ArrayList<>();
+        for (Entry entry : entries) {
+            LyricLine line = lines.get(entry.index);
+            // Keep native translations; do not pay to translate a line already supplied by a source.
+            if (line.translation == null || line.translation.trim().isEmpty()) missing.add(entry);
+        }
+        return missing;
     }
-    return japaneseOnly;
-}
 
 private static boolean likelyJapaneseRomaji(List<Entry> entries) {
     if (entries == null || entries.isEmpty()) return false;

@@ -36,9 +36,35 @@ object SettingsBackup {
     private const val KEY_LYRICS_TRANSLATE_SOURCE = "lyricsTranslateSource"
     private const val KEY_LYRICS_TRANSLATE_TARGET = "lyricsTranslateTarget"
     private const val KEY_LYRICS_ALIVE_FX = "lyricsAliveEffects"
-    private const val KEY_LYRICS_AUDIO_REACTIVE = "lyricsAudioReactive"
     private const val KEY_LYRICS_ROMA = "lyricsRomanisation"
     private const val KEY_LYRICS_GROUPS = "lyricsGentleFlow"
+    private const val KEY_LYRICS_SEARCH = "lyricsSearchMode"
+    private const val KEY_SPICY_LYRICS = "spicyLyricsEnabled"
+    private val LYRIC_PROVIDER_KEYS = linkedMapOf(
+        "lyricsProviderQq" to "qq",
+        "lyricsProviderNetease" to "netease",
+        "lyricsProviderKuwo" to "kuwo",
+        "lyricsProviderKugou" to "kugou",
+        "lyricsProviderLrcLib" to "lrclib",
+        "lyricsProviderVariants" to "variants",
+    )
+
+    /** Export preferences only; provider and translation credentials stay on the device. */
+    internal fun writeLyricProviders(json: JSONObject, module: ModuleBridge.State) {
+        val values = listOf(module.providerQq, module.providerNetease, module.providerKuwo,
+            module.providerKugou, module.providerLrcLib, module.providerVariants)
+        LYRIC_PROVIDER_KEYS.keys.forEachIndexed { index, key -> json.put(key, values[index]) }
+        json.put(KEY_SPICY_LYRICS, module.spicyLyricsEnabled)
+    }
+
+    /** Missing or malformed fields must not reset preferences when restoring older backups. */
+    internal fun readLyricProviders(json: JSONObject): Map<String, Boolean> = buildMap {
+        for ((key, extra) in LYRIC_PROVIDER_KEYS) {
+            if (!json.has(key)) continue
+            val value = runCatching { json.getBoolean(key) }.getOrNull() ?: continue
+            put(extra, value)
+        }
+    }
     private const val KEY_LYRICS_ALIGN = "lyricsAlignment"
     private const val KEY_FP_AVOID = "fingerprintAvoid"
     /** The whole notification-shade page, as one object keyed the way the module names them. */
@@ -76,9 +102,10 @@ object SettingsBackup {
             json.put(KEY_LYRICS_TRANSLATE_SOURCE, module.lyricTranslateSource)
             json.put(KEY_LYRICS_TRANSLATE_TARGET, module.lyricTranslateTarget)
             json.put(KEY_LYRICS_ALIVE_FX, module.lyricsAliveFx)
-            json.put(KEY_LYRICS_AUDIO_REACTIVE, module.lyricsAudioReactive)
             json.put(KEY_LYRICS_ROMA, module.lyricsRoma)
             json.put(KEY_LYRICS_GROUPS, module.lyricsGroups)
+            json.put(KEY_LYRICS_SEARCH, module.lyricsSearchMode)
+            writeLyricProviders(json, module)
             json.put(KEY_LYRICS_ALIGN, module.lyricsAlign)
             json.put(KEY_FP_AVOID, module.fpAvoid)
             // Written whole rather than key by key, because the map is built from the module's
@@ -161,14 +188,21 @@ object SettingsBackup {
             if (obj.has(KEY_LYRICS_GROUPS)) {
                 ModuleBridge.setLyricsGroups(context, obj.getBoolean(KEY_LYRICS_GROUPS))
             }
+            val providers = readLyricProviders(obj)
+            if (providers.isNotEmpty()) ModuleBridge.setLyricProviders(context, providers)
+            if (obj.has(KEY_SPICY_LYRICS)) {
+                runCatching { obj.getBoolean(KEY_SPICY_LYRICS) }.getOrNull()?.let {
+                    ModuleBridge.setSpicyLyrics(context, it)
+                }
+            }
+            if (obj.has(KEY_LYRICS_SEARCH)) {
+                ModuleBridge.setLyricsSearchMode(context, obj.optInt(KEY_LYRICS_SEARCH, 0))
+            }
             if (obj.has(KEY_LYRICS_ALIGN)) {
                 ModuleBridge.setLyricsAlign(context, obj.getInt(KEY_LYRICS_ALIGN))
             }
             if (obj.has(KEY_LYRICS_ALIVE_FX)) {
                 ModuleBridge.setLyricsAliveFx(context, obj.getInt(KEY_LYRICS_ALIVE_FX))
-            }
-            if (obj.has(KEY_LYRICS_AUDIO_REACTIVE)) {
-                ModuleBridge.setLyricsAudioReactive(context, obj.getBoolean(KEY_LYRICS_AUDIO_REACTIVE))
             }
             if (obj.has(KEY_FP_AVOID)) {
                 ModuleBridge.setFingerprintAvoid(context, obj.getInt(KEY_FP_AVOID))

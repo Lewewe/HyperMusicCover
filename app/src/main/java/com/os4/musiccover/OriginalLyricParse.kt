@@ -13,7 +13,8 @@ import com.mocharealm.accompanist.lyrics.core.parser.AutoParser
  * knows there was ever more than one. Kotlin only because AutoParser's constructor is all default
  * arguments, which Java cannot call.
  */
-object LyricParse {
+/** Parser retained for the Original lyric mode. */
+object OriginalLyricParse {
 
     /**
      * The same thing for a source that ships its translation separately.
@@ -26,7 +27,6 @@ object LyricParse {
      */
     @JvmStatic
     fun parse(body: String, translation: String?): List<LyricLine> {
-        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) return OriginalLyricParse.parse(body, translation)
         val lines = parse(body)
         if (translation.isNullOrBlank() || lines.isEmpty()) return lines
         val tr = lrc(translation)
@@ -35,9 +35,7 @@ object LyricParse {
         val out = ArrayList<LyricLine>(lines.size)
         for ((i, line) in lines.withIndex()) {
             val text = texts[i]
-            out.add(if (text == null || text in line.translation.orEmpty().split('\n')) line
-                else withTranslation(line, if (line.translation == null) text
-                    else line.translation + "\n" + text))
+            out.add(if (text == null) line else withTranslation(line, text))
         }
         return out
     }
@@ -70,7 +68,6 @@ object LyricParse {
      */
     @JvmStatic
     fun parse(body: String, translation: String?, roma: String?): List<LyricLine> {
-        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) return OriginalLyricParse.parse(body, translation, roma)
         val lines = parse(body, translation)
         if (roma.isNullOrBlank() || lines.isEmpty()) return lines
         val ro = lrc(roma)
@@ -154,10 +151,6 @@ object LyricParse {
     @JvmStatic
     fun borrow(own: List<LyricLine>, other: List<LyricLine>, translations: Boolean,
                romas: Boolean): Lent {
-        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) {
-            val lent = OriginalLyricParse.borrow(own, other, translations, romas)
-            return Lent(lent.lines, lent.translations, lent.romas, lent.why, lent.matched)
-        }
         if (own.isEmpty() || other.isEmpty() || !(translations || romas)) {
             return Lent(own, 0, 0, "nothing to borrow into or from")
         }
@@ -233,7 +226,6 @@ object LyricParse {
      */
     @JvmStatic
     fun foreign(lines: List<LyricLine>): Boolean {
-        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) return OriginalLyricParse.foreign(lines)
         var han = 0
         var other = 0
         for (line in lines) {
@@ -261,7 +253,6 @@ object LyricParse {
      */
     @JvmStatic
     fun romanisable(lines: List<LyricLine>): Boolean {
-        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) return OriginalLyricParse.romanisable(lines)
         var total = 0
         var other = 0
         for (line in lines) {
@@ -280,32 +271,6 @@ object LyricParse {
         val r = roma?.trim()?.replace(Regex("\\s+"), " ")
         if (r.isNullOrEmpty() || letters(r) == letters(text)) return null
         return r
-    }
-
-    /**
-     * Some synced lyric sources put a space between every Romaji mora rather than between words:
-     * "do n do n su ki ni na ru yo ri mo". Keep ordinary word-spaced Romaji untouched, but
-     * group the unmistakably short mora pairs while leaving common particles as boundaries.
-     */
-    private fun joinSpacedRomaji(value: String): String {
-        val tokens = value.split(' ').filter { it.isNotEmpty() }
-        if (tokens.size < 4 || tokens.any { it.length > 2 || !it.all(Char::isLetter) }) {
-            return value
-        }
-        val particles = setOf("wa", "ga", "o", "wo", "ni", "de", "to", "mo", "e")
-        val out = ArrayList<String>()
-        var i = 0
-        while (i < tokens.size) {
-            val token = tokens[i]
-            if (particles.contains(token.lowercase()) || i + 1 >= tokens.size) {
-                out.add(token)
-                i++
-            } else {
-                out.add(token + tokens[i + 1])
-                i += 2
-            }
-        }
-        return out.joinToString(" ")
     }
 
     private fun letters(s: String): String =
@@ -371,7 +336,6 @@ object LyricParse {
 
     @JvmStatic
     fun parse(body: String): List<LyricLine> {
-        if (LockLyrics.sSearchMode == LockLyrics.SEARCH_ORIGINAL) return OriginalLyricParse.parse(body)
         // A malformed lyric must not let a parser exception terminate SystemUI's worker.
         val prepared = bracketWords(body)
         val lyrics = try {
@@ -433,8 +397,7 @@ object LyricParse {
             }
         }
         out.sortBy { it.start }
-        // Preserve native translation and accompaniment lanes before inferring backing vocals.
-        return speakers(withLanes(out, prepared.lanes)).map { parenthesizedBacking(it) }
+        return speakers(withLanes(out, prepared.lanes))
     }
 
     /** A body made ready for the parser, and the translations taken off it by their line's start. */
@@ -735,124 +698,32 @@ object LyricParse {
         // way a separately shipped one is.
         val shown = text.substring(0, n)
         return LyricLine(shown, line.translation, romaOf(line.phonetic, shown), line.start,
-            maxOf(line.end, ends.maxOrNull()!!), line.alignment == KaraokeAlignment.End,
-            starts, ends, chars)
+            line.end, line.alignment == KaraokeAlignment.End, starts, ends, chars)
     }
 
     /**
-     * A single, unnested parenthetical in word-timed lyrics may be an echo. When one source
-     * syllable spans both voices, copy its supplied interval to each selected part; never divide
-     * or invent timing. Delimiters/edge whitespace may share a sung syllable. Character selection
-     * below rebases offsets but never retimes a retained syllable.
-     */
-    internal fun parenthesizedBacking(line: LyricLine): LyricLine {
-        if (line.bg != null || line.sylStart == null) return line
-        val text = line.text
-        var open = -1
-        var close = -1
-        for (i in text.indices) {
-            when (text[i]) {
-                '(', '（' -> {
-                    if (open >= 0) return line // Nested or multiple groups need more than one guess.
-                    open = i
-                }
-                ')', '）' -> {
-                    if (open < 0 || close >= 0 ||
-                        text[i] != (if (text[open] == '(') ')' else '）')) return line
-                    close = i
-                }
-            }
-        }
-        if (open < 0 || close <= open) return line
-        val backing = text.substring(open + 1, close).trim()
-        if (backing.none { it.isLetterOrDigit() } || STAGE_DIRECTION.matches(backing)) return line
-        // Do not turn optional word endings like "sing(ing)" into a second voice.
-        if ((open > 0 && text[open - 1].isLetterOrDigit() && text[open - 1].code < 128) ||
-            (close + 1 < text.length && text[close + 1].isLetterOrDigit() &&
-                text[close + 1].code < 128)) return line
-
-        val mainChars = BooleanArray(text.length) { it < open || it > close }
-        val bgChars = BooleanArray(text.length) { it > open && it < close }
-        trimSelection(text, mainChars)
-        trimSelection(text, bgChars)
-        // At the cut, keep one existing separator, but not a space before punctuation.
-        var left = open - 1
-        while (left >= 0 && text[left].isWhitespace()) left--
-        var right = close + 1
-        while (right < text.length && text[right].isWhitespace()) right++
-        if (left >= 0 && right < text.length) {
-            for (i in left + 1 until open) mainChars[i] = false
-            for (i in close + 1 until right) mainChars[i] = false
-            if (text[right] !in ",.!?:;，。！？：；、…)]}）】》」』") {
-                if (left + 1 < open) mainChars[left + 1] = true
-                else if (close + 1 < right) mainChars[close + 1] = true
-            }
-        }
-        if (text.indices.none { mainChars[it] && text[it].isLetterOrDigit() }) return line
-        var from = 0
-        for (to in line.charEnd) {
-            if (to < from || to > text.length) return line
-            from = to
-        }
-        if (from != text.length) return line
-        val main = selectCharacters(line, mainChars, line.translation, false) ?: return line
-        val bg = selectCharacters(line, bgChars, null, true) ?: return line
-        main.bg = bg
-        main.end = maxOf(main.end, bg.end)
-        return main
-    }
-
-    private fun trimSelection(text: String, keep: BooleanArray) {
-        for (i in text.indices) {
-            if (!keep[i]) continue
-            if (!text[i].isWhitespace()) break
-            keep[i] = false
-        }
-        for (i in text.indices.reversed()) {
-            if (!keep[i]) continue
-            if (!text[i].isWhitespace()) break
-            keep[i] = false
-        }
-    }
-
-    private fun selectCharacters(line: LyricLine, keep: BooleanArray, translation: String?,
-                                 background: Boolean): LyricLine? {
-        val text = StringBuilder()
-        val starts = ArrayList<Int>()
-        val ends = ArrayList<Int>()
-        val chars = ArrayList<Int>()
-        var from = 0
-        for (k in line.sylStart.indices) {
-            val before = text.length
-            for (i in from until line.charEnd[k]) if (keep[i]) text.append(line.text[i])
-            from = line.charEnd[k]
-            if (text.length == before) continue
-            starts.add(line.sylStart[k])
-            ends.add(line.sylEnd[k])
-            chars.add(text.length)
-        }
-        if (chars.isEmpty()) return null
-        return LyricLine(text.toString(), translation, if (background) null else line.roma,
-            if (background) starts.first() else line.start,
-            if (background) ends.maxOrNull()!! else line.end, line.opposite,
-            starts.toIntArray(), ends.toIntArray(), chars.toIntArray())
-    }
-
-    // Only recognizable notation, not arbitrary parenthetical prose, is excluded here.
-    private val STAGE_DIRECTION = Regex(
-        "(?:instrumental|music|intro|outro|interlude|solo|(?:guitar|piano|drum|bass) solo|" +
-            "verse(?: \\d+)?|chorus|bridge|repeat|pause|silence|applause|spoken|whisper(?:ing)?|" +
-            "laugh(?:s|ing)?|humming|ad[ -]?lib|伴奏|间奏|間奏|前奏|尾奏|独白|獨白|" +
-            "念白|笑声|笑聲|哼唱)", RegexOption.IGNORE_CASE)
-
-    /**
-     * Missing/zero word spans must sweep rather than snap in sungChars(). Each runs to the
-     * next strictly later word start in this voice, then to a usable line end. Only consecutive
-     * missing words with the same start share that interval; distinct starts keep their timing.
-     * Valid durations are never changed.
+     * The words at the end of a line that the source left without a span of their own take the
+     * room it was leaving them.
      *
-     * A terminal word with no usable line end can reach the next lead line, but not across an
-     * interlude: a wait of four seconds after its nominal span belongs to LyricView's lull dots.
+     * Word timing routinely runs out before the line does. A file that times a line by its words
+     * alone has nowhere to read the last word's end from, and one that carries a duration per
+     * word has nothing to say for a note the singer holds on: either way the last word arrives
+     * with its end missing, or set equal to its own start. That is invisible anywhere else in a
+     * line - sungChars() walks the syllables looking for the one the moment falls in, and a word
+     * nobody is inside is simply stepped over - but at the end of a line there is no next word to
+     * hand the fill on to, so the walk runs off the end of the array and reports the whole line
+     * sung. The fill then crosses the last word in a single frame instead of sweeping it, and the
+     * word is never the second long that the glow asks for.
+     *
+     * A word left without a span runs to the end of the line, and to the arrival of the line after
+     * it when the file has no end to offer - which is the case for every file that times a line by
+     * its words and nothing else. Not every such wait is a note, though: a singer will hold a word
+     * through the last bar of a chorus but nobody holds one across an interlude, and the renderer
+     * answers the second kind with its interlude dots (`LyricView.LULL_MS`, the same four seconds),
+     * so past that the word keeps the nominal span and leaves the rest of the wait to them. Words
+     * that share a start - which is what a wholly untimed tail looks like - divide the stretch
+     * between them, rather than crossing together, so the fill still moves through them one at a
+     * time.
      */
     internal fun closeUntimedTail(starts: IntArray, ends: IntArray, lineEnd: Int, nextStart: Int) {
         var k = 0
@@ -861,11 +732,12 @@ object LyricParse {
                 k++
                 continue
             }
+            // The run of untimed words this one belongs to.
             var last = k
-            while (last + 1 < starts.size && starts[last + 1] == starts[k] &&
-                ends[last + 1] <= starts[last + 1]) last++
+            while (last + 1 < starts.size && ends[last + 1] <= starts[last + 1]) last++
             val from = starts[k]
-            // Tied starts cannot close a span; look past them, even if they have valid ends.
+            // A later word that starts later is where the run has to be over by. At the tail
+            // there is none of those, and the line's own end closes it.
             var to = lineEnd
             for (m in last + 1 until starts.size) {
                 if (starts[m] > from) {

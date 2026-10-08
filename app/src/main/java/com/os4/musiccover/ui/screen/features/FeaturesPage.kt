@@ -28,13 +28,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
+import com.os4.musiccover.ExtrasActivity
 import com.os4.musiccover.CoverActivity
 import com.os4.musiccover.TranslationProvider
 import com.os4.musiccover.ModuleBridge
 import com.os4.musiccover.R
 import com.os4.musiccover.ShadeActivity
 import com.os4.musiccover.MiniPlayerActivity
-import com.os4.musiccover.ExtrasActivity
 import com.os4.musiccover.ui.util.PageScaffold
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -270,10 +270,12 @@ internal fun CoverPageView(
                     1 -> CardGroup(enabled, module) { module = it }
                 }
             }
-
         }
+
     }
 }
+
+
 
 @Composable
 internal fun ExtrasPageView(
@@ -293,19 +295,29 @@ internal fun ExtrasPageView(
     ) {
         item {
             Column {
+                LyricSearchControls(module.alive, module) { module = it }
+                SmallTitle(text = stringResource(R.string.lyrics_display_section))
                 Card(
                     modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
                 ) {
-                    LyricsGroup(
+                    LyricDisplayControls(
                         enabled = module.alive,
                         module = module,
                         onChange = { module = it },
                     )
                 }
-                ExtrasGroup(
+                LyricEffectsControls(
                     enabled = module.alive,
                     module = module,
                     onChange = { module = it },
+                )
+                OnlineTranslationControls(module.alive, module) { module = it }
+                LyricBehaviorControls(module.alive, module) { module = it }
+                MiuixText(
+                    text = stringResource(R.string.lyrics_two_finger_tap),
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(horizontal = 28.dp).padding(bottom = 16.dp),
                 )
             }
         }
@@ -343,6 +355,7 @@ private fun CoverGroup(
                 title = stringResource(R.string.cover_bias),
                 value = module.bias,
                 valueRange = 0f..1f,
+                detent = 0.34f,
                 enabled = enabled,
                 onValueChange = {
                     onChange(module.copy(bias = it))
@@ -369,6 +382,7 @@ private fun ClockGroup(
             value = (if (module.clockSize > 0f) module.clockSize else DEFAULT_CLOCK_SIZE)
                 .coerceIn(CLOCK_SIZE_MIN, 1f),
             valueRange = CLOCK_SIZE_MIN..1f,
+            detent = DEFAULT_CLOCK_SIZE,
             enabled = enabled,
             label = { "${(it * 100f).roundToInt()}%" },
             onValueChange = {
@@ -406,11 +420,7 @@ private fun ClockGroup(
 }
 
 @Composable
-private fun LyricsGroup(
-    enabled: Boolean,
-    module: ModuleBridge.State,
-    onChange: (ModuleBridge.State) -> Unit,
-) {
+private fun LyricSourceStatus(module: ModuleBridge.State) {
     val context = LocalContext.current
     // Whether a provider module is installed is a fact about the package list and does not
     // change while the page is open; whether one is working comes from the module.
@@ -496,7 +506,6 @@ private fun LyricsGroup(
             onClick = { dismiss?.invoke() },
         )
     }
-    Column {
         // The standing half of the same statement. It never goes away and it never asks to be
         // dismissed, which is what makes it useful on the visit after the notice was flicked
         // away - or on a phone where the module had not answered yet when the notice was due.
@@ -508,17 +517,16 @@ private fun LyricsGroup(
             ),
             summary = stringResource(summary),
         )
-        // The one way the lock screen is asked for the cover instead, now that the lyrics have no
-        // switch of their own. A row rather than a summary on one of the switches below: none of
-        // them is about the cover, and this is not a description of any of them.
-        BasicComponent(title = stringResource(R.string.lyrics_two_finger_tap))
-        // The lyrics themselves are not a setting any more: they are drawn whenever the track has
-        // a lyric, and the two-finger tap on the lock screen is how the cover is asked for
-        // instead. Neither is the band they are drawn in - its height, its place in the room, the
-        // margin the lines are held inside and the size and weight of the main line are all fixed
-        // now (see LyricStyle). The one thing about where the words go that is still the user's
-        // is where they settle between those margins; the switches below are about the words
-        // themselves, so all three stay.
+}
+
+@Composable
+private fun LyricDisplayControls(
+    enabled: Boolean,
+    module: ModuleBridge.State,
+    onChange: (ModuleBridge.State) -> Unit,
+) {
+    val context = LocalContext.current
+    Column {
         val alignModes = listOf(
             stringResource(R.string.lyrics_align_left),
             stringResource(R.string.lyrics_align_center),
@@ -552,35 +560,7 @@ private fun LyricsGroup(
                 ModuleBridge.setLyricsRoma(context, it)
             },
         )
-        SwitchPreference(
-            title = stringResource(R.string.lyrics_groups),
-            summary = stringResource(R.string.lyrics_groups_summary),
-            checked = module.lyricsGroups,
-            enabled = enabled,
-            onCheckedChange = {
-                onChange(module.copy(lyricsGroups = it))
-                ModuleBridge.setLyricsGroups(context, it)
-            },
-        )
-        SwitchPreference(
-            title = stringResource(R.string.lyrics_hdr),
-            summary = stringResource(R.string.lyrics_hdr_summary),
-            checked = module.lyricsHdr,
-            enabled = enabled,
-            onCheckedChange = {
-                onChange(module.copy(lyricsHdr = it))
-                ModuleBridge.setLyricsHdr(context, it)
-            },
-        )
-        SwitchPreference(
-            title = stringResource(R.string.lyrics_keep_on),
-            checked = module.lyricsKeepOn,
-            enabled = enabled,
-            onCheckedChange = {
-                onChange(module.copy(lyricsKeepOn = it))
-                ModuleBridge.setLyricsKeepOn(context, it)
-            },
-        )
+
     }
 
 }
@@ -757,7 +737,7 @@ private fun TranslationCredentialsDialog(
 }
 
 @Composable
-internal fun ExtrasGroup(
+private fun LyricSearchControls(
     enabled: Boolean,
     module: ModuleBridge.State,
     onChange: (ModuleBridge.State) -> Unit,
@@ -765,8 +745,24 @@ internal fun ExtrasGroup(
     val context = LocalContext.current
     var showKeyDialog by remember { mutableStateOf(false) }
     Column {
-        OnlineTranslationControls(enabled, module, onChange)
-        if (showKeyDialog && module.spicyLyricsEnabled)  {
+        SmallTitle(text = stringResource(R.string.lyrics_search_section))
+        Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+            LyricSourceStatus(module)
+            WindowDropdownPreference(
+                title = stringResource(R.string.lyrics_search_mode),
+                summary = stringResource(if (module.lyricsSearchMode == 1)
+                    R.string.lyrics_search_extended_summary else R.string.lyrics_search_original_summary),
+                items = listOf(stringResource(R.string.lyrics_search_original),
+                    stringResource(R.string.lyrics_search_extended)),
+                selectedIndex = module.lyricsSearchMode.coerceIn(0, 1),
+                enabled = enabled,
+                onSelectedIndexChange = {
+                    onChange(module.copy(lyricsSearchMode = it))
+                    ModuleBridge.setLyricsSearchMode(context, it)
+                },
+            )
+        }
+        if (showKeyDialog && module.lyricsSearchMode == 1 && module.spicyLyricsEnabled)  {
             SpicyLyricsKeyDialog(
                 initialKey = module.spicyLyricsApiKey,
                 onDismiss = { showKeyDialog = false },
@@ -775,96 +771,151 @@ internal fun ExtrasGroup(
                 ModuleBridge.setSpicyLyricsApiKey(context, key)
             }
         }
-        SmallTitle(text = stringResource(R.string.extras_lyric_effects))
-        Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-        val aliveModes = listOf(
-            stringResource(R.string.lyrics_alive_off),
-            stringResource(R.string.lyrics_alive_subtle),
-            stringResource(R.string.lyrics_alive_dramatic),
-            stringResource(R.string.lyrics_alive_eye_candy),
-        )
-        WindowDropdownPreference(
-            title = stringResource(R.string.lyrics_alive),
-            summary = stringResource(
-                when (module.lyricsAliveFx.coerceIn(0, 3)) {
-                    1 -> R.string.lyrics_alive_subtle_summary
-                    2 -> R.string.lyrics_alive_dramatic_summary
-                    3 -> R.string.lyrics_alive_eye_candy_summary
-                    else -> R.string.lyrics_alive_off_summary
-                },
-            ),
-            items = aliveModes,
-            selectedIndex = module.lyricsAliveFx.coerceIn(0, aliveModes.lastIndex),
-            enabled = enabled,
-            onSelectedIndexChange = {
-                onChange(module.copy(lyricsAliveFx = it))
-                ModuleBridge.setLyricsAliveFx(context, it)
-            },
-        )
-        }
-        SmallTitle(text = stringResource(R.string.extras_lyric_providers))
-        Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-        SwitchPreference(
-            title = stringResource(R.string.extras_spicy_lyrics),
-            summary = stringResource(R.string.extras_spicy_lyrics_summary),
-            checked = module.spicyLyricsEnabled,
-            enabled = enabled,
-            onCheckedChange = {
-                onChange(module.copy(spicyLyricsEnabled = it))
-                ModuleBridge.setSpicyLyrics(context, it)
-            },
-        )
-        if (module.spicyLyricsEnabled) {
-            ArrowPreference(
-                title = stringResource(R.string.extras_spicy_lyrics_key),
-                summary = stringResource(
-                    if (module.spicyLyricsApiKey.isBlank()) R.string.extras_spicy_lyrics_unset
-                    else R.string.extras_spicy_lyrics_ready,
-                ),
-                enabled = enabled,
-                onClick = { showKeyDialog = true },
-            )
-        }
-        SwitchPreference(
-            title = stringResource(R.string.extras_provider_variants),
-            summary = stringResource(R.string.extras_provider_variants_summary),
-            checked = module.providerVariants,
-            enabled = enabled,
-            onCheckedChange = {
-                val updated = module.copy(providerVariants = it)
-                onChange(updated)
-                ModuleBridge.setLyricProviders(context, updated)
-            },
-        )
-        @Composable
-        fun providerPreference(titleId: Int, checked: Boolean, update: (Boolean) -> ModuleBridge.State) {
+        if (module.lyricsSearchMode == 1) {
+            SmallTitle(text = stringResource(R.string.extras_lyric_providers))
+            Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
             SwitchPreference(
-                title = stringResource(titleId),
-                checked = checked,
+                title = stringResource(R.string.extras_spicy_lyrics),
+                summary = stringResource(R.string.extras_spicy_lyrics_summary),
+                checked = module.spicyLyricsEnabled,
                 enabled = enabled,
                 onCheckedChange = {
-                    val updated = update(it)
+                    onChange(module.copy(spicyLyricsEnabled = it))
+                    ModuleBridge.setSpicyLyrics(context, it)
+                },
+            )
+            if (module.spicyLyricsEnabled) {
+                ArrowPreference(
+                    title = stringResource(R.string.extras_spicy_lyrics_key),
+                    summary = stringResource(
+                        if (module.spicyLyricsApiKey.isBlank()) R.string.extras_spicy_lyrics_unset
+                        else R.string.extras_spicy_lyrics_ready,
+                    ),
+                    enabled = enabled,
+                    onClick = { showKeyDialog = true },
+                )
+            }
+            SwitchPreference(
+                title = stringResource(R.string.extras_provider_variants),
+                summary = stringResource(R.string.extras_provider_variants_summary),
+                checked = module.providerVariants,
+                enabled = enabled,
+                onCheckedChange = {
+                    val updated = module.copy(providerVariants = it)
                     onChange(updated)
                     ModuleBridge.setLyricProviders(context, updated)
                 },
             )
+            @Composable
+            fun providerPreference(titleId: Int, checked: Boolean, update: (Boolean) -> ModuleBridge.State) {
+                SwitchPreference(
+                    title = stringResource(titleId),
+                    checked = checked,
+                    enabled = enabled,
+                    onCheckedChange = {
+                        val updated = update(it)
+                        onChange(updated)
+                        ModuleBridge.setLyricProviders(context, updated)
+                    },
+                )
+            }
+            providerPreference(R.string.extras_provider_qq, module.providerQq) {
+                module.copy(providerQq = it)
+            }
+            providerPreference(R.string.extras_provider_netease, module.providerNetease) {
+                module.copy(providerNetease = it)
+            }
+            providerPreference(R.string.extras_provider_kuwo, module.providerKuwo) {
+                module.copy(providerKuwo = it)
+            }
+            providerPreference(R.string.extras_provider_kugou, module.providerKugou) {
+                module.copy(providerKugou = it)
+            }
+            providerPreference(R.string.extras_provider_lrclib, module.providerLrcLib) {
+                module.copy(providerLrcLib = it)
+            }
         }
-        providerPreference(R.string.extras_provider_qq, module.providerQq) {
-            module.copy(providerQq = it)
         }
-        providerPreference(R.string.extras_provider_netease, module.providerNetease) {
-            module.copy(providerNetease = it)
+    }
+}
+
+@Composable
+private fun LyricEffectsControls(
+    enabled: Boolean,
+    module: ModuleBridge.State,
+    onChange: (ModuleBridge.State) -> Unit,
+) {
+    val context = LocalContext.current
+    Column {
+        SmallTitle(text = stringResource(R.string.extras_lyric_effects))
+        Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+            val aliveModes = listOf(
+                stringResource(R.string.lyrics_alive_off),
+                stringResource(R.string.lyrics_alive_subtle),
+                stringResource(R.string.lyrics_alive_dramatic),
+                stringResource(R.string.lyrics_alive_eye_candy),
+            )
+            WindowDropdownPreference(
+                title = stringResource(R.string.lyrics_alive),
+                summary = stringResource(
+                    when (module.lyricsAliveFx.coerceIn(0, 3)) {
+                        1 -> R.string.lyrics_alive_subtle_summary
+                        2 -> R.string.lyrics_alive_dramatic_summary
+                        3 -> R.string.lyrics_alive_eye_candy_summary
+                        else -> R.string.lyrics_alive_off_summary
+                    },
+                ),
+                items = aliveModes,
+                selectedIndex = module.lyricsAliveFx.coerceIn(0, aliveModes.lastIndex),
+                enabled = enabled,
+                onSelectedIndexChange = {
+                    onChange(module.copy(lyricsAliveFx = it))
+                    ModuleBridge.setLyricsAliveFx(context, it)
+                },
+            )
+            SwitchPreference(
+                title = stringResource(R.string.lyrics_groups),
+                summary = stringResource(R.string.lyrics_groups_summary),
+                checked = module.lyricsGroups,
+                enabled = enabled,
+                onCheckedChange = {
+                    onChange(module.copy(lyricsGroups = it))
+                    ModuleBridge.setLyricsGroups(context, it)
+                },
+            )
+            SwitchPreference(
+                title = stringResource(R.string.lyrics_hdr),
+                summary = stringResource(R.string.lyrics_hdr_summary),
+                checked = module.lyricsHdr,
+                enabled = enabled,
+                onCheckedChange = {
+                    onChange(module.copy(lyricsHdr = it))
+                    ModuleBridge.setLyricsHdr(context, it)
+                },
+            )
         }
-        providerPreference(R.string.extras_provider_kuwo, module.providerKuwo) {
-            module.copy(providerKuwo = it)
-        }
-        providerPreference(R.string.extras_provider_kugou, module.providerKugou) {
-            module.copy(providerKugou = it)
-        }
-        providerPreference(R.string.extras_provider_lrclib, module.providerLrcLib) {
-            module.copy(providerLrcLib = it)
-        }
-        }
+
+    }
+}
+
+@Composable
+private fun LyricBehaviorControls(
+    enabled: Boolean,
+    module: ModuleBridge.State,
+    onChange: (ModuleBridge.State) -> Unit,
+) {
+    val context = LocalContext.current
+    SmallTitle(text = stringResource(R.string.lyrics_behavior_section))
+    Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        SwitchPreference(
+            title = stringResource(R.string.lyrics_keep_on),
+            checked = module.lyricsKeepOn,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(lyricsKeepOn = it))
+                ModuleBridge.setLyricsKeepOn(context, it)
+            },
+        )
     }
 }
 
@@ -939,6 +990,17 @@ private fun CardGroup(
                 ModuleBridge.setCardTitleTap(context, it)
             },
         )
+        // The progress bar's glow, the island's look on the card's own bar (#49). Not tied to
+        // cover mode either: it is the OEM's card in every mode.
+        SwitchPreference(
+            title = stringResource(R.string.media_bar_glow),
+            checked = module.mediaBarGlow,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(mediaBarGlow = it))
+                ModuleBridge.setMediaBarGlow(context, it)
+            },
+        )
         // Sits here because that is where it was asked for, but it is not a card setting and does
         // not follow cover mode, unlike the switches above it - which the rows no longer say, so
         // it is only in the module and in this comment. No onCardRestyled(): the preview above
@@ -989,11 +1051,7 @@ private fun CardGroup(
  * pages adjust module settings the same way, and a second slider that looked almost the same was
  * the first thing a reviewer noticed.
  *
- * [detent] is a single value on the track that ticks as it is passed - the app's only one, and it
- * exists because a slider whose default is one number among many is otherwise impossible to find
- * again by hand. It is miuix's own key point rather than a comparison of this frame's value
- * against the last, so the tick is the library's and behaves the way every other miuix slider's
- * does.
+ * [detent] marks the module default with a dot and uses miuix's key point haptic feedback.
  */
 @Composable
 internal fun ValueSlider(
@@ -1034,6 +1092,7 @@ internal fun ValueSlider(
             hapticEffect = if (detent != null) SliderDefaults.SliderHapticEffect.Step
                            else SliderDefaults.DefaultHapticEffect,
             keyPoints = detent?.let { listOf(it) },
+            showKeyPoints = detent != null,
             // The library's magnet would pull the value onto the key point from 2% of the range
             // away, which is a snap rather than a tick, and it would take the values just either
             // side of the detent out of what this slider can be set to. Off, deliberately: the

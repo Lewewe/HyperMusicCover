@@ -14,11 +14,10 @@ animation loop is added. The existing karaoke frames drive the effect.
 
 ## Plain karaoke and Alive modes
 
-Alive Lyrics Off uses a simple Apple Music-style karaoke presentation. All word-timed text remains
-visible; as each timed word is sung, its segment fills white and rises as one unit over a short
-transition. Once sung, it stays white and raised. It has no letter-rise wave, breathing, trails,
-translation motion or cover tint. HDR held-note highlighting remains available via
-its separate HDR setting. Timed lyrics still fill normally; line-synced lyrics remain line-level.
+Alive Lyrics Off preserves the stable Enhanced fork's original renderer. Syllables rise according
+to their timing and retain their measured shaping, karaoke gradient and existing held-note glow.
+HDR highlighting remains controlled by its separate setting. No new letter reveal, trails,
+breathing or translation motion is applied in this mode.
 
 Subtle and Dramatic retain the normal renderer: all word-timed letters remain visible, and the fill
 cursor drives each safe grapheme's rise. As the fill passes, each letter eases smoothly back to

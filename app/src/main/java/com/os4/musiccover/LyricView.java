@@ -69,7 +69,6 @@ final class LyricView extends View {
     private static final int TRANS_WEIGHT = 500;
     /** Between one line's last row (or its translation) and the next line. */
     private static final float GAP_DP = 22f;
-    private static final float RAPID_GAP_DP = 8f;
     private static final float TRANS_GAP_DP = 5f;
     /**
      * A line that is not being sung - and the unsung part of the one that is, which Apple draws at
@@ -157,6 +156,7 @@ final class LyricView extends View {
     private static final float LIFT_DP = 1.8f;
     /** Plain karaoke lifts each timed word once, then leaves it raised after it is sung. */
     private static final int BASIC_WORD_RISE_MS = 180;
+    private static final int LIFT_MIN_MS = 320;
     /** A small hold makes the animated-mode lift read as sung, followed by a soft settle. */
     private static final int LIFT_HOLD_MS = 60;
     private static final int LIFT_RETURN_MS = 280;
@@ -345,7 +345,6 @@ final class LyricView extends View {
     private LyricStyle wantStyle;
     /** The translation and romanisation switches the layout now in use was made under. */
     private int builtTrans = LockLyrics.BELOW_TRANS;
-    private boolean builtRapidGroups;
     /** The alignment pref the layout now in use was made under; see LockLyrics.sAlign. */
     private int builtAlign = LockLyrics.ALIGN_LEFT;
     /** Diagnostics: how long the last layout took on its thread. */
@@ -600,7 +599,6 @@ final class LyricView extends View {
                 // The alignment is in the layout too, and asked for the same way: against what
                 // the layout in use was built with, not against the field.
                 || LockLyrics.sAlign != builtAlign
-                || LockLyrics.sRapidGroups != builtRapidGroups
                 || !LockLyrics.sStyle.sameLayout(layoutStyle))
                 && (LockLyrics.wantsAttached() || show == 0f)) {
             if (layOut()) {
@@ -888,9 +886,10 @@ final class LyricView extends View {
             LyricLine l = lines.get(i);
             boolean focused = dotsFor < 0 && i == focus;
             // Emphasis: on the scroll focus, and on a duet's overlapping answer while it is sung.
-            // Off in one frame - the line that has been sung drops to the inactive level at once.
-            boolean concurrentlySung = simultaneousVisible(i) && !focused;
-            boolean on = focused || concurrentlySung
+            // Finished lines in a Gentle lyric flow group keep their emphasis until it advances.
+            boolean concurrentlySung = !LockLyrics.sRapidGroups
+                    && simultaneousVisible(i) && !focused;
+            boolean on = focused || retained(i) || concurrentlySung
                     || (dotsFor < 0 && i < focus && i >= focus - 2
                     && ms >= l.start && ms < l.end);
             float eTo = on ? 1f : 0f;
@@ -912,8 +911,8 @@ final class LyricView extends View {
                 why |= 64;
             }
             // Size: the focus at full size, the rest a little smaller, travelling with the scroll.
-            boolean sung = simultaneousVisible(i);
-            float scTo = focused || sung ? 1f : INACTIVE_SCALE;
+            boolean sung = !LockLyrics.sRapidGroups && simultaneousVisible(i);
+            float scTo = focused || retained(i) || sung ? 1f : INACTIVE_SCALE;
             float sc = started ? approach(scale[i], scTo, dtTo, TAU_SCALE) : scale[i];
             if (Math.abs(sc - scTo) < 0.0005f) sc = scTo;
             if (sc != scale[i]) {
@@ -1526,12 +1525,27 @@ final class LyricView extends View {
     }
 
     /** A held note is glowing now, or is about to - the window's HDR mode follows this. */
-    private boolean glowSoon() {
+    private boolean originalGlowSoon() {
         if (!LockLyrics.sHdr || focus < 0 || show == 0f || !LockLyrics.playing()) return false;
-        for (int i = 0; i < lines.size(); i++) {
+        for (int i = Math.max(0, focus - 1); i <= focus; i++) {
             LyricLine l = lines.get(i);
-            if (!l.hasWords() || emph[i] <= 0f || !simultaneousVisible(i)) continue;
-            if (!l.hasDisplayWords() || emph[i] <= 0f) continue;
+            if (!l.hasWords() || emph[i] <= 0f) continue;
+            for (int k = 0; k < l.sylStart.length; k++) {
+                int s = l.sylStart[k], end = l.sylEnd[k];
+                if (end - s >= GLOW_MIN_MS && ms >= s - HDR_ARM_MS && ms < end + GLOW_TAIL_MS) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean glowSoon() {
+        if (LockLyrics.sRapidGroups) return originalGlowSoon();
+        if (!LockLyrics.sHdr || focus < 0 || show == 0f || !LockLyrics.playing()) return false;
+        for (int i = Math.max(0, focus - 12); i <= Math.min(lines.size() - 1, focus + 12); i++) {
+            LyricLine l = lines.get(i);
+            if (!l.hasDisplayWords() || emph[i] <= 0f || simultaneousSuppressed(i)) continue;
             for (int k = 0; k < l.sylStart.length; k++) {
                 int s = l.sylStart[k], end = l.sylEnd[k];
                 if (end - s >= GLOW_MIN_MS && ms >= s - HDR_ARM_MS && ms < end + GLOW_TAIL_MS) {
@@ -1543,38 +1557,35 @@ final class LyricView extends View {
     }
 
     /** A singing line's words are moving: the fill, the lift, a held note's glow. */
-    private boolean wordsLive() {
-        if (!LockLyrics.playing() || LockLyrics.inHeldAod() || focus < 0 || show == 0f) return false;
-        int tail = AliveLyricsEffects.enabled(LockLyrics.sAliveFx)
-                ? Math.max(LIFT_HOLD_MS + LIFT_RETURN_MS, GLOW_TAIL_MS) : 0;
-        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)) {
-            tail = Math.max(tail, EYE_WORD_FLY_MS);
-        }
-        for (int i = 0; i < lines.size(); i++) {
+    private boolean originalWordsLive() {
+        if (!LockLyrics.playing() || focus < 0 || show == 0f) return false;
+        for (int i = Math.max(0, focus - 1); i <= focus; i++) {
             LyricLine l = lines.get(i);
-            if (l.hasWords() && emph[i] > 0f && simultaneousVisible(i)
-                    && ms >= l.start && ms < l.end + tail) {
+            if (l.hasWords() && emph[i] > 0f && ms >= l.start
+                    && ms < l.end + Math.max(LIFT_MIN_MS, GLOW_TAIL_MS)) {
                 return true;
             }
         }
         return false;
     }
 
-    private boolean pulseWanted() {
-        return AliveLyricsEffects.enabled(LockLyrics.sAliveFx)
-                && LockLyrics.playing() && Main.screenOnCached()
-                && !LockLyrics.still() && !LockLyrics.inHeldAod() && LockLyrics.wantsShown()
-                && isAttachedToWindow() && isShown() && getWindowVisibility() == View.VISIBLE
-                && show > 0.01f && audioVisible() && !lines.isEmpty();
-    }
-
-    private boolean audioVisible() {
-        View view = this;
-        while (view != null) {
-            if (view.getAlpha() * view.getTransitionAlpha() <= 0.01f) return false;
-            view = view.getParent() instanceof View ? (View) view.getParent() : null;
+    private boolean wordsLive() {
+        if (LockLyrics.sRapidGroups) return originalWordsLive();
+        if (!LockLyrics.playing() || LockLyrics.inHeldAod() || focus < 0 || show == 0f) return false;
+        int tail = AliveLyricsEffects.enabled(LockLyrics.sAliveFx)
+                ? Math.max(LIFT_HOLD_MS + LIFT_RETURN_MS, GLOW_TAIL_MS)
+                : Math.max(LIFT_MIN_MS, GLOW_TAIL_MS);
+        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)) {
+            tail = Math.max(tail, EYE_WORD_FLY_MS);
         }
-        return true;
+        for (int i = Math.max(0, focus - 12); i <= Math.min(lines.size() - 1, focus + 12); i++) {
+            LyricLine l = lines.get(i);
+            if (l.hasDisplayWords() && emph[i] > 0f && !simultaneousSuppressed(i)
+                    && ms >= l.start && (long) ms < (long) l.end + tail) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A translation that has started fading in still needs frames until it settles. */
@@ -1707,7 +1718,6 @@ final class LyricView extends View {
         int transOn;
         /** The alignment pref this layout was made under; see LockLyrics.sAlign. */
         int align;
-        boolean rapidGroups;
         List<LyricLine> lines;
         StaticLayout[] main, trans, onlineTrans, bgLay;
         float[] base, height, dotsTop;
@@ -1739,7 +1749,6 @@ final class LyricView extends View {
         b.width = width;
         b.style = style;
         b.transOn = transOn;
-        b.rapidGroups = LockLyrics.sRapidGroups;
         b.align = alignOn;
         b.lines = ls;
         int n = ls.size();
@@ -1758,8 +1767,6 @@ final class LyricView extends View {
         b.clusterEndBg = new int[n][];
         float y = 0f;
         float gap = GAP_DP * density;
-        RapidLyricGroups groups = b.rapidGroups
-                ? new RapidLyricGroups(ls) : null;
         for (int i = 0; i < n; i++) {
             LyricLine l = ls.get(i);
             // A long gap before this line holds the interlude dots, in a slot of their own.
@@ -1801,13 +1808,8 @@ final class LyricView extends View {
             // skipped in the draw: the rows it would have taken are most of a line's height, and
             // a gap there would leave every line floating with a hole under it.
             if ((transOn & LockLyrics.BELOW_TRANS) != 0) {
-                String nativeSecondary = LockLyrics.sOnlineTranslateMode == LockLyrics.TR_MODE_OFF
-                        ? l.translation : null;
+                String nativeSecondary = l.onlineTranslation == null ? l.under(transOn) : null;
                 String onlineSecondary = l.onlineTranslation;
-                if (nativeSecondary != null && l.roma != null
-                        && (transOn & LockLyrics.BELOW_ROMA) != 0) {
-                    nativeSecondary += "\n" + l.roma;
-                }
                 if (onlineSecondary != null && l.roma != null
                         && (transOn & LockLyrics.BELOW_ROMA) != 0) {
                     onlineSecondary += "\n" + l.roma;
@@ -1847,10 +1849,7 @@ final class LyricView extends View {
             }
             b.base[i] = y;
             b.height[i] = h;
-            float nextGap = groups != null && i + 1 < n
-                    && groups.grouped(i) && groups.grouped(i + 1)
-                    ? RAPID_GAP_DP * density : gap;
-            y += h + nextGap;
+            y += h + gap;
         }
         b.tookMs = SystemClock.uptimeMillis() - t0;
         return b;
@@ -1867,7 +1866,6 @@ final class LyricView extends View {
         applyPaintStyle(b.style);
         version = b.version;
         builtTrans = b.transOn;
-        builtRapidGroups = b.rapidGroups;
         builtAlign = b.align;
         lines = b.lines;
         rapidGroups = new RapidLyricGroups(lines);
@@ -2079,7 +2077,36 @@ final class LyricView extends View {
      * A correction, not a position, because it is the part of the placement that steps and the
      * band is the part that moves: step() eases this and leaves the band alone.
      */
+    /** Gentle lyric flow keeps the stable fork's group placement and scroll anchor. */
+    private float originalAnchorFixTarget() {
+        if (!centring()) return 0f;
+        float bandH = bandBottom - bandTop;
+        float anchor = bandTop + ANCHOR * bandH;
+        if (dotsFor < 0 && readingFirst >= 0 && readingLast > readingFirst) {
+            // Reserve the fitting group's space so its first line does not jump at every word.
+            float blockH = base[readingLast] - base[readingFirst] + height[readingLast];
+            return bandTop + (bandH - blockH) / 2f - anchor;
+        }
+        int n = lines.size();
+        // Rows are at least a line's gap apart, so this brackets whatever the band can hold.
+        int span = 2 + (int) (bandH / Math.max(1f, GAP_DP * density));
+        int lo = Math.max(0, focus - span), hi = Math.min(n - 1, focus + span);
+        int first = -1, last = -1;
+        for (int i = lo; i <= hi; i++) {
+            float y = anchor + base[i] - base[focus];
+            if (y >= bandTop && y + height[i] <= bandBottom) {
+                if (first < 0) first = i;
+                last = i;
+            }
+        }
+        if (first < 0) return 0f;
+        float blockH = base[last] - base[first] + height[last];
+        // The uncentred anchor drops out: where the block sits is the band's and its rows' doing.
+        return bandTop + (bandH - blockH) / 2f + base[focus] - base[first] - anchor;
+    }
+
     private float anchorFixTarget() {
+        if (LockLyrics.sRapidGroups) return originalAnchorFixTarget();
         if (!centring()) return 0f;
         if (simultaneousCount() > 1) return 0f;
         float bandH = bandBottom - bandTop;
@@ -2125,6 +2152,13 @@ final class LyricView extends View {
     }
 
     private void updateSimultaneousDrop(int n) {
+        if (LockLyrics.sRapidGroups) {
+            simultaneousDropped = -1;
+            simultaneousFirst = simultaneousSecond = simultaneousExitLine = -1;
+            simultaneousExitAt = 0L;
+            simultaneousTopSet = false;
+            return;
+        }
         int active = 0;
         int oldest = -1;
         int lo = Math.max(0, focus - 12), hi = Math.min(n - 1, focus + 12);
@@ -2146,6 +2180,7 @@ final class LyricView extends View {
 
     /** The stage shows the two latest active rows; older overlapping rows are intentionally hidden. */
     private boolean simultaneousVisible(int i) {
+        if (LockLyrics.sRapidGroups) return false;
         if (!sungNow(i) || simultaneousSuppressed(i)) return false;
         int latest = -1, previous = -1;
         int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
@@ -2158,6 +2193,7 @@ final class LyricView extends View {
     }
 
     private boolean simultaneousSuppressed(int i) {
+        if (LockLyrics.sRapidGroups) return false;
         // Once three voices overlap, keep the oldest one out for the rest of its phrase. This
         // prevents it returning through the normal stack when the middle voice ends first.
         return i == simultaneousDropped && sungNow(i);
@@ -2234,6 +2270,7 @@ final class LyricView extends View {
      * singer as soon as the focus changes.
      */
     private float simultaneousY(int index) {
+        if (LockLyrics.sRapidGroups) return Float.NaN;
         if (!sungNow(index)) return Float.NaN;
         if (simultaneousCount() < 2) {
             if (index != simultaneousExitLine || now() >= simultaneousExitAt) return Float.NaN;
@@ -2329,10 +2366,9 @@ final class LyricView extends View {
                     clamp01((bandBottom - (y + renderedHeight)) / fade));
             float a = vis * edge;
             // Lines already sung, above the focus, sit further back than the ones to come.
-            if ((dotsFor >= 0 ? i < dotsFor : i < focus) && !sungNow(i)) {
-                a *= ABOVE_ALPHA;
-            }
-            if ((dotsFor >= 0 ? i < dotsFor : i < focus) && !retained(i)) a *= ABOVE_ALPHA;
+            // Keep finished rows bright until their Gentle lyric flow group is released.
+            if ((dotsFor >= 0 ? i < dotsFor : i < focus)
+                    && !retained(i) && (LockLyrics.sRapidGroups || !sungNow(i))) a *= ABOVE_ALPHA;
             if (a <= 0.003f) continue;
             drawLine(canvas, i, side, y, a);
         }
@@ -2418,9 +2454,10 @@ final class LyricView extends View {
                 : align == Layout.Alignment.ALIGN_OPPOSITE ? lay.getWidth() : 0f;
         boolean still = LockLyrics.still();
         // Retained lines stay readable, but finished word lifts/glows need no per-word rendering.
+        int wordTail = AliveLyricsEffects.enabled(LockLyrics.sAliveFx)
+                ? LIFT_HOLD_MS + LIFT_RETURN_MS : LIFT_MIN_MS;
         boolean settledWords = retained(i) && i < focus
-                && (long) ms >= (long) l.end
-                + Math.max(LIFT_HOLD_MS + LIFT_RETURN_MS, GLOW_TAIL_MS);
+                && (long) ms >= (long) l.end + Math.max(wordTail, GLOW_TAIL_MS);
         boolean eyeCandy = AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx);
         boolean words = l.hasDisplayWords() && e > 0f && !still && !settledWords;
         int save = canvas.save();
@@ -2647,14 +2684,10 @@ final class LyricView extends View {
                 c.restoreToCount(save);
                 below += bgGap + bl.getHeight();
             }
-            String nativeSecondary = LockLyrics.sOnlineTranslateMode == LockLyrics.TR_MODE_OFF
-                    ? l.translation : null;
+            String nativeSecondary = l.onlineTranslation == null
+                    ? l.under(LockLyrics.below()) : null;
             String onlineSecondary = l.onlineTranslation;
             if (LockLyrics.sTrans) {
-                if (nativeSecondary != null && l.roma != null
-                        && (LockLyrics.below() & LockLyrics.BELOW_ROMA) != 0) {
-                    nativeSecondary += "\n" + l.roma;
-                }
                 if (onlineSecondary != null && l.roma != null
                         && (LockLyrics.below() & LockLyrics.BELOW_ROMA) != 0) {
                     onlineSecondary += "\n" + l.roma;
@@ -2900,8 +2933,65 @@ final class LyricView extends View {
     }
 
     /** Draw one timed row with its mode-specific rise, highlight and optional held-note glow. */
+    // Off uses the stable fork's syllable lift, shaping and held-note glow unchanged.
+    private void drawOriginalSyllables(Canvas c, LyricLine l, StaticLayout lay, TextPaint p, float[] xs,
+                               float e, int r, float liftScale, boolean glowOn) {
+        int count = l.sylStart.length;
+        int rs = lay.getLineStart(r), re = lay.getLineEnd(r);
+        float baseline = lay.getLineBaseline(r);
+        for (int k = 0; k < count; k++) {
+            int from = k == 0 ? 0 : l.charEnd[k - 1];
+            int cs = Math.max(from, rs), ce = Math.min(l.charEnd[k], re);
+            if (ce <= cs) continue;
+            int s = l.sylStart[k], end = l.sylEnd[k], dur = end - s;
+            float rise = ms <= s ? 0f : clamp01((ms - s) / (float) Math.max(dur, LIFT_MIN_MS));
+            float lift = liftPx * liftScale * e * (1f - (1f - rise) * (1f - rise));
+            float glow = 0f;
+            if (glowOn && dur >= GLOW_MIN_MS && ms > s) {
+                glow = ms < end ? clamp01((ms - s) / (dur * 0.3f))
+                        : 1f - clamp01((ms - end) / (float) GLOW_TAIL_MS);
+                glow *= e;
+            }
+            float x0 = xs[cs];
+            if (glow > 0.01f) {
+                float x1 = ce < re ? xs[ce] : lay.getLineRight(r);
+                int save = c.save();
+                float swell = 1f + GLOW_SWELL * glow;
+                c.scale(swell, swell, (x0 + x1) / 2f, baseline);
+                float g = glowGain(glow);
+                p.setShadowLayer(glowPx * glow, 0f, 0f, white(GLOW_ALPHA * glow, g));
+                // The glowing syllable itself goes above white with its halo: its sung part
+                // through this row's gradient re-coloured, or all of it once the row is sung.
+                Shader rowShader = p.getShader();
+                long rowColor = p.getColorLong();
+                if (g > 1.001f) {
+                    if (Float.isNaN(rowAt)) {
+                        if (rowShader == null && l.sungChars(ms) >= ce) {
+                            p.setColor(white(rowSungA, g));
+                        }
+                    } else {
+                        p.setShader(gradient(white(rowSungA, g), ink(rowUnsungA, 0f), rowAt,
+                                rowFeather, 2));
+                    }
+                }
+                c.drawTextRun(l.text, cs, ce, rs, re, x0, baseline - lift, false, p);
+                p.setShader(rowShader);
+                p.setColor(rowColor);
+                p.clearShadowLayer();
+                c.restoreToCount(save);
+            } else {
+                c.drawTextRun(l.text, cs, ce, rs, re, x0, baseline - lift, false, p);
+            }
+        }
+    }
+
     private void drawSyllables(Canvas c, LyricLine l, StaticLayout lay, TextPaint p, float[] xs,
                                float e, int r, float liftScale, boolean glowOn) {
+        if (!AliveLyricsEffects.enabled(LockLyrics.sAliveFx)) {
+            drawOriginalSyllables(c, l, lay, p, xs, e, r, liftScale, glowOn);
+            return;
+        }
+
         int count = l.sylStart.length;
         int rs = lay.getLineStart(r), re = lay.getLineEnd(r);
         float baseline = lay.getLineBaseline(r);
@@ -2923,7 +3013,6 @@ final class LyricView extends View {
                 lift = liftPx * liftScale * e * letterRise(syllableProgress, end);
             }
             float glow = 0f;
-            float audioLift = 0f;
             boolean syllableStarted = sungChars > cs;
             if (LockLyrics.sHdr && glowOn && syllableStarted
                     && dur >= GLOW_MIN_MS) {
@@ -2964,14 +3053,14 @@ final class LyricView extends View {
                     }
                 }
                 drawSyllableInk(c, l, lay, p, xs, cs, ce, rs, re, k, s, end,
-                        baseline - lift - audioLift, e, glowOn, g);
+                        baseline - lift, e, glowOn, g);
                 p.setShader(rowShader);
                 p.setColor(rowColor);
                 p.clearShadowLayer();
                 c.restoreToCount(save);
             } else {
                 drawSyllableInk(c, l, lay, p, xs, cs, ce, rs, re, k, s, end,
-                        baseline - lift - audioLift, e, glowOn, 1f);
+                        baseline - lift, e, glowOn, 1f);
             }
         }
     }

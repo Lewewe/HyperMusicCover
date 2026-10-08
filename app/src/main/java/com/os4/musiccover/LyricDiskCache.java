@@ -30,7 +30,12 @@ final class LyricDiskCache {
             }
             try (FileInputStream in = new FileInputStream(file)) {
                 byte[] bytes = new byte[(int) Math.min(file.length(), MAX_BYTES)];
-                int count = in.read(bytes);
+                int count = 0;
+                while (count < bytes.length) {
+                    int read = in.read(bytes, count, bytes.length - count);
+                    if (read < 0) break;
+                    count += read;
+                }
                 if (count <= 0) return null;
                 file.setLastModified(System.currentTimeMillis());
                 return new JSONObject(new String(bytes, 0, count, StandardCharsets.UTF_8));
@@ -58,7 +63,13 @@ final class LyricDiskCache {
     }
 
     private static File file(String namespace, String key) {
-        Context context = Main.appContext();
+        Context context;
+        try {
+            context = Main.appContext();
+        } catch (Throwable unavailable) {
+            // Cache access is optional when the host context has not been initialized.
+            return null;
+        }
         if (context == null || key == null || key.isEmpty()) return null;
         File dir = new File(new File(context.getCacheDir(), "lyrics"), VERSION + "_" + namespace);
         return new File(dir, digest(key) + ".json");

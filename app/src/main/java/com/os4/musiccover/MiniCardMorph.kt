@@ -56,6 +56,8 @@ internal class MiniCardMorph(
      * instead. Read every frame; [circle] when there is none.
      */
     private var roundness: (() -> Float)? = null,
+    /** Opening intent belongs to this morph; later notification gestures cannot inherit it. */
+    private val mediaPillTap: Boolean = MiniPlayerRuntime.musicPillTapActive,
 ) : Choreographer.FrameCallback {
     class Landing(val art: View?, val title: View?, val text: View?, val radius: Float,
                   val artRadius: Float, val media: Boolean = false) {
@@ -450,7 +452,7 @@ internal class MiniCardMorph(
         // Remove that second blur layer while opening either media-player presentation.
         mini.suppressBackdropBlur(mediaCard && toNative)
         val cardBlurPx = if (mediaCard) 3f * mini.resources.displayMetrics.density else blurPx
-        blurCard(cardBlurPx * cardBlurFactor(c, mediaCard, largeArtwork, toNative) / max(s, 0.05f))
+        blurCard(cardBlurPx * cardBlurFactor(c, mediaCard, largeArtwork, toNative, mediaPillTap) / max(s, 0.05f))
         mini.setMorphContentBlur(blurPx * pillBlurFactor(c, mediaCard, largeArtwork, toNative))
 
         // The mini player's frame is the container itself; its material fades last.
@@ -574,7 +576,7 @@ internal class MiniCardMorph(
         placedBox = null
         restore()
         listener.onSettled(this, toNative, completed)
-        if (completed && toNative && mediaCard && Main.miniPlayerLargeArtworkTarget()) {
+        if (completed && toNative && mediaCard && mediaPillTap && Main.miniPlayerLargeArtworkTarget()) {
             fadeMediaFocus()
         }
     }
@@ -930,8 +932,9 @@ internal class MiniCardMorph(
         fun cardFocus(p: Float) = smooth(0.4f, 0.95f, p)
 
         /** The media player holds a mild blur until its geometry has landed. */
-        fun cardBlurFactor(p: Float, media: Boolean, largeArtwork: Boolean, opening: Boolean) =
-            if (!media) 1f - cardFocus(p) else if (largeArtwork && opening) 1f else 0f
+        fun cardBlurFactor(p: Float, media: Boolean, largeArtwork: Boolean, opening: Boolean,
+                           mediaPillTap: Boolean = false) =
+            if (!media) 1f - cardFocus(p) else if (largeArtwork && opening && mediaPillTap) 1f else 0f
 
         /** Compact artwork stays sharp through the pill-to-player handoff. */
         fun pillBlurFactor(p: Float, media: Boolean, largeArtwork: Boolean, opening: Boolean) =

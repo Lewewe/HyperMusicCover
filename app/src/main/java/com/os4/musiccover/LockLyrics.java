@@ -117,13 +117,32 @@ final class LockLyrics {
     private static volatile int sTranslateRevision;
     /** Optional motion/effect level for lyric rendering; see AliveLyricsEffects constants. */
     static volatile int sAliveFx = AliveLyricsEffects.OFF;
-    static volatile boolean sAudioReactive = false;
     static volatile boolean sProviderQq = true;
     static volatile boolean sProviderNetease = true;
     static volatile boolean sProviderKuwo = true;
     static volatile boolean sProviderKugou = true;
     static volatile boolean sProviderLrcLib = true;
     static volatile boolean sProviderVariants = true;
+    static final int SEARCH_ORIGINAL = 0, SEARCH_EXTENDED = 1;
+    static volatile int sSearchMode = SEARCH_ORIGINAL;
+
+    static boolean setSearchMode(int mode) {
+        int next = mode == SEARCH_EXTENDED ? SEARCH_EXTENDED : SEARCH_ORIGINAL;
+        if (sSearchMode == next) return false;
+        sSearchMode = next;
+        return true;
+    }
+
+    static void searchModeChanged() {
+        CACHE.clear();
+        unpark();
+        Main.main().removeCallbacks(SETTLED_LOOKUP);
+        if (sDemo || !sEnabled || sKey.isEmpty() || sController == null) return;
+        sInfoSeen = LyricSource.infoFor(sController);
+        sInfoTries = 0;
+        // Keep the current lyrics visible while the selected strategy reads them again.
+        lookup(sKey, sController, true);
+    }
     /**
      * The fifth: whether a line's romanisation is drawn under it, over the translation. Off by
      * default and apart from the translation's switch - either can be shown alone (#64). Like
@@ -141,9 +160,9 @@ final class LockLyrics {
         String ep = endpoint == null ? "" : endpoint.trim();
         String key = apiKey == null ? "" : apiKey.trim();
         String src = sourceLang == null ? "auto" : sourceLang.trim();
-        String dst = targetLang == null ? "auto" : targetLang.trim();
+        String dst = targetLang == null ? "en" : targetLang.trim();
         if (src.isEmpty()) src = "auto";
-        if (dst.isEmpty()) dst = "auto";
+        if (dst.isEmpty()) dst = "en";
         int nextMode = mode <= TR_MODE_OFF ? TR_MODE_OFF : TR_MODE_ORIGINAL_AND_TRANSLATION;
         boolean changed = !backend.equals(sTranslateProvider)
                 || !ep.equals(sTranslateEndpoint) || !key.equals(sTranslateApiKey)
@@ -250,14 +269,6 @@ final class LockLyrics {
         LyricView view = sView;
         if (view != null) view.kick();
         return true;
-    }
-
-    static boolean setAudioReactive(boolean on) {
-        boolean changed = sAudioReactive != on;
-        sAudioReactive = on;
-        LyricView view = sView;
-        if (view != null) view.kick();
-        return changed;
     }
 
     static boolean setAliveFx(int mode) {
@@ -1407,7 +1418,7 @@ final class LockLyrics {
             startTick();
             watch();
         } catch (Throwable t) {
-            Xp.log(TAG + "attach failed: " + Log.getStackTraceString(t));
+            Xp.w(TAG + "attach failed: " + Log.getStackTraceString(t));
         }
     }
 
@@ -1753,10 +1764,7 @@ final class LockLyrics {
         sLines = lines == null ? Collections.<LyricLine>emptyList() : lines;
         if (!sLines.isEmpty() && wanted()) sArtworkPage.preferCompact();
         // Only a settled answer: the empty set a track change puts up while it looks is not one.
-        if (!sLoading) {
-            sHadLyrics = !sLines.isEmpty();
-            if (sLines.isEmpty() && !sDemo) sArtworkPage.preferCover();
-        }
+        if (!sLoading) sHadLyrics = !sLines.isEmpty();
         sVersion++;
         sWhy = why;
         Xp.log(TAG + sLines.size() + " lines: " + why);
@@ -2002,7 +2010,7 @@ final class LockLyrics {
             }, Main.main());
             sDisplayWatched = true;
         } catch (Throwable t) {
-            Xp.log(TAG + "display listener failed: " + t);
+            Xp.w(TAG + "display listener failed: " + t);
         }
     }
 
@@ -2043,7 +2051,7 @@ final class LockLyrics {
             sDrawLock.acquire(STILL_LOCK_MAX_MS);
             noteStill("acq");
         } catch (Throwable t) {
-            Xp.log(TAG + "draw wake lock failed: " + t);
+            Xp.w(TAG + "draw wake lock failed: " + t);
         }
         readState(true);
         sStillDrawnUp = false;
@@ -2128,7 +2136,7 @@ final class LockLyrics {
                     Main.main());
             sStillWakeSet = true;
         } catch (Throwable t) {
-            Xp.log(TAG + "still wake failed: " + t);
+            Xp.w(TAG + "still wake failed: " + t);
         }
     }
 

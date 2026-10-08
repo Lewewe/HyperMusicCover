@@ -95,7 +95,7 @@ object MiniPlayerRuntime {
                 }
                 chain.proceed(args)
             }
-        }.onFailure { Xp.log("MCMini: native header visibility hook unavailable: $it") }
+        }.onFailure { Xp.w("MCMini: native header visibility hook unavailable: $it") }
         runCatching {
             val cls = Xp.findClass("com.android.keyguard.shortcut.MiuiShortcutController", classLoader)
             Xp.hookAll(cls, "addShortcutViews") { chain ->
@@ -103,7 +103,7 @@ object MiniPlayerRuntime {
                 (chain.args.firstOrNull() as? View)?.let { scheduleInstall(it, chain.thisObject) }
                 result
             }
-        }.onFailure { Xp.log("MCMini: shortcut hook unavailable, no mini player: $it") }
+        }.onFailure { Xp.w("MCMini: shortcut hook unavailable, no mini player: $it") }
         // The lock screen's list scrolling under the finger, wherever the gesture started -
         // between rows too, where the card swipe never sees it: the rows are the list's again.
         runCatching {
@@ -118,7 +118,7 @@ object MiniPlayerRuntime {
                 }
                 result
             }
-        }.onFailure { Xp.log("MCMini: list scroll hook unavailable: $it") }
+        }.onFailure { Xp.w("MCMini: list scroll hook unavailable: $it") }
         // A row given back to its island ahead of its morph home is left to the stack as a
         // transient view: laid out no more, drawn still. The stack takes it away when its own
         // animation ends; the morph's rows are kept until the morph has landed (holdTransient).
@@ -138,12 +138,12 @@ object MiniPlayerRuntime {
                         chain.proceed()
                     }
                 }
-            }.onFailure { Xp.log("MCMini: transient hold unavailable on $name: $it") }
+            }.onFailure { Xp.w("MCMini: transient hold unavailable on $name: $it") }
         }
         MiniPlayerScene.install(classLoader)
         installCardMaterialHooks(classLoader)
         runCatching { installAodDim(classLoader) }
-            .onFailure { Xp.log("MCMini: full-AOD dim unavailable: $it") }
+            .onFailure { Xp.w("MCMini: full-AOD dim unavailable: $it") }
         LockIslands.install(classLoader)
     }
 
@@ -181,7 +181,7 @@ object MiniPlayerRuntime {
         try {
             Xp.callMethod(row, "removeFromTransientContainer")
         } catch (t: Throwable) {
-            Xp.log("MCMini: transient release failed: $t")
+            Xp.w("MCMini: transient release failed: $t")
         } finally {
             passTransient = false
         }
@@ -300,7 +300,7 @@ object MiniPlayerRuntime {
             field.isAccessible = true
             (field.get(null) as Map<*, *>).values.filterNotNull().map { it.javaClass }.distinct()
         }.getOrElse {
-            Xp.log("MCMini: effect map unavailable, naming the effects instead: $it")
+            Xp.w("MCMini: effect map unavailable, naming the effects instead: $it")
             listOf("MediaViewNormalEffect", "MediaViewBlurEffect", "MediaViewBlurOnKeyguardEffect",
                 "MediaViewGlassEffect", "MediaViewGlassOnKeyguardEffect",
                 "MediaViewGlassOnKeyguardLightWallPaperEffect", "MediaViewGlassFullAodEffect")
@@ -355,7 +355,7 @@ object MiniPlayerRuntime {
                     }
                     result
                 }
-            }.onFailure { Xp.log("MCMini: ${cls.simpleName} hook unavailable: $it") }
+            }.onFailure { Xp.w("MCMini: ${cls.simpleName} hook unavailable: $it") }
         }
         // What the effects call on the card's background: record the outermost of them.
         listOf(
@@ -394,7 +394,7 @@ object MiniPlayerRuntime {
                         }
                     }
                 }
-            }.onFailure { Xp.log("MCMini: material recorder on $className unavailable: $it") }
+            }.onFailure { Xp.w("MCMini: material recorder on $className unavailable: $it") }
         }
     }
 
@@ -801,7 +801,7 @@ object MiniPlayerRuntime {
         lastRoot = WeakReference(root)
         lastShortcutController = shortcutController?.let(::WeakReference)
         fun doInstall() = runCatching { attach(root, shortcutController) }
-            .onFailure { Xp.log("MCMini: attach failed: $it") }
+            .onFailure { Xp.w("MCMini: attach failed: $it") }
         doInstall()
         root.post { doInstall() }
         root.postDelayed({ doInstall() }, 250L)
@@ -1489,6 +1489,16 @@ object MiniPlayerRuntime {
      * scene keeps. False when the mini player is not what is showing, and the OEM card's own
      * route applies.
      */
+    /** Captured by morphs created during a music-pill tap, never by a notification spread. */
+    internal var musicPillTapActive = false
+        private set
+
+    internal fun withMusicPillTap(fromPill: Boolean, action: () -> Unit) {
+        val previous = musicPillTapActive
+        musicPillTapActive = fromPill
+        try { action() } finally { musicPillTapActive = previous }
+    }
+
     @JvmStatic fun prepareSceneEntry(): Boolean =
         live().any { it.beginTransition(toNative = true, scene = true) }
 
@@ -1745,7 +1755,7 @@ object MiniPlayerRuntime {
             val cause = (error as? java.lang.reflect.InvocationTargetException)?.targetException ?: error
             if (!materialFailed) {
                 materialFailed = true
-                Xp.log("MCMini: card material unavailable, plain fill instead: $cause")
+                Xp.w("MCMini: card material unavailable, plain fill instead: $cause")
             }
             view.background = null
             view.setImageDrawable(GradientDrawable().apply { setColor(0x9E1F2324.toInt()) })
@@ -5969,11 +5979,13 @@ private class MiniPlayerController(
         }
         trace("switch tap ${key.takeLast(6)} small=$small")
         val wasOut = x.movers[key]?.morph != null
-        requestUp(x, key, fromPill = !small, cover = key == MUSIC_ISLAND)
-        // The music opens the cover from any place, as from the pill (tapIsland).
-        if (key == MUSIC_ISLAND && !wasOut) {
-            MiniPlayerRuntime.forgetRestoreScene()
-            Main.miniPlayerEnterCover()
+        MiniPlayerRuntime.withMusicPillTap(key == MUSIC_ISLAND && !small) {
+            requestUp(x, key, fromPill = !small, cover = key == MUSIC_ISLAND)
+            // The music opens the cover from any place, as from the pill (tapIsland).
+            if (key == MUSIC_ISLAND && !wasOut) {
+                MiniPlayerRuntime.forgetRestoreScene()
+                Main.miniPlayerEnterCover()
+            }
         }
     }
 
@@ -5988,6 +6000,10 @@ private class MiniPlayerController(
      * cover's card before (2026-09-25).
      */
     private fun openCover() {
+        MiniPlayerRuntime.withMusicPillTap(selectedIsland == MUSIC_ISLAND) { openCoverFromTap() }
+    }
+
+    private fun openCoverFromTap() {
         MiniPlayerRuntime.forgetRestoreScene()
         // A notification still on its way - opening, or springing back out after a pull too
         // short to collapse it - is not "out" yet to expandedKey, and the cover came up over it
@@ -8849,7 +8865,7 @@ private class MiniPlayerController(
 
     fun refresh() {
         if (Looper.myLooper() != Looper.getMainLooper()) { scheduleRefresh(); return }
-        runCatching { refreshUnsafe() }.onFailure { Xp.log("MCMini: refresh failed: $it") }
+        runCatching { refreshUnsafe() }.onFailure { Xp.w("MCMini: refresh failed: $it") }
     }
 
     private fun scheduleRefresh() {
@@ -10059,7 +10075,7 @@ private class MiniPlayerController(
             "sceneOverride=${Main.coverSceneActive()} transition=${morph != null}"
         if (log != lastPresentationLog) {
             lastPresentationLog = log
-            Xp.log("MCMini: presentation $log")
+            Xp.d("MCMini: presentation $log")
         }
         // A focus notification's second button while the pill is the only island: the big one.
         // Out of sight under a switch or a flight, it is set, not grown: it grew in only once the
@@ -10210,9 +10226,12 @@ private class MiniPlayerController(
     /**
      * The row's centre moved up off the fingerprint sensor where the two would meet
      * (MiniPlayerRuntime.fingerprintArea, #66); the torch and camera stay where they are. Only
-     * the span between the buttons counts across: the row never reaches past them.
+     * the span between the buttons counts across: the row never reaches past them. Under a
+     * switch (MiniPlayerConfig.FOD_LIFT); off, the row stays put and only the touches that start
+     * on the sensor are still left to it.
      */
     private fun clearOfFingerprint(centerY: Float, height: Int, l: FloatArray?, r: FloatArray?): Float {
+        if (!config.optBoolean(MiniPlayerConfig.FOD_LIFT, true)) return centerY
         val fod = fingerprintInHost() ?: return centerY
         val from = l?.get(0) ?: 0f
         val to = r?.get(0) ?: host.width.toFloat()
@@ -10325,7 +10344,7 @@ private class MiniPlayerController(
                     runCatching { transport(current, playing) }
                         .onFailure { dispatchFallback(fallbackKey) }
                 } else dispatchFallback(fallbackKey)
-            }.onFailure { Xp.log("MCMini: media command failed: $it") }
+            }.onFailure { Xp.w("MCMini: media command failed: $it") }
         }
     }
 

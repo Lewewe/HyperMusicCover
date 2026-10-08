@@ -888,7 +888,7 @@ public class Main extends XposedModule {
             LockLyrics.armed("+" + tag);
         } catch (Throwable t) {
             LockLyrics.armed("!" + tag);
-            Xp.log(TAG + "leaving hook " + tag + " failed: " + t);
+            Xp.w(TAG + "leaving hook " + tag + " failed: " + t);
         }
     }
 
@@ -949,9 +949,6 @@ public class Main extends XposedModule {
         PassBlurScaleFix.install();
         // The mini player hangs off the shortcut row, not the clock container.
         MiniPlayerRuntime.install(cl);
-        // 高德's ride card is a focus notification of its own only once the cloud list that
-        // decides who may have one answers for it (AmapFocus).
-        AmapFocus.install(cl);
         PaletteThrottle.INSTANCE.install(cl);
         // Draw lasting lock screen status beside the date, clear of the pill.
         DateStatus.INSTANCE.install(cl);
@@ -989,7 +986,7 @@ public class Main extends XposedModule {
                 try {
                     registerReceiver(sContainer.getContext().getApplicationContext());
                 } catch (Throwable t) {
-                    Xp.log(TAG + "registerReceiver failed: " + t);
+                    Xp.w(TAG + "registerReceiver failed: " + t);
                 }
                 // An immersive page's slot, if a rebuilt keyguard came with a new window.
                 try {
@@ -1004,7 +1001,7 @@ public class Main extends XposedModule {
                 try {
                     LyriconSource.attach(sContainer.getContext().getApplicationContext());
                 } catch (Throwable t) {
-                    Xp.log(TAG + "Lyricon attach failed: " + t);
+                    Xp.w(TAG + "Lyricon attach failed: " + t);
                 }
                 // The keyguard is rebuilt on some transitions, taking our cover with it, so
                 // re-attach rather than assume the view is still in the tree.
@@ -1052,7 +1049,7 @@ public class Main extends XposedModule {
                         try {
                             LockLyrics.refresh();
                         } catch (Throwable t) {
-                            Xp.log(TAG + "lyrics refresh failed: " + t);
+                            Xp.w(TAG + "lyrics refresh failed: " + t);
                         }
                     }
                 });
@@ -1080,7 +1077,7 @@ public class Main extends XposedModule {
                 return result;
             });
         } catch (Throwable t) {
-            Xp.log(TAG + "onDetachedFromWindow hook failed: " + t);
+            Xp.w(TAG + "onDetachedFromWindow hook failed: " + t);
         }
 
         // The lyrics' HDR highlight no longer has a hook here: it needs a colour mode, a colour
@@ -1149,7 +1146,7 @@ public class Main extends XposedModule {
                 return result;
             });
         } catch (Throwable t) {
-            Xp.log(TAG + "KeyguardService sleep/wake hooks failed, the clock cuts to and from "
+            Xp.w(TAG + "KeyguardService sleep/wake hooks failed, the clock cuts to and from "
                     + "the AOD: " + t);
         }
 
@@ -1187,7 +1184,7 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             // Independently, like every other hook here: without it a track change simply waits
             // for the player, which is what it did before.
-            Xp.log(TAG + "transport control hook failed, a skip is only noticed when the player "
+            Xp.w(TAG + "transport control hook failed, a skip is only noticed when the player "
                     + "reports it: " + t);
         }
 
@@ -1232,7 +1229,7 @@ public class Main extends XposedModule {
                 return result;
             });
         } catch (Throwable t) {
-            Xp.log(TAG + "doAnimationToAod hook failed, AOD falls back to screen off: " + t);
+            Xp.w(TAG + "doAnimationToAod hook failed, AOD falls back to screen off: " + t);
         }
 
         // The system does re-show the cut-out - verified: it came back right after we restored
@@ -1259,7 +1256,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "depth ownership hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "depth ownership hook failed: " + t);
+            Xp.w(TAG + "depth ownership hook failed: " + t);
         }
 
         // What the OEM itself wants of its cut-out view while we hold it hidden. See sDeductedRef.
@@ -1275,7 +1272,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "cut-out visibility watched");
         } catch (Throwable t) {
-            Xp.log(TAG + "cut-out visibility hook failed: " + t);
+            Xp.w(TAG + "cut-out visibility hook failed: " + t);
         }
 
         // The full-screen AOD's shrink, and the one view that must not take it.
@@ -1306,7 +1303,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "AOD shrink hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "AOD shrink hook failed (the video cover may pull in from the edges"
+            Xp.w(TAG + "AOD shrink hook failed (the video cover may pull in from the edges"
                     + " into full-screen AOD): " + t);
         }
 
@@ -1336,7 +1333,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "wallpaperBlack hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "wallpaperBlack hook failed (the cover may sit bright in AOD): " + t);
+            Xp.w(TAG + "wallpaperBlack hook failed (the cover may sit bright in AOD): " + t);
         }
 
         // The fingerprint ring, when the user has asked for it to go. Two hooks, because the
@@ -1375,7 +1372,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "fingerprint animation hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "fingerprint animation hook failed, the ring will still pulse: " + t);
+            Xp.w(TAG + "fingerprint animation hook failed, the ring will still pulse: " + t);
         }
 
         try {
@@ -1411,7 +1408,7 @@ public class Main extends XposedModule {
             }
             Xp.log(TAG + "fingerprint icon hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "fingerprint icon hook failed, the static print will stay: " + t);
+            Xp.w(TAG + "fingerprint icon hook failed, the static print will stay: " + t);
         }
 
         // The view the print is actually painted on. Its own hook because it is its own class
@@ -1436,7 +1433,7 @@ public class Main extends XposedModule {
             }
             Xp.log(TAG + "fingerprint print view hooked, " + hooked + " of its paint methods");
         } catch (Throwable t) {
-            Xp.log(TAG + "fingerprint print view hook failed: " + t);
+            Xp.w(TAG + "fingerprint print view hook failed: " + t);
         }
 
         // Whether the notifications keep clear of that icon. Installed whatever the setting is,
@@ -1483,7 +1480,7 @@ public class Main extends XposedModule {
                         + " in " + (android.os.SystemClock.uptimeMillis() - t0) + "ms");
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "fingerprint avoidance hook failed: " + t);
+            Xp.w(TAG + "fingerprint avoidance hook failed: " + t);
         }
 
         // MIUI's own answer to "what kind of wallpaper is this", which beats every heuristic
@@ -1500,7 +1497,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "keyguard wallpaper manager hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "keyguard wallpaper manager hook failed, falling back to "
+            Xp.w(TAG + "keyguard wallpaper manager hook failed, falling back to "
                     + "MIUI's files for the wallpaper type: " + t);
         }
 
@@ -1518,7 +1515,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "media card hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "media card hook failed: " + t);
+            Xp.w(TAG + "media card hook failed: " + t);
         }
 
         // A tap on the cover puts the wallpaper back.
@@ -1610,7 +1607,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "lock screen tap hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "lock screen tap hook failed: " + t);
+            Xp.w(TAG + "lock screen tap hook failed: " + t);
         }
 
         // The charging animation going up and coming down, recorded rather than guessed at.
@@ -1637,7 +1634,7 @@ public class Main extends XposedModule {
             });
             Xp.log(TAG + "charging animation hooked");
         } catch (Throwable t) {
-            Xp.log(TAG + "charging animation hook failed: " + t);
+            Xp.w(TAG + "charging animation hook failed: " + t);
         }
 
         // The notification shade's cover background. Its hooks and logic are ShadeLayer's own.
@@ -1692,7 +1689,7 @@ public class Main extends XposedModule {
                 return chain.proceed(args);
             });
         } catch (Throwable t) {
-            Xp.log(TAG + "notifStateChange hook failed: " + t);
+            Xp.w(TAG + "notifStateChange hook failed: " + t);
         }
 
         // The OEM squeezes the clock through these four setters on TimeView. Scaling
@@ -1791,10 +1788,10 @@ public class Main extends XposedModule {
                     return chain.proceed();
                 });
             } catch (Throwable t) {
-                Xp.log(TAG + "setClockPalette hook failed: " + t);
+                Xp.w(TAG + "setClockPalette hook failed: " + t);
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "TimeView hook failed: " + t);
+            Xp.w(TAG + "TimeView hook failed: " + t);
         }
 
         // The date line above the clock is deliberately left to the OEM. On the glass styles it
@@ -1831,7 +1828,7 @@ public class Main extends XposedModule {
                 return result;
             });
         } catch (Throwable t) {
-            Xp.log(TAG + "interactor hook failed: " + t);
+            Xp.w(TAG + "interactor hook failed: " + t);
         }
     }
 
@@ -1879,7 +1876,7 @@ public class Main extends XposedModule {
             }, f, Context.RECEIVER_EXPORTED);
             Xp.log(TAG + "listening for the dialled code " + LauncherIcon.SECRET_CODE);
         } catch (Throwable t) {
-            Xp.log(TAG + "secret code receiver failed: " + t);
+            Xp.w(TAG + "secret code receiver failed: " + t);
         }
     }
 
@@ -1946,7 +1943,6 @@ public class Main extends XposedModule {
                     + "\nlyrictrsource=" + LockLyrics.sTranslateSourceLang
                     + "\nlyrictrtarget=" + LockLyrics.sTranslateTargetLang
                     + "\nlyricalive=" + LockLyrics.sAliveFx
-                    + "\nlyricaudio=" + (LockLyrics.sAudioReactive ? 1 : 0)
                     + "\nspicylyrics=" + (LockLyrics.sSpicyLyricsEnabled ? 1 : 0)
                     + "\nproviderqq=" + (LockLyrics.sProviderQq ? 1 : 0)
                     + "\nprovidernetease=" + (LockLyrics.sProviderNetease ? 1 : 0)
@@ -1956,6 +1952,7 @@ public class Main extends XposedModule {
                     + "\nprovidervariants=" + (LockLyrics.sProviderVariants ? 1 : 0)
                     // Off when absent, which is what every file from before it had.
                     + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
+                    + "\nlyricsearch=" + LockLyrics.sSearchMode
                     + "\nlyricgroups=" + (LockLyrics.sRapidGroups ? 1 : 0)
                     // 0 left, 1 centre, 2 right, and left when the key is absent: a file from
                     // before this setting is one where the lyrics always sat left.
@@ -1979,7 +1976,7 @@ public class Main extends XposedModule {
             af.finishWrite(f);
         } catch (Throwable t) {
             if (f != null) af.failWrite(f);
-            Xp.log(TAG + "saveState failed: " + t);
+            Xp.w(TAG + "saveState failed: " + t);
         }
     }
 
@@ -2067,8 +2064,6 @@ public class Main extends XposedModule {
                         else if ("lyrichdr".equals(k)) LockLyrics.sHdr = "1".equals(v);
                         else if ("lyrictrans".equals(k)) LockLyrics.sTrans = "1".equals(v);
                         else if ("lyrictrmode".equals(k)) LockLyrics.setTranslateMode(Integer.parseInt(v));
-                        else if ("lyrictrmode".equals(k)) LockLyrics.sOnlineTranslateMode =
-                                "1".equals(v) ? LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION : LockLyrics.TR_MODE_OFF;
                         else if ("lyrictrprovider".equals(k)) LockLyrics.sTranslateProvider =
                                 TranslationProvider.normalize(v);
                         else if ("lyrictrendpoint".equals(k)) LockLyrics.sTranslateEndpoint = v;
@@ -2079,7 +2074,6 @@ public class Main extends XposedModule {
                         else if ("lyrictrtarget".equals(k)) LockLyrics.sTranslateTargetLang =
                                 v.isEmpty() ? "en" : v;
                         else if ("lyricalive".equals(k)) LockLyrics.setAliveFx(Integer.parseInt(v));
-                        else if ("lyricaudio".equals(k)) LockLyrics.setAudioReactive("1".equals(v));
                         else if ("spicylyrics".equals(k)) LockLyrics.sSpicyLyricsEnabled = "1".equals(v);
                         else if ("providerqq".equals(k)) LockLyrics.sProviderQq = "1".equals(v);
                         else if ("providernetease".equals(k)) LockLyrics.sProviderNetease = "1".equals(v);
@@ -2088,6 +2082,7 @@ public class Main extends XposedModule {
                         else if ("providerlrclib".equals(k)) LockLyrics.sProviderLrcLib = "1".equals(v);
                         else if ("providervariants".equals(k)) LockLyrics.sProviderVariants = "1".equals(v);
                         else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
+                        else if ("lyricsearch".equals(k)) LockLyrics.setSearchMode(Integer.parseInt(v));
                         else if ("lyricgroups".equals(k)) LockLyrics.sRapidGroups = "1".equals(v);
                         // Clamped in the setter; absent or unreadable means left, see saveState.
                         else if ("lyricalign".equals(k)) LockLyrics.setAlign(Integer.parseInt(v));
@@ -2124,7 +2119,7 @@ public class Main extends XposedModule {
                 }
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "loadState failed: " + t);
+            Xp.w(TAG + "loadState failed: " + t);
             return;
         } finally {
             sLoading = false;
@@ -2158,7 +2153,7 @@ public class Main extends XposedModule {
                 if (!ProbeGuard.admit(this, i)) return;
                 String op = i.getStringExtra("op");
                 if (op == null) op = "info";
-                Xp.log(TAG + "recv op=" + op + ("lyrictrcfg".equals(op)
+                Xp.d(TAG + "recv op=" + op + ("lyrictrcfg".equals(op)
                         || "spicylyricscfg".equals(op)
                         ? " extras=[credentials redacted]" : " extras=" + i.getExtras()));
                 // An op answering later, through goAsync: the receipt is its to send.
@@ -2223,11 +2218,6 @@ public class Main extends XposedModule {
                         recolorClock();
                     } else if ("gdata".equals(op)) {
                         pokeGlassData(i.getIntExtra("idx", -1), i.getFloatExtra("v", 0f));
-                    } else if ("transit".equals(op)) {
-                        // 高德's bus and subway navigation, from AmapTransitShare in its process -
-                        // or by hand: --es json '<intentEntity>', --ez demo true, --es do end.
-                        setResultData(AmapTransitScene.INSTANCE.command(i.getStringExtra("json"),
-                                i.getStringExtra("do"), i.getBooleanExtra("demo", false)));
                     } else if ("immersive".equals(op) || "navmap".equals(op)) {
                         // The immersive pages: --es id <scene> --es do state|open|close|arm|disarm.
                         // navmap is 高德's old spelling (start / stop), kept for a 高德 process
@@ -2421,17 +2411,23 @@ public class Main extends XposedModule {
                         Xp.log(TAG + "Spicy Lyrics settings updated");
                         saveState();
                      } else if ("lyricproviders".equals(op)) {
-                        LockLyrics.sProviderQq = i.getBooleanExtra("qq", true);
-                        LockLyrics.sProviderNetease = i.getBooleanExtra("netease", true);
-                        LockLyrics.sProviderKuwo = i.getBooleanExtra("kuwo", true);
-                        LockLyrics.sProviderKugou = i.getBooleanExtra("kugou", true);
-                        LockLyrics.sProviderLrcLib = i.getBooleanExtra("lrclib", true);
-                        LockLyrics.sProviderVariants = i.getBooleanExtra("variants", true);
+                        LockLyrics.sProviderQq = i.getBooleanExtra("qq", LockLyrics.sProviderQq);
+                        LockLyrics.sProviderNetease = i.getBooleanExtra("netease", LockLyrics.sProviderNetease);
+                        LockLyrics.sProviderKuwo = i.getBooleanExtra("kuwo", LockLyrics.sProviderKuwo);
+                        LockLyrics.sProviderKugou = i.getBooleanExtra("kugou", LockLyrics.sProviderKugou);
+                        LockLyrics.sProviderLrcLib = i.getBooleanExtra("lrclib", LockLyrics.sProviderLrcLib);
+                        LockLyrics.sProviderVariants = i.getBooleanExtra("variants", LockLyrics.sProviderVariants);
                         saveState();
                     } else if ("lyricroma".equals(op)) {
                         LockLyrics.sRoma = i.getBooleanExtra("on", !LockLyrics.sRoma);
                         Xp.log(TAG + "lyrics romanisations: " + LockLyrics.sRoma);
                         LockLyrics.refresh();
+                        saveState();
+                    } else if ("lyricsearch".equals(op)) {
+                        if (LockLyrics.setSearchMode(i.getIntExtra("v", LockLyrics.SEARCH_ORIGINAL))) {
+                            LockLyrics.searchModeChanged();
+                            saveState();
+                        }
                     } else if ("lyricgroups".equals(op)) {
                         LockLyrics.sRapidGroups = i.getBooleanExtra("on", !LockLyrics.sRapidGroups);
                         LockLyrics.refresh();
@@ -2457,11 +2453,6 @@ public class Main extends XposedModule {
                             LockLyrics.refresh();
                             saveStateSoon();
                         }
-                    } else if ("lyricaudio".equals(op)) {
-                        if (LockLyrics.setAudioReactive(i.getBooleanExtra("on", !LockLyrics.sAudioReactive))) {
-                            saveState();
-                        }
-                        setResultData("lyricaudio=" + LockLyrics.sAudioReactive);
                     } else if ("lyricinfo".equals(op)) {
                         // The playing session's metadata, every string key, with lyricInfo written
                         // out whole - to see how a player marks who sings which line.
@@ -2579,7 +2570,7 @@ public class Main extends XposedModule {
                                 try {
                                     describeLocal();
                                 } catch (Throwable t) {
-                                    Xp.log(TAG + "local probe failed: " + t);
+                                    Xp.w(TAG + "local probe failed: " + t);
                                 }
                             }
 
@@ -2593,7 +2584,7 @@ public class Main extends XposedModule {
                                     os.close();
                                     lf.setReadable(true, false);
                                 } catch (Throwable t) {
-                                    Xp.log(TAG + "local write failed: " + t);
+                                    Xp.w(TAG + "local write failed: " + t);
                                 }
                             }
                         }, "MCLocalProbe").start();
@@ -2627,7 +2618,7 @@ public class Main extends XposedModule {
                                 try {
                                     describeNcm();
                                 } catch (Throwable t) {
-                                    Xp.log(TAG + "ncm probe failed: " + t);
+                                    Xp.w(TAG + "ncm probe failed: " + t);
                                 }
                             }
 
@@ -2650,7 +2641,7 @@ public class Main extends XposedModule {
                                     os.close();
                                     out.setReadable(true, false);
                                 } catch (Throwable t) {
-                                    Xp.log(TAG + "ncm write failed: " + t);
+                                    Xp.w(TAG + "ncm write failed: " + t);
                                 }
                             }
                         }, "MCNcmProbe").start();
@@ -2930,7 +2921,6 @@ public class Main extends XposedModule {
                         out.putString("lyrictrsource", LockLyrics.sTranslateSourceLang);
                         out.putString("lyrictrtarget", LockLyrics.sTranslateTargetLang);
                         out.putInt("lyricalive", LockLyrics.sAliveFx);
-                        out.putBoolean("lyricaudio", LockLyrics.sAudioReactive);
                         out.putBoolean("spicylyrics", LockLyrics.sSpicyLyricsEnabled);
                         out.putBoolean("providerqq", LockLyrics.sProviderQq);
                         out.putBoolean("providernetease", LockLyrics.sProviderNetease);
@@ -2939,6 +2929,7 @@ public class Main extends XposedModule {
                         out.putBoolean("providerlrclib", LockLyrics.sProviderLrcLib);
                         out.putBoolean("providervariants", LockLyrics.sProviderVariants);
                         out.putBoolean("lyricroma", LockLyrics.sRoma);
+                        out.putInt("lyricsearch", LockLyrics.sSearchMode);
                         out.putBoolean("lyricgroups", LockLyrics.sRapidGroups);
                         out.putInt("lyricalign", LockLyrics.sAlign);
                         out.putFloat("lyricfill", LockLyrics.sStyle.fill);
@@ -3081,7 +3072,7 @@ public class Main extends XposedModule {
                         Xp.log(TAG + "unknown op " + op);
                     }
                 } catch (Throwable t) {
-                    Xp.log(TAG + "op failed: " + Log.getStackTraceString(t));
+                    Xp.w(TAG + "op failed: " + Log.getStackTraceString(t));
                 }
                 // The receipt. A setting sent while SystemUI is down, or before this receiver
                 // exists, goes nowhere and the broadcast still comes back - only with the code it
@@ -3105,7 +3096,7 @@ public class Main extends XposedModule {
         try {
             ProbeGuard.send(ctx, CoverPush.wallpaperIntent("hello"));
         } catch (Throwable t) {
-            Xp.log(TAG + "hello to the wallpaper process failed: " + t);
+            Xp.w(TAG + "hello to the wallpaper process failed: " + t);
         }
         loadState();
         // Again at startup, not only when the switch is touched: the flag the always-on display
@@ -3175,7 +3166,7 @@ public class Main extends XposedModule {
                     if (Intent.ACTION_USER_PRESENT.equals(a)) ImmersiveHost.onUnlocked();
                     else if (Intent.ACTION_SCREEN_OFF.equals(a)) ImmersiveHost.onScreenOff();
                 } catch (Throwable t) {
-                    Xp.log(TAG + "immersive lifecycle failed: " + t);
+                    Xp.w(TAG + "immersive lifecycle failed: " + t);
                 }
                 if (Intent.ACTION_SCREEN_OFF.equals(a)) CoverMorphLayer.cancel();
                 if (Intent.ACTION_SCREEN_ON.equals(a)) {
@@ -3302,7 +3293,7 @@ public class Main extends XposedModule {
                 sSelfDriving = false;
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "applyY failed: " + Log.getStackTraceString(t));
+            Xp.w(TAG + "applyY failed: " + Log.getStackTraceString(t));
         }
     }
 
@@ -3346,7 +3337,7 @@ public class Main extends XposedModule {
                             + " textSizePx=" + Xp.getObjectField(t, "textSizePx")
                             + " -> glyphs " + Math.round(b.width()) + "x" + Math.round(b.height()));
                 } catch (Throwable e) {
-                    Xp.log(TAG + "setClockParams failed: " + Log.getStackTraceString(e));
+                    Xp.w(TAG + "setClockParams failed: " + Log.getStackTraceString(e));
                 }
             }
         });
@@ -3442,7 +3433,7 @@ public class Main extends XposedModule {
                 if (ms.length() > 0) Xp.log(TAG + "  " + c.getSimpleName() + " methods: " + ms);
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "dumpClockStyleInfo failed: " + Log.getStackTraceString(t));
+            Xp.w(TAG + "dumpClockStyleInfo failed: " + Log.getStackTraceString(t));
         }
     }
 
@@ -3522,7 +3513,7 @@ public class Main extends XposedModule {
                                 + geomOf(clockTarget(root)));
                     }
                 } catch (Throwable t) {
-                    Xp.log(TAG + "geom failed: " + t);
+                    Xp.w(TAG + "geom failed: " + t);
                 }
             }
         });
@@ -5029,7 +5020,7 @@ public class Main extends XposedModule {
                     + " getNotificationClockTop=" + Xp.callMethod(v, "getNotificationClockTop")
                     + " hold=" + sHoldY + " lastSystem=" + r1(sLastSystemY));
         } catch (Throwable t) {
-            Xp.log(TAG + "notif probe failed: " + t);
+            Xp.w(TAG + "notif probe failed: " + t);
         }
     }
 
@@ -5301,7 +5292,7 @@ public class Main extends XposedModule {
             }
             return best;
         } catch (Throwable t) {
-            Xp.log(TAG + "getActiveSessions failed: " + t);
+            Xp.w(TAG + "getActiveSessions failed: " + t);
             return null;
         }
     }
@@ -5747,7 +5738,7 @@ public class Main extends XposedModule {
                     f.close();
                     Xp.log(TAG + "shot art " + raw.getWidth() + "x" + raw.getHeight());
                 } catch (Throwable t) {
-                    Xp.log(TAG + "art dump failed: " + t);
+                    Xp.w(TAG + "art dump failed: " + t);
                 }
             }
         }
@@ -5973,7 +5964,7 @@ public class Main extends XposedModule {
             b.recycle();
             return bos.toByteArray();
         } catch (Throwable t) {
-            Xp.log(TAG + "clock capture failed: " + t);
+            Xp.w(TAG + "clock capture failed: " + t);
             return null;
         }
     }
@@ -6069,7 +6060,7 @@ public class Main extends XposedModule {
             o.close();
             Xp.log(TAG + "shot " + name + " " + png.length + "B -> " + f);
         } catch (Throwable t) {
-            Xp.log(TAG + "shot dump failed: " + t);
+            Xp.w(TAG + "shot dump failed: " + t);
         }
     }
 
@@ -6100,7 +6091,7 @@ public class Main extends XposedModule {
             if (img != null) img.setVisibility(View.INVISIBLE);
             return shoot(card, CARD_SHOT_W);
         } catch (Throwable t) {
-            Xp.log(TAG + "card capture failed: " + t);
+            Xp.w(TAG + "card capture failed: " + t);
             return null;
         } finally {
             if (img != null) img.setVisibility(wasVisible);
@@ -6141,7 +6132,7 @@ public class Main extends XposedModule {
             b.compress(Bitmap.CompressFormat.PNG, 100, bos);
             return bos.toByteArray();
         } catch (Throwable t) {
-            Xp.log(TAG + "view capture failed: " + t);
+            Xp.w(TAG + "view capture failed: " + t);
             return null;
         } finally {
             if (b != null) b.recycle();
@@ -6315,7 +6306,7 @@ public class Main extends XposedModule {
                     t.apply();
                     Xp.log(TAG + "aod dim re-asserted " + black + " (+" + at + "ms)");
                 } catch (Throwable t2) {
-                    Xp.log(TAG + "aod dim re-assert failed: " + t2);
+                    Xp.w(TAG + "aod dim re-assert failed: " + t2);
                 }
             }, at);
         }
@@ -6350,7 +6341,7 @@ public class Main extends XposedModule {
             }
             Xp.log(TAG + "vtree done, " + sVtreeLines + " views");
         } catch (Throwable t) {
-            Xp.log(TAG + "vtree failed: " + t);
+            Xp.w(TAG + "vtree failed: " + t);
         }
     }
 
@@ -7196,7 +7187,7 @@ public class Main extends XposedModule {
                 }
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "dex walk for the avoid combine failed: " + t);
+            Xp.w(TAG + "dex walk for the avoid combine failed: " + t);
         }
         for (String n : names) {
             try {
@@ -7298,7 +7289,7 @@ public class Main extends XposedModule {
                 }
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "reading the fingerprint setting early failed: " + t);
+            Xp.w(TAG + "reading the fingerprint setting early failed: " + t);
         }
     }
 
@@ -7994,7 +7985,7 @@ public class Main extends XposedModule {
             Xp.log(TAG + "title tap -> " + (playing ? "pause" : "play")
                     + " on " + c.getPackageName());
         } catch (Throwable t) {
-            Xp.log(TAG + "title tap failed: " + t);
+            Xp.w(TAG + "title tap failed: " + t);
         }
     }
 
@@ -8784,7 +8775,7 @@ public class Main extends XposedModule {
                 while (sChargeTrail.size() > 8) sChargeTrail.removeFirst();
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "charge trail failed: " + t);
+            Xp.w(TAG + "charge trail failed: " + t);
         }
     }
 
@@ -9096,7 +9087,7 @@ public class Main extends XposedModule {
                     Xp.log(TAG + "cover attached, layer "
                             + layer.getWidth() + "x" + layer.getHeight());
                 } catch (Throwable t) {
-                    Xp.log(TAG + "attachCover failed: " + Log.getStackTraceString(t));
+                    Xp.w(TAG + "attachCover failed: " + Log.getStackTraceString(t));
                 }
             }
         });
@@ -9340,7 +9331,7 @@ public class Main extends XposedModule {
                     : (MediaSessionManager) ctx.getSystemService(Context.MEDIA_SESSION_SERVICE);
             return msm == null ? null : msm.getActiveSessions(null);
         } catch (Throwable t) {
-            Xp.log(TAG + "active session read failed: " + t);
+            Xp.w(TAG + "active session read failed: " + t);
             return null;
         }
     }
@@ -9532,7 +9523,7 @@ public class Main extends XposedModule {
                 Xp.log(TAG + "active-session listener registered");
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "session listener failed: " + Log.getStackTraceString(t));
+            Xp.w(TAG + "session listener failed: " + Log.getStackTraceString(t));
         }
         rebindSession();
     }
@@ -9595,7 +9586,7 @@ public class Main extends XposedModule {
                     sWatchedMetadata = new SessionMetadata(c, c.getMetadata());
                     Xp.log(TAG + "following " + c.getPackageName());
                 } catch (Throwable t) {
-                    Xp.log(TAG + "registerCallback failed: " + t);
+                    Xp.w(TAG + "registerCallback failed: " + t);
                 }
             } else {
                 Xp.log(TAG + "no active media session");
@@ -10344,7 +10335,15 @@ public class Main extends XposedModule {
         }
         if (y < top || y > bottom) return;
         if (sCoverMode) {
-            exitFromTap("tap at y=" + y);
+            if (LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
+                // Keep the media player and clock in place; this is not a scene exit to pill.
+                if (!LockLyrics.compactWithoutLyrics()) {
+                    beginCompactArtworkMorph(false);
+                    LockLyrics.setArtworkCompact(true);
+                }
+            } else {
+                exitFromTap("tap at y=" + y);
+            }
         } else if (sTapSuppressed) {
             enterFromTap("tap at y=" + y);
         }
@@ -10421,7 +10420,7 @@ public class Main extends XposedModule {
                                : sVideoWpOwed ? ", live wallpaper owed back"
                                : ", live wallpaper restored"));
                 } catch (Throwable t) {
-                    Xp.log(TAG + "detachCover failed: " + t);
+                    Xp.w(TAG + "detachCover failed: " + t);
                 }
             }
         });
@@ -10820,7 +10819,7 @@ public class Main extends XposedModule {
                     + "px, band " + top + ".." + bottom);
         } catch (Throwable t) {
             sCoverTint = 0;
-            Xp.log(TAG + "cover tint failed: " + t);
+            Xp.w(TAG + "cover tint failed: " + t);
         }
     }
 
@@ -10868,7 +10867,7 @@ public class Main extends XposedModule {
                             // one IllegalArgumentException per frame, which is how it was found.
                         }
                     } catch (Throwable t) {
-                        Xp.log(TAG + "recolor failed: " + t);
+                        Xp.w(TAG + "recolor failed: " + t);
                     }
                 }
             }
@@ -11203,14 +11202,14 @@ public class Main extends XposedModule {
                 // The first few fires prove which view carries the clock's glass and that the
                 // field is there to hand back; the rest are counted rather than spammed.
                 if (hits <= 5 || hits % 50 == 0) {
-                    Xp.log(TAG + "setMiGlass guard fired (" + hits + ") on "
+                    Xp.d(TAG + "setMiGlass guard fired (" + hits + ") on "
                             + viewIdOf((View) self) + " restored=" + restored);
                 }
                 return chain.proceed(args);
             });
             Xp.log(TAG + "HyperLight setMiGlass guard armed");
         } catch (Throwable t) {
-            Xp.log(TAG + "HyperLight setMiGlass guard unavailable: " + t);
+            Xp.w(TAG + "HyperLight setMiGlass guard unavailable: " + t);
         }
     }
 
@@ -11448,7 +11447,7 @@ public class Main extends XposedModule {
                             Xp.callMethod(t, "setMiGlassEffectEnable", on);
                             t.invalidate();
                         } catch (Throwable e) {
-                            Xp.log(TAG + "setGlass " + id + " failed: " + e);
+                            Xp.w(TAG + "setGlass " + id + " failed: " + e);
                         }
                     }
                 }
@@ -11483,7 +11482,7 @@ public class Main extends XposedModule {
                     }
                     if (n == 0) Xp.log(TAG + idName + " not found in either clock root");
                 } catch (Throwable e) {
-                    Xp.log(TAG + "groupScale failed: " + Log.getStackTraceString(e));
+                    Xp.w(TAG + "groupScale failed: " + Log.getStackTraceString(e));
                 }
             }
         });
@@ -11615,13 +11614,13 @@ public class Main extends XposedModule {
         try {
             Xp.log(TAG + "getClockBottom()=" + Xp.callMethod(v, "getClockBottom"));
         } catch (Throwable t) {
-            Xp.log(TAG + "getClockBottom failed: " + t);
+            Xp.w(TAG + "getClockBottom failed: " + t);
         }
         try {
             Xp.log(TAG + "getNotificationClockTop()="
                     + Xp.callMethod(v, "getNotificationClockTop"));
         } catch (Throwable t) {
-            Xp.log(TAG + "getNotificationClockTop failed: " + t);
+            Xp.w(TAG + "getNotificationClockTop failed: " + t);
         }
         logViewById(v, "mi_media_controls");
         logViewById(v, "album_art_image");
@@ -11648,11 +11647,11 @@ public class Main extends XposedModule {
                     Object cfg = Xp.getObjectField(anim, f);
                     Xp.log(TAG + f + " = " + describe(cfg));
                 } catch (Throwable t) {
-                    Xp.log(TAG + f + " unavailable: " + t);
+                    Xp.w(TAG + f + " unavailable: " + t);
                 }
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "dumpAnimConfigs failed: " + Log.getStackTraceString(t));
+            Xp.w(TAG + "dumpAnimConfigs failed: " + Log.getStackTraceString(t));
         }
     }
 
@@ -11728,7 +11727,7 @@ public class Main extends XposedModule {
             Rect r = new Rect(loc[0], loc[1], loc[0] + found.getWidth(), loc[1] + found.getHeight());
             Xp.log(TAG + idName + ": " + r + " vis=" + found.getVisibility());
         } catch (Throwable t) {
-            Xp.log(TAG + idName + " lookup failed: " + t);
+            Xp.w(TAG + idName + " lookup failed: " + t);
         }
     }
 }

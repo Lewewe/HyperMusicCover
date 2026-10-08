@@ -68,34 +68,38 @@ class LibreTranslateLyricTranslator implements LyricTranslator {
         }
         final String cacheKey = LyricTranslationLogic.cacheKey("v3|" + cfg.provider + "|" + trackKey,
                 endpoint, source, target, lines);
-        Map<String, String> hit;
-        synchronized (CACHE) {
-            hit = CACHE.get(cacheKey);
-        }
-        if (hit == null) {
-            Map<String, String> diskHit = fromDisk(cacheKey);
-            if (diskHit != null) {
-                hit = diskHit;
-                synchronized (CACHE) {
-                    CACHE.put(cacheKey, diskHit);
-                }
-            }
-        }
-        if (hit != null && !hit.isEmpty()) {
-            cb.onTranslated(cacheKey, LyricTranslationLogic.merge(lines, hit), true);
-            return;
-        }
         final List<LyricTranslationLogic.Batch> batches =
                 LyricTranslationLogic.batches(entries, BATCH_MAX_CHARS, BATCH_MAX_LINES);
         POOL.execute(new Runnable() {
             @Override
             public void run() {
+                if (!cb.isCurrent()) return;
+                Map<String, String> hit;
+                synchronized (CACHE) {
+                    hit = CACHE.get(cacheKey);
+                }
+                if (hit == null) {
+                    Map<String, String> diskHit = fromDisk(cacheKey);
+                    if (diskHit != null) {
+                        hit = diskHit;
+                        synchronized (CACHE) {
+                            CACHE.put(cacheKey, diskHit);
+                        }
+                    }
+                }
+                if (hit != null && !hit.isEmpty()) {
+                    if (!cb.isCurrent()) return;
+                    cb.onTranslated(cacheKey, LyricTranslationLogic.merge(lines, hit), true);
+                    return;
+                }
+                if (!cb.isCurrent()) return;
                 LinkedHashMap<String, String> translated = new LinkedHashMap<>();
                 for (LyricTranslationLogic.Batch batch : batches) {
                     if (!cb.isCurrent()) return;
                     Map<String, String> mapped = translateBatch(batch, cfg, source, target);
                     if (!mapped.isEmpty()) translated.putAll(mapped);
                 }
+                if (!cb.isCurrent()) return;
                 if (translated.isEmpty()) {
                     cb.onFailed("translation request failed");
                     return;

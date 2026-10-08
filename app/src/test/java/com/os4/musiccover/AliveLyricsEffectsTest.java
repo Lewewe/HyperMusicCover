@@ -7,27 +7,6 @@ import static org.junit.Assert.*;
 public class AliveLyricsEffectsTest {
 
     @Test
-    public void audioPulseIsBoundedAndTracksOnlyMeasuredEnergy() {
-        float previous = 1f;
-        for (int i = 0; i <= 100; i++) {
-            float level = AliveLyricsEffects.audioLevel(i / 100f);
-            float scale = AliveLyricsEffects.audioScale(true, true, false, level);
-            assertTrue(scale >= previous);
-            assertTrue(scale <= 1.0351f);
-            previous = scale;
-        }
-        assertEquals(1f, AliveLyricsEffects.audioScale(true, true, false, 0f), 0f);
-        assertEquals(1.053f, AliveLyricsEffects.audioScale(true, true, false, 1f, 1f), 1e-6f);
-        assertEquals(0f, AliveLyricsEffects.audioTransient(0f, 0f), 0f);
-        assertTrue(AliveLyricsEffects.audioTransient(0.05f, 0.8f) > 0.9f);
-        assertEquals(0f, AliveLyricsEffects.audioLevel(Float.NaN), 0f);
-        assertEquals(0f, AliveLyricsEffects.audioLevel(Float.POSITIVE_INFINITY), 0f);
-        assertEquals(0f, AliveLyricsEffects.audioLevel(-1f), 0f);
-        assertEquals(1f, AliveLyricsEffects.audioScale(true, false, false, 1f), 0f);
-        assertEquals(1f, AliveLyricsEffects.audioScale(false, true, false, 1f), 0f);
-    }
-
-    @Test
     public void trailIntensityIsZeroOutsideWindowAndMonotonicInDecay() {
         int end = 1000;
         assertEquals(0f, AliveLyricsEffects.wordTrailIntensity(AliveLyricsEffects.SUBTLE,
@@ -58,8 +37,6 @@ public class AliveLyricsEffectsTest {
 
     @Test
     public void effectsSettleInStillModeAndAfterFade() {
-        assertEquals(1f, AliveLyricsEffects.audioScale(true, true, true, 1f), 0f);
-        assertEquals(1f, AliveLyricsEffects.audioScale(true, true, true, 1f, 1f), 0f);
         assertEquals(1f, AliveLyricsEffects.translationFade(AliveLyricsEffects.SUBTLE,
                 true, true, 80), 0f);
         assertFalse(AliveLyricsEffects.translationNeedsFrame(AliveLyricsEffects.SUBTLE,

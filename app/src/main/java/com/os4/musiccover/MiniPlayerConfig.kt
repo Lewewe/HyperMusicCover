@@ -39,6 +39,9 @@ object MiniPlayerConfig {
     /** Move lasting lock screen status beside the date while islands are enabled. */
     const val STATUS_AT_DATE = "statusAtDate"
 
+    /** Lift the pill row clear of a low under-display fingerprint sensor. */
+    const val FOD_LIFT = "fodLift"
+
     private val defaults = linkedMapOf<String, Any>(
         ENABLED to false,
         WIDTH to 221f,
@@ -46,6 +49,7 @@ object MiniPlayerConfig {
         ART_RADIUS to 12f,
         ADAPTIVE_WIDTH to false,
         STATUS_AT_DATE to true,
+        FOD_LIFT to true,
         BACKGROUND_BLUR to false,
         BACKGROUND_BLUR_RADIUS to 30f,
         BACKGROUND_BLUR_BRIGHTNESS to 80f,
@@ -75,7 +79,7 @@ object MiniPlayerConfig {
         val input = runCatching { JSONObject(raw.orEmpty()) }.getOrDefault(JSONObject())
         val out = JSONObject()
         defaults.forEach { (key, fallback) ->
-            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH || key == BACKGROUND_BLUR || key == STATUS_AT_DATE) {
+            out.put(key, if (key == ENABLED || key == ADAPTIVE_WIDTH || key == BACKGROUND_BLUR || key == STATUS_AT_DATE || key == FOD_LIFT) {
                 runCatching { input.getBoolean(key) }.getOrDefault(fallback)
             } else if (key == BACKGROUND_BLUR_RADIUS) {
                 blurRadius(input.optDouble(key, 30.0))

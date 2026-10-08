@@ -372,7 +372,8 @@ final class OnlineLyrics {
     /** One catalogue's answer for the song, or null. */
     static Found ask(Src src, NcmLyrics.Query q) {
         String cacheKey = src.name() + "|" + q.key();
-        JSONObject cached = LyricDiskCache.read("providers", cacheKey);
+        JSONObject cached = LockLyrics.sSearchMode == LockLyrics.SEARCH_EXTENDED
+                ? LyricDiskCache.read("providers", cacheKey) : null;
         Found cachedFound = fromCache(src, cached);
         if (cachedFound != null) return cachedFound;
         try {
@@ -406,6 +407,7 @@ final class OnlineLyrics {
                 default:
                     return null;
             }
+            if (LockLyrics.sSearchMode != LockLyrics.SEARCH_EXTENDED) return found;
             if (found != null && found.body != null && !found.body.isEmpty()) {
                 JSONObject value = new JSONObject();
                 value.put("id", found.id);
@@ -413,11 +415,12 @@ final class OnlineLyrics {
                 value.put("translation", found.translation);
                 value.put("roma", found.roma);
                 value.put("words", found.words);
-                LyricDiskCache.write("providers", cacheKey, value);
+                if (LockLyrics.sSearchMode == LockLyrics.SEARCH_EXTENDED)
+                    LyricDiskCache.write("providers", cacheKey, value);
             }
             return found;
         } catch (Throwable t) {
-            Xp.log("[MCLyric] " + src + " failed: " + t);
+            Xp.w("[MCLyric] " + src + " failed: " + t);
             return null;
         }
     }

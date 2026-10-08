@@ -25,19 +25,15 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        // The GitHub identity the module ships under. LSPosed keys a module on this, so
-        // changing it means the module has to be re-enabled and its scope re-picked by hand,
-        // and any older build under a different id has to be uninstalled or the two both hook
-        // SystemUI. The Java package and the probe broadcast actions stay com.os4.musiccover:
-        // nothing user-visible hangs off them, and every documented adb command does.
-        applicationId = "com.github.zyl6932.HyperMusicCover"
+        // The fork has its own installation and LSPosed identity. Enable this package's scope
+        // and disable the old module when migrating. Internal classes and probe actions keep
+        // their namespace so callers and documented diagnostics remain compatible.
+        applicationId = "com.yzc26623.HyperMusicCoverEnhanced"
         minSdk = 35
         targetSdk = 37
-        // CI stamps builds so every one is distinguishable in LSPosed and in the About page:
-        // release.yml derives -PmcVersionName / -PmcVersionCode from the tag, nightly.yml adds
-        // -PmcVersionSuffix. A plain local build keeps the values below.
-        versionCode = (findProperty("mcVersionCode") as String?)?.toInt() ?: 2
-        versionName = ((findProperty("mcVersionName") as String?) ?: "0.0.1") +
+        // Build properties can override the release version for local test builds.
+        versionCode = (findProperty("mcVersionCode") as String?)?.toInt() ?: 200000
+        versionName = ((findProperty("mcVersionName") as String?) ?: "0.2.0") +
                 ((findProperty("mcVersionSuffix") as String?) ?: "")
     }
 
@@ -127,6 +123,10 @@ dependencies {
     // Modern Xposed API. compileOnly on purpose: the framework provides it at runtime and
     // packaging it would shadow the real one. Zero bytes in the APK either way.
     compileOnly("io.github.libxposed:api:102.0.0")
+    // The app's side of it: LSPosed binds this to the app, which then writes the remote
+    // preferences every hooked process reads (the log level) and reads which packages the
+    // module is actually enabled in (重启全部作用域). Only the app uses it.
+    implementation("io.github.libxposed:service:102.0.0")
 
     // The lyric parser. Its classes end up in the same dex as Main.java's, so they are also
     // loaded into SystemUI when the module is - see LyricProbe, which is why it has to stay
@@ -162,6 +162,6 @@ dependencies {
     implementation(libs.material.icons.extended)
 
     testImplementation("junit:junit:4.13.2")
-    // The real org.json for the JVM tests: android.jar's is a stub (AmapTransitCardTest).
+    // Use a real JSON implementation for settings migration tests instead of android.jar stubs.
     testImplementation("org.json:json:20231013")
 }

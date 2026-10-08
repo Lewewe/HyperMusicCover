@@ -76,29 +76,6 @@ final class AliveLyricsEffects {
         return 1f + depth * pulse;
     }
 
-    static float audioLevel(float rms) {
-        if (!Float.isFinite(rms) || rms <= 0f) return 0f;
-        return clamp01((float) Math.sqrt(Math.min(1f, rms)) * 1.8f);
-    }
-
-    /** A bounded onset estimate from sparse peak and RMS probes, not a beat detector. */
-    static float audioTransient(float rms, float peak) {
-        if (!Float.isFinite(rms) || !Float.isFinite(peak) || rms < 0f || peak <= 0f) return 0f;
-        float onset = peak - Math.max(0.015f, rms * 2.1f);
-        return clamp01(onset * 3f);
-    }
-
-    static float audioScale(boolean active, boolean playing, boolean still, float level) {
-        return audioScale(active, playing, still, level, 0f);
-    }
-
-    static float audioScale(boolean active, boolean playing, boolean still, float level,
-                            float transientLevel) {
-        if (!active || !playing || still || !Float.isFinite(level)
-                || !Float.isFinite(transientLevel)) return 1f;
-        return 1f + 0.035f * clamp01(level) + 0.018f * clamp01(transientLevel);
-    }
-
     static int trailDurationMs(int mode) {
         int m = clampMode(mode);
         if (m <= OFF) return 0;

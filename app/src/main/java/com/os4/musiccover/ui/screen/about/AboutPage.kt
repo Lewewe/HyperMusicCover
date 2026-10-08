@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -49,6 +50,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,6 +90,7 @@ fun AboutPageContent(
     openCreditsPage: () -> Unit,
     isBlurEnabled: Boolean = true,
     isCurrent: () -> Boolean = { true },
+    extraBottomPadding: Dp = 0.dp,
 ) {
     // Owns the check, the install and the four dialogs; see UpdateUi.kt. It has to sit above the
     // Scaffold because the dialogs open their own windows and cannot be nested in the page body.
@@ -141,7 +145,7 @@ fun AboutPageContent(
             AboutContent(
                 padding = PaddingValues(
                     top = innerPadding.calculateTopPadding(),
-                    bottom = 0.dp,
+                    bottom = extraBottomPadding,
                 ),
                 topAppBarScrollBehavior = topAppBarScrollBehavior,
                 lazyListState = lazyListState,
@@ -254,6 +258,7 @@ private fun AboutContent(
                 top = scrollPadding.calculateTopPadding(),
                 start = scrollPadding.calculateLeftPadding(LayoutDirection.Ltr),
                 end = scrollPadding.calculateRightPadding(LayoutDirection.Ltr),
+                bottom = scrollPadding.calculateBottomPadding() + 12.dp,
             ),
         ) {
             item(key = "logoSpacer") {
@@ -268,9 +273,8 @@ private fun AboutContent(
 
             item(key = "about") {
                 Column(
-                    modifier = Modifier
-                        .fillParentMaxHeight()
-                        .padding(bottom = scrollPadding.calculateBottomPadding()),
+                    // Measure the full content height so added rows remain scrollable.
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Card(
                         modifier = Modifier
@@ -335,6 +339,11 @@ private fun AboutContent(
                         ArrowPreference(
                             title = stringResource(R.string.about_source_code),
                             summary = stringResource(R.string.about_source_code_summary),
+                            onClick = { uriHandler.openUri("https://github.com/Lewewe/HyperMusicCover-Enhanced") },
+                        )
+                        ArrowPreference(
+                            title = stringResource(R.string.about_original_source),
+                            summary = stringResource(R.string.about_original_source_summary),
                             onClick = { uriHandler.openUri("https://github.com/zyl6932/HyperMusicCover") },
                         )
                         ArrowPreference(
@@ -361,7 +370,7 @@ private fun AboutContent(
                         ArrowPreference(
                             title = stringResource(R.string.about_feedback),
                             summary = stringResource(R.string.about_feedback_summary),
-                            onClick = { uriHandler.openUri("https://github.com/zyl6932/HyperMusicCover/issues") },
+                            onClick = { uriHandler.openUri("https://github.com/Lewewe/HyperMusicCover-Enhanced/issues") },
                         )
                     }
                     Card(
@@ -453,6 +462,8 @@ private fun AboutContent(
             }
             MiuixText(
                 modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
                     .padding(top = 12.dp, bottom = 5.dp)
                     .graphicsLayer {
                         val projectNameProgress = ((scrollProgressProvider() - 0.20f) / 0.15f).coerceIn(0f, 1f)
@@ -479,7 +490,12 @@ private fun AboutContent(
                 text = appName,
                 color = colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
-                fontSize = 35.sp,
+                fontSize = 26.sp,
+                autoSize = TextAutoSize.StepBased(minFontSize = 16.sp, maxFontSize = 26.sp),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
             )
             Column(
                 modifier = Modifier

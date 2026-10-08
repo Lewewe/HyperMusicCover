@@ -97,9 +97,6 @@ final class ImmersiveHost {
     private static final List<ImmersiveScene> SCENES = new ArrayList<>();
 
     static {
-        // Before the map: both are 高德's island, and the ride's page claims it only while 高德's
-        // current leg is a bus or a subway.
-        SCENES.add(AmapTransitScene.INSTANCE);
         SCENES.add(AmapNavScene.INSTANCE);
         SCENES.add(CountdownScene.INSTANCE);
     }
@@ -318,7 +315,7 @@ final class ImmersiveHost {
                         if (sTapPage) scene.onPageTap();
                         else scene.onRowTap();
                     } catch (Throwable t) {
-                        Xp.log(TAG + scene.id() + " tap failed: " + t);
+                        Xp.w(TAG + scene.id() + " tap failed: " + t);
                     }
                 }
                 endTap();
@@ -374,7 +371,7 @@ final class ImmersiveHost {
         try {
             return open.pageHit(x, y);
         } catch (Throwable t) {
-            Xp.log(TAG + open.id() + " page hit failed: " + t);
+            Xp.w(TAG + open.id() + " page hit failed: " + t);
             return false;
         }
     }
@@ -578,7 +575,7 @@ final class ImmersiveHost {
                 try {
                     s.release();
                 } catch (Throwable t) {
-                    Xp.log(TAG + s.id() + " release failed: " + t);
+                    Xp.w(TAG + s.id() + " release failed: " + t);
                 }
             }
             Xp.log(TAG + "unlocked: " + prepared.size()
@@ -822,7 +819,7 @@ final class ImmersiveHost {
                         try {
                             s.prepare(slot);
                         } catch (Throwable t) {
-                            Xp.log(TAG + s.id() + " prepare failed: " + t);
+                            Xp.w(TAG + s.id() + " prepare failed: " + t);
                         }
                         if (sLetGo.contains(s)) {
                             sMain.removeCallbacks(LET_GO_EXPIRED);
@@ -910,7 +907,7 @@ final class ImmersiveHost {
             try {
                 Main.onImmersive(keep);
             } catch (Throwable t) {
-                Xp.log(TAG + "lock screen " + (keep ? "hold" : "hand-back") + " failed: " + t);
+                Xp.w(TAG + "lock screen " + (keep ? "hold" : "hand-back") + " failed: " + t);
             }
         }
         if (sSlot == null) return false;
@@ -953,7 +950,7 @@ final class ImmersiveHost {
             try {
                 s.onShown(shown && s == page || s == swap, dozing && s != swap);
             } catch (Throwable t) {
-                Xp.log(TAG + s.id() + " show failed: " + t);
+                Xp.w(TAG + s.id() + " show failed: " + t);
             }
         }
         if (shown != sShown) {
@@ -1055,7 +1052,7 @@ final class ImmersiveHost {
         try {
             page.setFade(alpha);
         } catch (Throwable t) {
-            Xp.log(TAG + page.id() + " fade failed: " + t);
+            Xp.w(TAG + page.id() + " fade failed: " + t);
         }
         if (sEdge != null && !sEdgeFromSwap) sEdge.setFade(alpha);
     }
@@ -1094,7 +1091,7 @@ final class ImmersiveHost {
         try {
             out.setFade(alpha);
         } catch (Throwable t) {
-            Xp.log(TAG + out.id() + " fade failed: " + t);
+            Xp.w(TAG + out.id() + " fade failed: " + t);
         }
         if (sEdge != null && sEdgeFromSwap) sEdge.setFade(alpha);
     }
@@ -1231,7 +1228,7 @@ final class ImmersiveHost {
             sDozeLifts++;
         } catch (Throwable t) {
             // Drawn all the same: whatever lifts the display next shows it.
-            Xp.log(TAG + "draw wake lock failed: " + t);
+            Xp.w(TAG + "draw wake lock failed: " + t);
         }
         sLiftView = drawer;
         sLiftAt = SystemClock.uptimeMillis();
@@ -1320,7 +1317,7 @@ final class ImmersiveHost {
             }, sMain);
             sDisplayWatched = true;
         } catch (Throwable t) {
-            Xp.log(TAG + "display listener failed: " + t);
+            Xp.w(TAG + "display listener failed: " + t);
         }
     }
 
