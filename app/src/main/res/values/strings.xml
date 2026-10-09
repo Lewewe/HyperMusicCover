@@ -151,6 +151,8 @@
     <string name="lyrics_hdr">HDR highlight (experimental)</string>
     <string name="lyrics_hdr_summary">May drop frames</string>
     <string name="lyrics_keep_on">Keep the screen on for lyrics</string>
+    <string name="lyrics_close_without_lyrics">Close cover when lyrics are unavailable</string>
+    <string name="lyrics_close_without_lyrics_summary">When enabled, tapping the cover exits cover mode for tracks without lyrics.</string>
     <string name="hide_fingerprint">Hide lock screen fingerprint icon</string>
     <!-- See the default strings for how the items map onto the module's fpavoid values. -->
     <string name="fp_sink">Notifications sink</string>

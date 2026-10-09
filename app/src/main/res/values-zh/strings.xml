@@ -217,6 +217,8 @@
     <string name="lyrics_roma">显示罗马音</string>
     <string name="lyrics_groups">舒缓歌词</string>
     <string name="lyrics_groups_summary">将快速切换的歌词分组显示，每组最多四行，让每一句都更从容易读。</string>
+    <string name="lyrics_close_without_lyrics">歌词不可用时关闭封面</string>
+    <string name="lyrics_close_without_lyrics_summary">启用后，播放没有歌词的歌曲时，点按封面会退出封面模式。</string>
     <string name="mini_status_at_date">状态显示在日期后面</string>
     <string name="mini_status_at_date_summary">勿扰、充电显示在日期后，避免被胶囊遮挡</string>
     <string name="settings_debug">调试</string>
