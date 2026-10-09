@@ -976,7 +976,8 @@ final class LyricView extends View {
      */
     private float showTarget() {
         if (!LockLyrics.wantsShown() || !bandOk
-                || (lines.isEmpty() && !LockLyrics.hasBpmCompanion())) return 0f;
+                || (lines.isEmpty() && !LockLyrics.hasBpmCompanion()
+                && !LockLyrics.bpmSearchingLyrics())) return 0f;
         // With the HDR highlight the lyrics are a window of their own above the shade window,
         // and the control centre pulled over the lock screen is drawn in the shade window - so
         // its blur, which takes what is under it, can never reach them: they stood sharp over
@@ -1421,7 +1422,10 @@ final class LyricView extends View {
         if (anchorFix != anchorFixWant) return true;
         ClockCollapse.Phase p = ClockCollapse.phase();
         if (p == ClockCollapse.Phase.ENTER || p == ClockCollapse.Phase.EXIT) return true;
-        if (lines.isEmpty()) return LockLyrics.hasBpmCompanion() && LockLyrics.playing() && show > 0f;
+        if (lines.isEmpty()) {
+            return (LockLyrics.hasBpmCompanion() || LockLyrics.bpmSearchingLyrics())
+                    && show > 0f;
+        }
         if (focus < 0 || show == 0f) return false;
         int n = lines.size();
         int lo = Math.max(0, focus - 6), hi = Math.min(n - 1, focus + 12);
@@ -1975,7 +1979,8 @@ final class LyricView extends View {
         // The lyricless BPM companion has no rows to bring the band alive first.  It still uses
         // the exact same clock/card gap, so allow that one empty page to measure before its
         // show animation starts; otherwise showTarget() and this early return deadlock at zero.
-        if (lines.isEmpty() && show == 0f && !LockLyrics.hasBpmCompanion()) return false;
+        if (lines.isEmpty() && show == 0f && !LockLyrics.hasBpmCompanion()
+                && !LockLyrics.bpmSearchingLyrics()) return false;
         // Both edges as drawn, in this view's unzoomed frame: a swipe zooms the clock's and the
         // card's containers and not this layer. See ClockCollapse.contentBottomFor.
         float clock = ClockCollapse.contentBottomFor(this);

@@ -1298,7 +1298,7 @@ final class LockLyrics {
      * until nothing has moved for SETTLE_MS, and looks the settled key up once.
      */
     private static final long BURST_MS = 1500L;
-    private static final long SETTLE_MS = 500L;
+    private static final long SETTLE_MS = 250L;
 
     /**
      * A new song carrying the old one's duration: QQ 音乐 publishes the next track's name a
