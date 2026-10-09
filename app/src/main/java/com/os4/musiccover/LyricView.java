@@ -2703,16 +2703,39 @@ final class LyricView extends View {
         int save = c.save();
         c.translate(0f, transTop(i) - lift);
         if (t != null) {
-            t.getPaint().setColor(ink(a * TRANS_ALPHA * fade, 0f));
-            t.draw(c);
-            t.getPaint().setColor(0xFFFFFFFF);
+            drawTranslationLayout(c, t, a, fade, fx);
         }
         if (online != null) {
             if (t != null) c.translate(0f, t.getHeight() + ONLINE_TRANS_GAP_DP * density);
-            online.getPaint().setColor(ink(a * TRANS_ALPHA * fade, 0f));
-            online.draw(c);
-            online.getPaint().setColor(0xFFFFFFFF);
+            drawTranslationLayout(c, online, a, fade, fx);
         }
+        c.restoreToCount(save);
+    }
+
+    /** Eye-candy writes translations on, instead of revealing the complete row in one alpha step. */
+    private void drawTranslationLayout(Canvas c, StaticLayout layout, float a, float fade, int fx) {
+        TextPaint p = layout.getPaint();
+        if (!AliveLyricsEffects.eyeCandy(fx)) {
+            p.setColor(ink(a * TRANS_ALPHA * fade, 0f));
+            layout.draw(c);
+            p.setColor(0xFFFFFFFF);
+            return;
+        }
+        float reveal = smoothUnit(fade);
+        int save = c.save();
+        float feather = Math.max(2f * density, textPx * 0.18f);
+        c.clipRect(-feather, -feather, layout.getWidth() * reveal + feather,
+                layout.getHeight() + feather);
+        float oldRadius = p.getShadowLayerRadius(), oldDx = p.getShadowLayerDx();
+        float oldDy = p.getShadowLayerDy();
+        long oldShadow = p.getShadowLayerColorLong();
+        float blur = (1f - reveal) * 3f * density;
+        if (blur > 0.1f) p.setShadowLayer(blur, 0f, 0f, white(0.28f * (1f - reveal), 0f));
+        p.setColor(ink(a * TRANS_ALPHA * (0.35f + 0.65f * reveal), 0f));
+        layout.draw(c);
+        p.setColor(0xFFFFFFFF);
+        if (oldRadius > 0f) p.setShadowLayer(oldRadius, oldDx, oldDy, oldShadow);
+        else p.clearShadowLayer();
         c.restoreToCount(save);
     }
 
@@ -3004,6 +3027,7 @@ final class LyricView extends View {
             } else {
                 setWordEntrance(l, syllable, cs, phraseOnset, true);
                 drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, phraseOnset,
+                        phraseOnset,
                         AliveLyricsEffects.wordEntranceMs(LockLyrics.sAliveFx, true),
                         baseline, whiteness, lead, gain, eyeWordMotion[0],
                         eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
@@ -3015,10 +3039,23 @@ final class LyricView extends View {
                     ? clusterEndBg[rowLeadIndex] : clusterEnd[rowLeadIndex]) : null;
         boolean backing = !lead;
         int entranceStart = backing ? Math.min(start, l.start + syllable * 55) : start;
+        int previousToken = previousEyeTokenOnset(l, syllable);
+        // QQ/Spicy provide English syllables at word boundaries. Treating each grapheme inside
+        // one of those words as a separate preview made "hi" reveal "i" rather than staging
+        // "there". CJK has no such whitespace boundary, so it deliberately keeps the more
+        // useful character-by-character behavior below.
+        if (eyeCandy && usesWordPreview(l)) {
+            int wordPreviewAfter = syllable == 0 ? l.start : l.sylStart[syllable - 1];
+            setWordEntrance(l, syllable, cs, entranceStart, true);
+            drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, entranceStart,
+                    wordPreviewAfter, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+                    eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
+            return;
+        }
         if (ends == null || !canSplitClusters(lay, xs, ends, cs, ce, re)) {
             setWordEntrance(l, syllable, cs, entranceStart, eyeCandy);
             drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re,
-                    entranceStart, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+                    entranceStart, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
                     eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
             return;
         }
@@ -3028,7 +3065,7 @@ final class LyricView extends View {
             if (next <= ch || next > ce) {
                 setWordEntrance(l, syllable, cs, start, eyeCandy);
                 drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re,
-                        start, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+                        start, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
                         eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
                 return;
             }
@@ -3043,8 +3080,9 @@ final class LyricView extends View {
                     : KARAOKE_LETTER_FLY_MS;
             setWordEntrance(l, syllable, ch, onset, eyeCandy);
             drawKaraokeCluster(c, l, lay, p, xs, ch, next, rs, re,
-                    onset, flightMs, baseline, whiteness, lead, gain, eyeWordMotion[0],
+                    onset, previousToken, flightMs, baseline, whiteness, lead, gain, eyeWordMotion[0],
                     eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
+            previousToken = onset;
             ch = next;
         }
     }
@@ -3080,10 +3118,20 @@ final class LyricView extends View {
 
     private void drawKaraokeCluster(Canvas c, LyricLine l, StaticLayout lay, TextPaint p,
                                     float[] xs, int cs, int ce, int rs, int re, int onset,
-                                    int flightMs, float baseline, float whiteness, boolean lead,
+                                    int previewAfter, int flightMs, float baseline, float whiteness, boolean lead,
                                     float gain, float wordX, float wordOffset, float wordAlpha,
                                     float wordBlur) {
-        if (ms < onset) return;
+        if (ms < onset) {
+            // Eye-candy stages precisely one token ahead: the token after the currently singing
+            // one is readable, but later words remain hidden until their own predecessor starts.
+            if (!AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx) || ms < previewAfter
+                    || hasEarlierTimedToken(l, onset)) return;
+            int oldAlpha = p.getAlpha();
+            p.setAlpha(Math.round(oldAlpha * 0.40f));
+            drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, baseline, false, gain);
+            p.setAlpha(oldAlpha);
+            return;
+        }
         float progress = clamp01((ms - onset) / (float) Math.max(1, flightMs));
         float remaining = 1f - progress;
         float settled = 1f - remaining * remaining * remaining;
@@ -3143,6 +3191,41 @@ final class LyricView extends View {
             p.clearShadowLayer();
         }
         c.restoreToCount(save);
+    }
+
+    /** A preview may not jump over an earlier provider-timed syllable. */
+    private boolean hasEarlierTimedToken(LyricLine l, int candidateOnset) {
+        if (l.sylStart == null) return false;
+        for (int start : l.sylStart) {
+            if (start > ms && start < candidateOnset) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The first cluster of a syllable follows the final grapheme of the preceding syllable, not
+     * that syllable's first timestamp. This matters for Japanese payloads such as どん → な:
+     * using the first timestamp made both ん and な eligible as "the next" preview.
+     */
+    private static int previousEyeTokenOnset(LyricLine l, int syllable) {
+        if (syllable <= 0 || l.sylStart == null || l.charEnd == null) return l.start;
+        int prev = syllable - 1;
+        int from = prev == 0 ? 0 : l.charEnd[prev - 1];
+        int to = Math.max(from + 1, l.charEnd[prev]);
+        int chars = Math.max(1, to - from);
+        int start = l.sylStart[prev], end = Math.max(start, l.sylEnd[prev]);
+        // A timed syllable with N graphemes starts its final visible grapheme at (N - 1) / N.
+        return start + Math.round((end - start) * (chars - 1) / (float) chars);
+    }
+
+    /** True for whitespace-delimited Latin lyrics, false for CJK and other character scripts. */
+    private static boolean usesWordPreview(LyricLine l) {
+        if (l.sylStart == null || l.text.indexOf(' ') < 0) return false;
+        for (int i = 0; i < l.text.length(); i++) {
+            char ch = l.text.charAt(i);
+            if (Character.isLetter(ch) && ch > 0x02ff) return false;
+        }
+        return true;
     }
 
     private static int clusterStartAt(int clusterStart, int syllableStart, int syllableEnd,

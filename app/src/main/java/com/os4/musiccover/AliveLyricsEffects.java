@@ -13,6 +13,7 @@ final class AliveLyricsEffects {
     private static final int TRAIL_MS_DRAMATIC = 420;
     private static final int TRANS_MS_SUBTLE = 260;
     private static final int TRANS_MS_DRAMATIC = 340;
+    private static final int TRANS_MS_EYE_CANDY = 520;
 
     static int clampMode(int mode) {
         if (mode <= OFF) return OFF;
@@ -106,7 +107,8 @@ final class AliveLyricsEffects {
     static float translationFade(int mode, boolean playing, boolean still, long elapsedMs) {
         if (!enabled(mode) || still || !playing) return 1f;
         if (elapsedMs <= 0L) return 0f;
-        int span = mode >= DRAMATIC ? TRANS_MS_DRAMATIC : TRANS_MS_SUBTLE;
+        int span = mode == EYE_CANDY ? TRANS_MS_EYE_CANDY
+                : mode >= DRAMATIC ? TRANS_MS_DRAMATIC : TRANS_MS_SUBTLE;
         return clamp01(elapsedMs / (float) span);
     }
 
@@ -120,7 +122,8 @@ final class AliveLyricsEffects {
     static boolean translationNeedsFrame(int mode, boolean playing, boolean still,
                                          long startedAt, long now) {
         if (!enabled(mode) || still || !playing || startedAt <= 0L || now <= startedAt) return false;
-        int span = mode >= DRAMATIC ? TRANS_MS_DRAMATIC : TRANS_MS_SUBTLE;
+        int span = mode == EYE_CANDY ? TRANS_MS_EYE_CANDY
+                : mode >= DRAMATIC ? TRANS_MS_DRAMATIC : TRANS_MS_SUBTLE;
         return now - startedAt < span;
     }
 
