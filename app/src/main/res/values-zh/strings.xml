@@ -215,6 +215,8 @@
     <string name="demo_island_immersive_title">沉浸页面</string>
     <string name="demo_island_stack_title">聚合岛</string>
     <string name="lyrics_roma">显示罗马音</string>
+    <string name="lyrics_bpm_companion">无歌词节拍伙伴</string>
+    <string name="lyrics_bpm_companion_summary">从正在播放的音频估算节拍，并在找不到歌词时显示随节拍反应的小颜文字。</string>
     <string name="lyrics_groups">舒缓歌词</string>
     <string name="lyrics_groups_summary">将快速切换的歌词分组显示，每组最多四行，让每一句都更从容易读。</string>
     <string name="lyrics_close_without_lyrics">歌词不可用时关闭封面</string>

@@ -117,6 +117,10 @@ final class LockLyrics {
     /** User-supplied Spicy Lyrics API key; never included in exported settings. */
     static volatile String sSpicyLyricsApiKey = "";
     static volatile boolean sSpicyLyricsEnabled = true;
+    /** Optional local output-mix tempo estimate used only by the lyricless beat companion. */
+    static volatile boolean sBpmEnabled;
+    private static volatile int sBpm;
+    private static volatile long sBpmFoundAt;
     private static volatile int sTranslateRevision;
     /** Optional motion/effect level for lyric rendering; see AliveLyricsEffects constants. */
     static volatile int sAliveFx = AliveLyricsEffects.OFF;
@@ -558,12 +562,60 @@ final class LockLyrics {
         return sDemo || !sLines.isEmpty() || CACHE.containsKey(sKey);
     }
 
+    /**
+     * Content that can occupy the lyric page.  The BPM companion deliberately only joins this
+     * once lookup has settled with no rows, so a normal song never briefly opens its companion
+     * while its lyrics are still loading.
+     */
+    static boolean hasDisplayContent() {
+        return hasLyrics() || hasBpmCompanion();
+    }
+
     /** Whether the last settled answer - not one still loading - had lines. See hasLyrics(). */
     private static boolean sHadLyrics;
 
     /** Whether the view belongs in the keyguard right now. */
     static boolean wantsAttached() {
-        return !Main.aodArtworkExpanded() && !sNotificationCompact && wanted() && Main.coverModeOn() && hasLyrics();
+        return !Main.aodArtworkExpanded() && !sNotificationCompact && wanted() && Main.coverModeOn()
+                && hasDisplayContent();
+    }
+
+    static boolean hasBpmCompanion() {
+        return sBpmEnabled && !sKey.isEmpty() && sLines.isEmpty()
+                && SystemClock.uptimeMillis() - sTrackChangedAt >= 3000L;
+    }
+    static int bpm() { return sBpm; }
+    static long bpmFoundAt() { return sBpmFoundAt; }
+    static boolean bpmEstimating() { return BpmEstimator.estimating(); }
+    static float bpmPulse() { return BpmEstimator.pulse(); }
+    static long bpmBeatAt() { return BpmEstimator.beatAt(); }
+    static long bpmBeatCount() { return BpmEstimator.beatCount(); }
+    static int bpmBeatDirection() { return BpmEstimator.beatDirection(); }
+    static int bpmPresentationSeed() {
+        return sKey == null ? 0 : sKey.hashCode() & Integer.MAX_VALUE;
+    }
+    private static void requestBpm(final String key, MediaController controller) {
+        sBpm = 0;
+        sBpmFoundAt = 0L;
+        if (!sBpmEnabled || key == null || key.isEmpty()) return;
+        BpmEstimator.start(key, new BpmEstimator.Callback() { @Override public void onEstimated(int bpm) {
+            if (!key.equals(sKey)) return;
+            sBpm = bpm;
+            if (bpm >= 40 && sBpmFoundAt == 0L) sBpmFoundAt = SystemClock.uptimeMillis();
+            refresh();
+        }});
+    }
+
+    /** Re-check the current track after the user changes the local BPM companion setting. */
+    static void refreshBpm() {
+        if (!sBpmEnabled) {
+            BpmEstimator.clearCache();
+            sBpm = 0;
+            sBpmFoundAt = 0L;
+            refresh();
+            return;
+        }
+        requestBpm(sKey, sController);
     }
 
     /** The native media player keeps its thumbnail without opening an empty lyric view. */
@@ -804,11 +856,13 @@ final class LockLyrics {
 
     /** The lyric page a tap into cover mode will land on. */
     static boolean willAttachOnEntry() {
-        return hasLyrics() && CoverMorphRoute.lyricsAfterEntry(sEnabled, sTapHidden, sDemo);
+        return hasDisplayContent()
+                && CoverMorphRoute.lyricsAfterEntry(sEnabled, sTapHidden, sDemo);
     }
 
     static boolean willAttachAfterTapToggle() {
-        return hasLyrics() && CoverMorphRoute.lyricsAfterToggle(sEnabled, sTapHidden, sDemo);
+        return hasDisplayContent()
+                && CoverMorphRoute.lyricsAfterToggle(sEnabled, sTapHidden, sDemo);
     }
 
     /**
@@ -1078,9 +1132,16 @@ final class LockLyrics {
         sArtworkPage.onTrackChanged(wantsAttached(), key.isEmpty());
         String lastKey = sKey;
         sKey = key;
+        requestBpm(key, c);
         long lastChange = sTrackAt;
         sTrackChangedAt = SystemClock.uptimeMillis();
         sTrackAt = sTrackChangedAt;
+        final String bpmKey = key;
+        Main.main().postDelayed(new Runnable() {
+            @Override public void run() {
+                if (bpmKey.equals(sKey)) refresh();
+            }
+        }, 3000L);
         Main.main().removeCallbacks(SETTLED_LOOKUP);
         unpark();
         sBlurVideoReloaded = false;
@@ -1625,7 +1686,7 @@ final class LockLyrics {
         // A new song or a switch in the still AOD: nothing is shown until the display is let up.
         if (sStill) drawStill();
         CoverCardLayer.refresh();
-        int buttonState = (sEnabled ? 1 : 0) | (hasCurrentLyrics() ? 2 : 0)
+        int buttonState = (sEnabled ? 1 : 0) | (hasDisplayContent() ? 2 : 0)
                 | (wantsCompactArtwork() ? 4 : 0);
         if (buttonState != sLyricsButtonState) {
             sLyricsButtonState = buttonState;
@@ -2321,8 +2382,9 @@ final class LockLyrics {
         // it while the display is dozing takes a screen wake lock and pulls the phone out of the
         // AOD at full brightness. Called from the tick, which never stops, so this would have
         // fired within a second of the screen going off.
-        boolean asked = sKeepOn && wantsShown() && !inHeldAod()
-                && !sLines.isEmpty() && playing();
+        boolean bpmDancerVisible = hasBpmCompanion();
+        boolean asked = (sKeepOn || bpmDancerVisible) && wantsShown() && !inHeldAod()
+                && (!sLines.isEmpty() || bpmDancerVisible) && playing();
         // Not in a pocket or face down: with nothing to stop it, a song playing kept the screen
         // lit and the lyrics drawing at 60Hz wherever the phone was put, for as long as it
         // played. Covered, the lock screen's own 10s timeout takes it again.

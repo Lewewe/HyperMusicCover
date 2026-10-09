@@ -892,8 +892,17 @@ private fun LyricEffectsControls(
                     ModuleBridge.setLyricsHdr(context, it)
                 },
             )
+            SwitchPreference(
+                title = stringResource(R.string.lyrics_bpm_companion),
+                summary = stringResource(R.string.lyrics_bpm_companion_summary),
+                checked = module.bpmEnabled,
+                enabled = enabled,
+                onCheckedChange = {
+                    onChange(module.copy(bpmEnabled = it))
+                    ModuleBridge.setBpmConfig(context, it)
+                },
+            )
         }
-
     }
 }
 

@@ -137,6 +137,7 @@ object ModuleBridge {
         /** User-owned API key: optional for custom, required for Google/DeepL. */
         val lyricTranslateApiKey: String = "",
         val spicyLyricsApiKey: String = "",
+        val bpmEnabled: Boolean = false,
         /** Source language for online translation ("auto" by default). */
         val lyricTranslateSource: String = "auto",
         /** Target language for online translation ("en" by default). */
@@ -501,6 +502,8 @@ object ModuleBridge {
 
     fun setSpicyLyricsApiKey(context: Context, apiKey: String) =
         send(context, "spicylyricscfg") { putExtra("apikey", apiKey.trim()) }
+    fun setBpmConfig(context: Context, on: Boolean) =
+        send(context, "bpmcfg") { putExtra("on", on) }
     fun setLyricsRoma(context: Context, on: Boolean) =
         send(context, "lyricroma") { putExtra("on", on) }
 
@@ -857,6 +860,7 @@ object ModuleBridge {
             lyricTranslateEndpoint = b.getString("lyrictrendpoint") ?: "",
             lyricTranslateApiKey = b.getString("lyrictrkey") ?: "",
             spicyLyricsApiKey = b.getString("spicylyricskey") ?: "",
+            bpmEnabled = b.getBoolean("bpmenabled", false),
             lyricTranslateSource = b.getString("lyrictrsource") ?: "auto",
             lyricTranslateTarget = b.getString("lyrictrtarget") ?: "en",
             lyricsAliveFx = b.getInt("lyricalive", 0),

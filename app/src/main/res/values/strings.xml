@@ -142,6 +142,8 @@
     <string name="lyrics_provider_got_it_wait">Got it (%1$d)</string>
     <string name="lyrics_trans">Show translations</string>
     <string name="lyrics_roma">Show romanisations</string>
+    <string name="lyrics_bpm_companion">Lyricless beat companion</string>
+    <string name="lyrics_bpm_companion_summary">Estimate the beat from playing audio and show a reactive kaomoji when no lyrics are found.</string>
     <string name="lyrics_groups">Gentle lyric flow</string>
     <string name="lyrics_groups_summary">Keep up to four fast-moving lines together, giving every phrase a little more room to breathe.</string>
     <string name="lyrics_align">Lyric alignment</string>

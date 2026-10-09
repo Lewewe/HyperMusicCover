@@ -1940,6 +1940,7 @@ public class Main extends XposedModule {
                     + "\nlyrictrendpoint=" + LockLyrics.sTranslateEndpoint
                     + "\nlyrictrkey=" + LockLyrics.sTranslateApiKey
                     + "\nspicylyricskey=" + LockLyrics.sSpicyLyricsApiKey
+                    + "\nbpmenabled=" + (LockLyrics.sBpmEnabled ? 1 : 0)
                     + "\nlyrictrsource=" + LockLyrics.sTranslateSourceLang
                     + "\nlyrictrtarget=" + LockLyrics.sTranslateTargetLang
                     + "\nlyricalive=" + LockLyrics.sAliveFx
@@ -2071,6 +2072,7 @@ public class Main extends XposedModule {
                         else if ("lyrictrendpoint".equals(k)) LockLyrics.sTranslateEndpoint = v;
                         else if ("lyrictrkey".equals(k)) LockLyrics.sTranslateApiKey = v;
                         else if ("spicylyricskey".equals(k)) LockLyrics.sSpicyLyricsApiKey = v;
+                        else if ("bpmenabled".equals(k)) LockLyrics.sBpmEnabled = "1".equals(v);
                         else if ("lyrictrsource".equals(k)) LockLyrics.sTranslateSourceLang =
                                 v.isEmpty() ? "auto" : v;
                         else if ("lyrictrtarget".equals(k)) LockLyrics.sTranslateTargetLang =
@@ -2416,6 +2418,10 @@ public class Main extends XposedModule {
                         if (i.hasExtra("on")) LockLyrics.sSpicyLyricsEnabled = i.getBooleanExtra("on", true);
                         if (!previous.equals(NextLyrics.configurationKey())) LockLyrics.searchModeChanged();
                         Xp.log(TAG + "Spicy Lyrics settings updated");
+                        saveState();
+                    } else if ("bpmcfg".equals(op)) {
+                        LockLyrics.sBpmEnabled = i.getBooleanExtra("on", LockLyrics.sBpmEnabled);
+                        LockLyrics.refreshBpm();
                         saveState();
                      } else if ("lyricproviders".equals(op)) {
                         String previous = NextLyrics.configurationKey();
@@ -2938,6 +2944,7 @@ public class Main extends XposedModule {
                         out.putString("lyrictrendpoint", LockLyrics.sTranslateEndpoint);
                         out.putString("lyrictrkey", LockLyrics.sTranslateApiKey);
                         out.putString("spicylyricskey", LockLyrics.sSpicyLyricsApiKey);
+                        out.putBoolean("bpmenabled", LockLyrics.sBpmEnabled);
                         out.putString("lyrictrsource", LockLyrics.sTranslateSourceLang);
                         out.putString("lyrictrtarget", LockLyrics.sTranslateTargetLang);
                         out.putInt("lyricalive", LockLyrics.sAliveFx);
@@ -7835,7 +7842,7 @@ public class Main extends XposedModule {
         if (!onKeyguard) LyricsButton.release();
         boolean lyricsButton = onKeyguard && !sCardForced && sCoverMode
                 && coverMorphCardMode() && !LockLyrics.wantsCompactArtwork()
-                && LockLyrics.sEnabled && LockLyrics.hasCurrentLyrics()
+                && LockLyrics.sEnabled && LockLyrics.hasDisplayContent()
                 && coverMorphEligible() && sCardShowing && card.isShown();
         float lyricsInset = LyricsButton.update(card, lyricsButton);
         alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
@@ -10211,7 +10218,7 @@ public class Main extends XposedModule {
 
     static void openLyricsFromButton() {
         if (!sCoverMode || LockLyrics.wantsCompactArtwork()
-                || !LockLyrics.sEnabled || !LockLyrics.hasCurrentLyrics()) return;
+                || !LockLyrics.sEnabled || !LockLyrics.hasDisplayContent()) return;
         onTwoFingerTap();
         applyMediaCard();
     }
@@ -10248,11 +10255,11 @@ public class Main extends XposedModule {
             sTwoWhy = "blocked: the lyrics switch is off";
             return;
         }
-        if (!LockLyrics.hasLyrics()) {
-            // The cover is the only page a track without lyrics has. Taken as a toggle, the tap
-            // would flip the hidden flag with nothing changing, and the next song that does have
-            // lyrics would then open on the cover for no reason anyone could see.
-            sTwoWhy = "blocked: this track has no lyrics";
+        if (!LockLyrics.hasDisplayContent()) {
+            // A lookup that is still pending has no stable page to toggle.  Once it settles, a
+            // lyricless track with the BPM companion is display content too, and follows this
+            // exact same cover/lyrics switch.
+            sTwoWhy = "blocked: this track has no display content";
             return;
         }
         long t0 = android.os.SystemClock.uptimeMillis();
