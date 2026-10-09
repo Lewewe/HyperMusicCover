@@ -34,11 +34,12 @@ Latin-script lyrics are not assumed to be English.
 ## Privacy and safety
 
 - Enabling online mode sends the original lyric text (never romanisation or a
-  source translation) to the selected service. While online mode is enabled, native
-  romanisation/source translations are hidden and only the selected online translation
-  is shown as the secondary row. Disabling online mode restores native secondary text.
-  If an individual line cannot be translated, it has no secondary text while online
-  mode is active. Background vocals are preserved, not separately uploaded.
+  source translation) to the selected service, including when a provider supplied a
+  translation in another language. The online result replaces that provider translation.
+  With **Show romanisations** enabled, a provider's romanisation is added beneath the
+  online translation; otherwise it is hidden. Disabling online mode restores native
+  secondary text. If an individual line cannot be translated, it has no secondary text
+  while online mode is active. Background vocals are preserved, not separately uploaded.
 - Google uses `X-Goog-Api-Key`; DeepL uses `Authorization: DeepL-Auth-Key …`.
   Keys are not added to official API URLs. Custom LibreTranslate uses JSON `api_key`.
 - Prefer HTTPS for custom servers. HTTP is allowed for existing/local servers but

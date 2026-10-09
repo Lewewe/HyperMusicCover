@@ -130,6 +130,27 @@ public class LyricTranslationLogicTest {
     }
 
     @Test
+    public void onlineDisplayNeverReceivesProviderSecondaryText() {
+        int previous = LockLyrics.sOnlineTranslateMode;
+        try {
+            LockLyrics.setTranslateMode(LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION);
+            LyricLine providerLine = new LyricLine("original", "provider Chinese", "romaji",
+                    0, 1000, false, null, null, null);
+            providerLine.onlineTranslation = "English";
+            List<LyricLine> displayed = LockLyrics.displayLines(Arrays.asList(providerLine));
+            assertEquals(1, displayed.size());
+            assertNull(displayed.get(0).translation);
+            assertEquals("romaji", displayed.get(0).roma);
+            assertEquals("English", displayed.get(0).onlineTranslation);
+
+            LockLyrics.setTranslateMode(LockLyrics.TR_MODE_OFF);
+            assertSame(providerLine, LockLyrics.displayLines(Arrays.asList(providerLine)).get(0));
+        } finally {
+            LockLyrics.setTranslateMode(previous);
+        }
+    }
+
+    @Test
     public void officialResponsesMapSeparateStringsIncludingRepeatedLines() {
         List<LyricTranslationLogic.Entry> entries = LyricTranslationLogic.entriesOf(
                 Arrays.asList(line("bonjour", 0), line("bonjour", 1000)));
