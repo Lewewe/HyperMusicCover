@@ -87,15 +87,31 @@ final class LyricTranslationLogic {
     static List<Entry> entriesForTranslation(List<LyricLine> lines, String source, String target) {
         List<Entry> entries = entriesOf(lines);
         if (entries.isEmpty() || sameLanguage(source, target)) return Collections.emptyList();
-        // Romaji is Japanese even when its Latin letters resemble the target language.
-        if (!likelyJapaneseRomaji(entries) && likelyLanguage(entries, target)) {
+        // A romanised Japanese source is a whole-song decision. Once we see enough Japanese
+        // markers, English inserts are indistinguishable from a romaji fragment, so translate
+        // every line rather than randomly dropping part of that lyric.
+        boolean japaneseRomaji = likelyJapaneseRomaji(entries);
+        if (!japaneseRomaji && likelyLanguage(entries, target)) {
             return Collections.emptyList();
         }
-        // Online mode is an explicit replacement for a source's secondary text.  A catalogue
-        // translation may be in a different language from the configured target (Kuwo often
-        // supplies Chinese for Japanese lyrics), so it must not suppress the requested
-        // translation.  The renderer hides that native secondary text while online mode is on.
-        return entries;
+        if (japaneseRomaji) return entries;
+        // A mixed-language song must be decided per line.  Testing the whole lyric let one
+        // Japanese verse make its English chorus go through the English translator too.
+        ArrayList<Entry> needed = new ArrayList<>(entries.size());
+        for (Entry entry : entries) {
+            List<Entry> one = Collections.singletonList(entry);
+            if (likelyLanguage(one, target)) continue;
+            // Outside a romanised-Japanese lyric, a Latin-only line in an English-target job is
+            // an English insert unless it is recognisably another supported Latin language.
+            if ("en".equals(languageBase(target)) && latinOnly(entry.text)
+                    && !likelyKnownForeignLatin(one)) continue;
+            needed.add(entry);
+        }
+        // Online mode is an explicit replacement for a source's secondary text. A catalogue
+        // translation may be in a different language from the configured target, so it must not
+        // suppress the requested translation. The renderer hides that native text while online
+        // output is pending or active.
+        return needed;
     }
 
 private static boolean likelyJapaneseRomaji(List<Entry> entries) {
@@ -236,6 +252,12 @@ private static final Set<String> JAPANESE_ROMAJI_MARKERS = new HashSet<>(Arrays.
         }
         int score = counts.containsKey(target) ? counts.get(target) : 0;
         Set<String> targetWords = distinct.get(target);
+        if ("en".equals(target)) {
+            // This deliberately accepts one unmistakably English function/content word in a
+            // short lyric line ("the ground", "frozen seconds"). Japanese romaji is screened
+            // before this helper is called, and other Latin languages retain the stricter rule.
+            return score > 0 && score * 5 >= words;
+        }
         if (score < 2 || targetWords == null || targetWords.size() < 2) return false;
         // English lyrics are commonly short and repetitive, so a whole-song ratio can reject
         // valid English tracks after only a few marker words. Keep the stricter ratio for other
@@ -264,7 +286,8 @@ private static final Set<String> JAPANESE_ROMAJI_MARKERS = new HashSet<>(Arrays.
     private static Map<String, Set<String>> latinMarkers() {
         Map<String, Set<String>> markers = new HashMap<>();
         markers.put("en", words("i me my you your we they the and are is was were have do not to of "
-                + "in on for with from what when where who will can this that he she it"));
+                + "in on for with from what when where who will can this that he she it be every "
+                + "prayer word world light frozen seconds ground shattered price prophecy"));
         markers.put("es", words("yo tu te mi que el la los las de del y en un una por para con "
                 + "como es soy eres estoy no pero porque cuando donde amor"));
         markers.put("fr", words("je tu nous vous il elle le la les des du et est suis sont pas "
@@ -284,6 +307,61 @@ private static final Set<String> JAPANESE_ROMAJI_MARKERS = new HashSet<>(Arrays.
         Set<String> result = new HashSet<>();
         Collections.addAll(result, text.split("\s+"));
         return result;
+    }
+
+    /** Chooses the visible secondary translation without pulling renderer classes into tests. */
+    static String translationFor(LyricLine line, int onlineMode) {
+        if (line == null) return null;
+        String candidate;
+        if (onlineMode != LockLyrics.TR_MODE_OFF) {
+            candidate = line.onlineTranslation != null && !line.onlineTranslation.trim().isEmpty()
+                    ? line.onlineTranslation : null;
+        } else {
+            candidate = line.translation;
+        }
+        // A provider occasionally returns the input unchanged (or only changes casing/spacing).
+        // Showing it beneath the same lyric looks like a broken English translation.
+        return sameVisibleText(line.text, candidate) ? null : candidate;
+    }
+
+    private static boolean latinOnly(String text) {
+        if (text == null || text.trim().isEmpty()) return false;
+        boolean letter = false;
+        for (int i = 0; i < text.length();) {
+            int cp = text.codePointAt(i);
+            if (Character.isLetter(cp)) {
+                // Restrict this fallback to plain ASCII. It is for English inserts, not a
+                // replacement language detector; accented Latin and every non-Latin script
+                // should continue through normal detection/translation.
+                if (cp > 0x7f || Character.UnicodeScript.of(cp) != Character.UnicodeScript.LATIN) return false;
+                letter = true;
+            }
+            i += Character.charCount(cp);
+        }
+        return letter;
+    }
+
+    private static boolean likelyKnownForeignLatin(List<Entry> entries) {
+        String[] languages = {"es", "fr", "de", "it", "pt", "nl"};
+        for (String language : languages) if (likelyLanguage(entries, language)) return true;
+        return false;
+    }
+
+    private static boolean sameVisibleText(String first, String second) {
+        if (first == null || second == null) return false;
+        String a = foldVisible(first);
+        String b = foldVisible(second);
+        return !a.isEmpty() && a.equals(b);
+    }
+
+    private static String foldVisible(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length();) {
+            int cp = text.codePointAt(i);
+            if (Character.isLetterOrDigit(cp)) out.appendCodePoint(Character.toLowerCase(cp));
+            i += Character.charCount(cp);
+        }
+        return out.toString();
     }
 
     static List<Batch> batches(List<Entry> entries, int maxChars, int maxLines) {

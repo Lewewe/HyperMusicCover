@@ -130,7 +130,7 @@ public class LyricTranslationLogicTest {
     }
 
     @Test
-    public void onlineDisplayNeverReceivesProviderSecondaryText() {
+    public void onlineDisplayHidesProviderTranslationUntilOnlineResultArrives() {
         int previous = LockLyrics.sOnlineTranslateMode;
         try {
             LockLyrics.setTranslateMode(LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION);
@@ -139,15 +139,41 @@ public class LyricTranslationLogicTest {
             providerLine.onlineTranslation = "English";
             List<LyricLine> displayed = LockLyrics.displayLines(Arrays.asList(providerLine));
             assertEquals(1, displayed.size());
-            assertNull(displayed.get(0).translation);
+            assertEquals("provider Chinese", displayed.get(0).translation);
             assertEquals("romaji", displayed.get(0).roma);
             assertEquals("English", displayed.get(0).onlineTranslation);
+            assertEquals("English", LyricTranslationLogic.translationFor(displayed.get(0),
+                    LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION));
+
+            providerLine.onlineTranslation = null;
+            assertNull(LyricTranslationLogic.translationFor(providerLine,
+                    LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION));
 
             LockLyrics.setTranslateMode(LockLyrics.TR_MODE_OFF);
             assertSame(providerLine, LockLyrics.displayLines(Arrays.asList(providerLine)).get(0));
         } finally {
             LockLyrics.setTranslateMode(previous);
         }
+    }
+
+    @Test
+    public void excludesEnglishLinesInsideForeignLyrics() {
+        List<LyricTranslationLogic.Entry> entries = LyricTranslationLogic.entriesForTranslation(
+                Arrays.asList(line("ã“ã‚“ã«ã¡ã¯", 0), line("The world was only just a dream", 1000),
+                        line("ã•ã‚ˆã†ãªã‚‰", 2000)), "auto", "en");
+        assertEquals(2, entries.size());
+        assertEquals("ã“ã‚“ã«ã¡ã¯", entries.get(0).text);
+        assertEquals("ã•ã‚ˆã†ãªã‚‰", entries.get(1).text);
+    }
+
+    @Test
+    public void excludesUppercaseEnglishAndHidesNoOpTranslation() {
+        assertTrue(LyricTranslationLogic.entriesForTranslation(
+                Arrays.asList(line("SHOW TIME, SO FLY", 0)), "auto", "en").isEmpty());
+        LyricLine line = line("SHOW TIME, SO FLY", 0);
+        line.onlineTranslation = "Show time, so fly";
+        assertNull(LyricTranslationLogic.translationFor(line,
+                LockLyrics.TR_MODE_ORIGINAL_AND_TRANSLATION));
     }
 
     @Test

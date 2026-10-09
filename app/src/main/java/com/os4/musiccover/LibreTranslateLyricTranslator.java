@@ -66,7 +66,9 @@ class LibreTranslateLyricTranslator implements LyricTranslator {
             cb.onFailed("lyrics already in target language or no translatable lines");
             return;
         }
-        final String cacheKey = LyricTranslationLogic.cacheKey("v3|" + cfg.provider + "|" + trackKey,
+        // v4 filters target-language lines individually; v3 may contain redundant
+        // English-to-English results from mixed-language songs.
+        final String cacheKey = LyricTranslationLogic.cacheKey("v4|" + cfg.provider + "|" + trackKey,
                 endpoint, source, target, lines);
         final List<LyricTranslationLogic.Batch> batches =
                 LyricTranslationLogic.batches(entries, BATCH_MAX_CHARS, BATCH_MAX_LINES);

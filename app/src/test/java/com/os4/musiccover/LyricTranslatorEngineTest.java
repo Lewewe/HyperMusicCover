@@ -54,22 +54,22 @@ public class LyricTranslatorEngineTest {
     @Test
     public void onlineModeTranslatesLyricsEvenWhenTheProviderSuppliesTranslations() throws Exception {
         FakeTranslator translator = new FakeTranslator("translated: ");
-        LyricLine nativeLine = line("native", "already translated", 0);
-        List<LyricLine> lines = Arrays.asList(nativeLine, line("bonjour", null, 1000));
+        LyricLine nativeLine = line("\u3053\u3093\u306b\u3061\u306f", "already translated", 0);
+        List<LyricLine> lines = Arrays.asList(nativeLine, line("Je t'aime, mon amour", null, 1000));
         Result result = new Result();
         translator.translate("latin-engine-test", lines,
                 new LyricTranslator.Config("https://server.example", "", "auto", "en", 1), result);
         result.await();
         assertNull(result.failure);
         assertEquals(1, translator.requests);
-        assertEquals("translated: native", result.lines.get(0).onlineTranslation);
-        assertEquals("translated: bonjour", result.lines.get(1).onlineTranslation);
+        assertEquals("translated: \u3053\u3093\u306b\u3061\u306f", result.lines.get(0).onlineTranslation);
+        assertEquals("translated: Je t'aime, mon amour", result.lines.get(1).onlineTranslation);
     }
 
     @Test
     public void providerCachesStaySeparateEvenWithIdenticalEffectiveEndpoints() throws Exception {
         String endpoint = TranslationProvider.endpoint(TranslationProvider.GOOGLE, "");
-        List<LyricLine> lines = Arrays.asList(line("bonjour", null, 0));
+        List<LyricLine> lines = Arrays.asList(line("Je t'aime, mon amour", null, 0));
         FakeTranslator custom = new FakeTranslator("custom: ");
         FakeTranslator google = new FakeTranslator("google: ");
         LyricTranslator.Config customConfig = new LyricTranslator.Config(endpoint, "", "auto", "en", 1);
@@ -83,7 +83,7 @@ public class LyricTranslatorEngineTest {
         b.await();
         assertFalse(a.cached);
         assertFalse(b.cached);
-        assertEquals("google: bonjour", b.lines.get(0).onlineTranslation);
+        assertEquals("google: Je t'aime, mon amour", b.lines.get(0).onlineTranslation);
         Result hit = new Result();
         google.translate("provider-cache-test", lines, googleConfig, hit);
         hit.await();
@@ -95,13 +95,13 @@ public class LyricTranslatorEngineTest {
     public void onlineModeTranslatesAllNativeTranslationsButDisabledModeDoesNotRequest() throws Exception {
         FakeTranslator translator = new FakeTranslator("unexpected");
         Result nativeResult = new Result();
-        translator.translate("all-native-engine-test", Arrays.asList(line("bonjour", "hello", 0)),
+        translator.translate("all-native-engine-test", Arrays.asList(line("Je t'aime, mon amour", "hello", 0)),
                 new LyricTranslator.Config("https://server.example", "", "auto", "en", 1), nativeResult);
         nativeResult.await();
         assertNull(nativeResult.failure);
-        assertEquals("unexpectedbonjour", nativeResult.lines.get(0).onlineTranslation);
+        assertEquals("unexpectedJe t'aime, mon amour", nativeResult.lines.get(0).onlineTranslation);
         Result off = new Result();
-        translator.translate("off-engine-test", Arrays.asList(line("bonjour", null, 0)),
+        translator.translate("off-engine-test", Arrays.asList(line("Je t'aime, mon amour", null, 0)),
                 new LyricTranslator.Config("https://server.example", "", "auto", "en", 0), off);
         off.await();
         assertNotNull(off.failure);
@@ -114,7 +114,7 @@ public class LyricTranslatorEngineTest {
         final CountDownLatch cancelled = new CountDownLatch(1);
         final CountDownLatch callback = new CountDownLatch(1);
         List<LyricLine> lines = new ArrayList<>();
-        for (int i = 0; i < 30; i++) lines.add(line("bonjour " + i, null, i * 1000));
+        for (int i = 0; i < 30; i++) lines.add(line("Je t'aime, mon amour " + i, null, i * 1000));
         translator.translate("cancel-engine-test", lines,
                 new LyricTranslator.Config("https://server.example", "", "auto", "en", 1),
                 new LyricTranslator.Callback() {
