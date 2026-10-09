@@ -32,3 +32,4 @@ local.properties
 # was tried, device quirks, and round-by-round debugging history. For whoever (whatever)
 # picks this up next, not for the repo's readers.
 /.workbuddy/
+.kotlin/

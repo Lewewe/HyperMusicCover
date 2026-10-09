@@ -887,8 +887,9 @@ final class LyricView extends View {
             boolean focused = dotsFor < 0 && i == focus;
             // Emphasis: on the scroll focus, and on a duet's overlapping answer while it is sung.
             // Finished lines in a Gentle lyric flow group keep their emphasis until it advances.
-            boolean concurrentlySung = !LockLyrics.sRapidGroups
-                    && simultaneousVisible(i) && !focused;
+            // A simultaneous phrase is not a rapid sequence. It keeps both singers on the
+            // stage even when Gentle lyric flow is grouping the ordinary, sequential rows.
+            boolean concurrentlySung = simultaneousVisible(i) && !focused;
             boolean on = focused || retained(i) || concurrentlySung
                     || (dotsFor < 0 && i < focus && i >= focus - 2
                     && ms >= l.start && ms < l.end);
@@ -911,7 +912,7 @@ final class LyricView extends View {
                 why |= 64;
             }
             // Size: the focus at full size, the rest a little smaller, travelling with the scroll.
-            boolean sung = !LockLyrics.sRapidGroups && simultaneousVisible(i);
+            boolean sung = simultaneousVisible(i);
             float scTo = focused || retained(i) || sung ? 1f : INACTIVE_SCALE;
             float sc = started ? approach(scale[i], scTo, dtTo, TAU_SCALE) : scale[i];
             if (Math.abs(sc - scTo) < 0.0005f) sc = scTo;
@@ -2102,7 +2103,10 @@ final class LyricView extends View {
     }
 
     private float anchorFixTarget() {
-        if (LockLyrics.sRapidGroups) return originalAnchorFixTarget();
+        // Gentle lyric flow centres rapid sequential groups, but a real duet needs the explicit
+        // simultaneous-stage placement below instead. Otherwise the second singer promotes the
+        // normal focus and scrolls the first one out of the band.
+        if (LockLyrics.sRapidGroups && simultaneousCount() <= 1) return originalAnchorFixTarget();
         if (!centring()) return 0f;
         if (simultaneousCount() > 1) return 0f;
         float bandH = bandBottom - bandTop;
@@ -2148,13 +2152,6 @@ final class LyricView extends View {
     }
 
     private void updateSimultaneousDrop(int n) {
-        if (LockLyrics.sRapidGroups) {
-            simultaneousDropped = -1;
-            simultaneousFirst = simultaneousSecond = simultaneousExitLine = -1;
-            simultaneousExitAt = 0L;
-            simultaneousTopSet = false;
-            return;
-        }
         int active = 0;
         int oldest = -1;
         int lo = Math.max(0, focus - 12), hi = Math.min(n - 1, focus + 12);
@@ -2176,7 +2173,6 @@ final class LyricView extends View {
 
     /** The stage shows the two latest active rows; older overlapping rows are intentionally hidden. */
     private boolean simultaneousVisible(int i) {
-        if (LockLyrics.sRapidGroups) return false;
         if (!sungNow(i) || simultaneousSuppressed(i)) return false;
         int latest = -1, previous = -1;
         int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
@@ -2189,7 +2185,6 @@ final class LyricView extends View {
     }
 
     private boolean simultaneousSuppressed(int i) {
-        if (LockLyrics.sRapidGroups) return false;
         // Once three voices overlap, keep the oldest one out for the rest of its phrase. This
         // prevents it returning through the normal stack when the middle voice ends first.
         return i == simultaneousDropped && sungNow(i);
@@ -2266,7 +2261,6 @@ final class LyricView extends View {
      * singer as soon as the focus changes.
      */
     private float simultaneousY(int index) {
-        if (LockLyrics.sRapidGroups) return Float.NaN;
         if (!sungNow(index)) return Float.NaN;
         if (simultaneousCount() < 2) {
             if (index != simultaneousExitLine || now() >= simultaneousExitAt) return Float.NaN;
@@ -2279,7 +2273,7 @@ final class LyricView extends View {
         float gap = GAP_DP * density;
         float total = 0f;
         for (int i = lo; i <= hi; i++) {
-            if (sungNow(i)) total += height[i] + gap;
+            if (simultaneousVisible(i)) total += height[i] + gap;
         }
         if (total > 0f) total -= gap;
         float groupScale = simultaneousScale();
@@ -2323,6 +2317,10 @@ final class LyricView extends View {
         int n = lines.size();
         int revealThrough = AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)
                 ? indexAt(ms) : n - 1;
+        // The simultaneous stage owns the lyric band. Without this, a normal future/past row
+        // can still be drawn from the scrolling stack behind the two singers and look like an
+        // unintended third simultaneous lyric.
+        boolean simultaneousStage = simultaneousCount() >= 2;
         updateTint();
 
         int save = canvas.save();
@@ -2335,9 +2333,10 @@ final class LyricView extends View {
         }
         canvas.clipRect(0f, bandTop, getWidth(), bandBottom);
         for (int i = Math.max(0, focus - 12); i < n; i++) {
+            if (simultaneousStage && !simultaneousVisible(i)) continue;
             // The interlude slot above this line, if it has one: its dots move with the line, and
             // sit there dim from the start rather than leaving a hole until their turn.
-            if (!Float.isNaN(dotsTop[i])) {
+            if (!simultaneousStage && !Float.isNaN(dotsTop[i])) {
                 float dy = anchor + dotsTop[i] - scroll[i];
                 if (dy > bandBottom) break;
                 float dh = DOTS_SLOT_EM * textPx;
