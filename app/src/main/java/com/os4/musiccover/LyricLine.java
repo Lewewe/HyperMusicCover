@@ -68,7 +68,11 @@ public final class LyricLine {
         // this end and stops drawing the word path at it, so an end ahead of the last syllable
         // cuts its fill off mid-sweep: on a line whose next one starts within a second, the
         // last word gets no sweep at all and the line leaves just as it begins.
-        if (words) this.end = Math.max(this.end, sylEnd[sylEnd.length - 1]);
+        if (words) {
+            // Some providers preserve source word order even when a sustained/ad-lib word ends
+            // after a later token. The line remains live until every timed word has ended.
+            for (int wordEnd : sylEnd) this.end = Math.max(this.end, wordEnd);
+        }
     }
 
     /**
@@ -123,6 +127,19 @@ public final class LyricLine {
 
     boolean hasWords() {
         return sylStart != null;
+    }
+
+    /**
+     * Whether a timed token is actually in progress. This is deliberately independent of the
+     * line end and of the character map: providers occasionally give the final token an invalid
+     * character range, but it is still an audible held word and must keep its row alive.
+     */
+    boolean singingWordAt(int ms) {
+        if (sylStart == null) return false;
+        for (int k = 0; k < sylStart.length; k++) {
+            if (ms >= sylStart[k] && ms < sylEnd[k]) return true;
+        }
+        return false;
     }
 
     boolean hasDisplayWords() {
