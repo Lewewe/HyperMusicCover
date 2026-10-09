@@ -63,6 +63,9 @@ final class LockLyrics {
     private static final ArtworkPageState sArtworkPage = new ArtworkPageState();
 
     private static String sKey = "";
+    /** Stable identity for the live track, used only by the persistent queue-ready cache. */
+    private static String sReadyPkg = "";
+    private static String sReadyMediaId = "";
     private static List<LyricLine> sLines = Collections.emptyList();
     private static int sVersion;
     /** Bumped per lookup, so an answer overtaken by the next song is dropped. */
@@ -123,6 +126,7 @@ final class LockLyrics {
     static volatile boolean sProviderKugou = true;
     static volatile boolean sProviderLrcLib = true;
     static volatile boolean sProviderVariants = true;
+    static volatile boolean sOfflineCache = true;
     static final int SEARCH_ORIGINAL = 0, SEARCH_EXTENDED = 1;
     static volatile int sSearchMode = SEARCH_ORIGINAL;
 
@@ -134,6 +138,7 @@ final class LockLyrics {
     }
 
     static void searchModeChanged() {
+        NextLyrics.configurationChanged();
         CACHE.clear();
         unpark();
         Main.main().removeCallbacks(SETTLED_LOOKUP);
@@ -183,10 +188,47 @@ final class LockLyrics {
                 sTranslateSourceLang, sTranslateTargetLang, sOnlineTranslateMode);
     }
 
+    interface AheadTranslationCallback {
+        void onReady(List<LyricLine> lines, boolean translated);
+    }
+
+    /** Finishes a queue result off-screen with the user's current translation settings. */
+    static void translateAhead(final String trackKey, final List<LyricLine> lines,
+                               final NextLyrics.Context context,
+                               final AheadTranslationCallback callback) {
+        if (!NextLyrics.isCurrent(context)) return;
+        final LyricTranslator.Config cfg = translationConfig();
+        final int revision = sTranslateRevision;
+        if (lines == null || lines.isEmpty() || !cfg.enabled()) {
+            callback.onReady(lines, false);
+            return;
+        }
+        TranslationProvider.translator(cfg.provider).translate(trackKey, new ArrayList<>(lines), cfg,
+                new LyricTranslator.Callback() {
+                    @Override public boolean isCurrent() {
+                        return NextLyrics.isCurrent(context) && revision == sTranslateRevision
+                                && cfg.sameSettings(translationConfig());
+                    }
+
+                    @Override public void onTranslated(String ignored, List<LyricLine> merged,
+                                                        boolean fromCache) {
+                        callback.onReady(merged == null || merged.isEmpty() ? lines : merged, true);
+                    }
+
+                    @Override public void onFailed(String why) {
+                        callback.onReady(lines, false);
+                    }
+                });
+    }
+
     static void translationConfigChanged() {
+        NextLyrics.configurationChanged();
         if (sDemo || sKey.isEmpty()) return;
         Cached nativeLyrics = CACHE.get(sKey);
-        if (nativeLyrics == null) return;
+        if (nativeLyrics == null) {
+            if (sController != null) lookup(sKey, sController, true);
+            return;
+        }
         setLines(nativeLyrics.lines, "translation settings changed");
         translateAsync(sKey, nativeLyrics.lines, sGen);
     }
@@ -199,6 +241,10 @@ final class LockLyrics {
         final int revision = sTranslateRevision;
         final List<LyricLine> displayedBase = sLines;
         final List<LyricLine> base = new ArrayList<>(lines);
+        final String readyPkg = sReadyPkg;
+        final String readyMediaId = sReadyMediaId;
+        final int readySource = sSource;
+        final NextLyrics.Context readyContext = NextLyrics.context();
         TranslationProvider.translator(cfg.provider).translate(key, base, cfg,
                 new LyricTranslator.Callback() {
                     @Override
@@ -221,6 +267,8 @@ final class LockLyrics {
                                         || !cfg.sameSettings(translationConfig())) return;
                                 setLines(merged, fromCache ? "cached + online translation"
                                         : "online translation");
+                                NextLyrics.persistReady(readyPkg, readyMediaId, merged,
+                                        readySource, true, readyContext);
                             }
                         });
                     }
@@ -469,6 +517,7 @@ final class LockLyrics {
                     return size() > 12;
                 }
             };
+
 
     // ------------------------------------------------------------------ for the view
 
@@ -1000,6 +1049,8 @@ final class LockLyrics {
     static void onTrack(String key, MediaController c) {
         key = lyricKey(key, c);
         sController = c;
+        sReadyPkg = c == null || c.getPackageName() == null ? "" : c.getPackageName();
+        sReadyMediaId = mediaIdOf(c);
         readState(true);
         if (sDemo) {
             if (verbose) Xp.log(TAG + "demo is held, not looking " + key + " up");
@@ -1051,12 +1102,41 @@ final class LockLyrics {
         sLoading = sEnabled && !key.isEmpty();
         setLines(Collections.<LyricLine>emptyList(), "track changed");
         if (!sEnabled || key.isEmpty()) return;
+        NextLyrics.Lyrics ahead = NextLyrics.take(c);
+        if (ahead != null) {
+            settlePrefetched(key, ahead);
+            return;
+        }
+        final String awaitedKey = key;
+        final int waitingGen = sGen + 1;
+        if (NextLyrics.await(c, new NextLyrics.LyricsCallback() {
+            @Override public void onReady(final NextLyrics.Lyrics result) {
+                Main.main().post(new Runnable() {
+                    @Override public void run() {
+                        if (waitingGen != sGen || !awaitedKey.equals(sKey) || sDemo) return;
+                        if (result != null && !result.lines.isEmpty()) {
+                            settlePrefetched(awaitedKey, result);
+                        } else {
+                            // A future queue miss has no duration or session payload behind it.
+                            // Resolve the now-live track once before recording any real miss.
+                            sInfoSeen = LyricSource.infoFor(c);
+                            lookup(awaitedKey, c, false);
+                        }
+                    }
+                });
+            }
+        })) {
+            sGen = waitingGen;
+            Main.main().postDelayed(LOOKUP_WATCHDOG, LOOKUP_TIMEOUT_MS);
+            return;
+        }
         Cached hit = CACHE.get(key);
         if (hit != null) {
             sLoading = false;
             sSource = hit.source;
             setLines(hit.lines, "cached");
             translateAsync(key, hit.lines, sGen);
+            NextLyrics.onLyricsFinal();
             return;
         }
         // What the lookup about to start will read the session as, so a payload that turns up
@@ -1113,6 +1193,7 @@ final class LockLyrics {
                 sSource = hit.source;
                 setLines(hit.lines, "cached");
                 translateAsync(key, hit.lines, sGen);
+                NextLyrics.onLyricsFinal();
                 return;
             }
             sInfoSeen = LyricSource.infoFor(c);
@@ -1227,6 +1308,11 @@ final class LockLyrics {
                 }
                 settle(want, lines, why, source);
             }
+
+            @Override public void onFinished(boolean empty) {
+                if (gen != sGen || !want.equals(sKey) || sDemo) return;
+                NextLyrics.onLyricsFinal();
+            }
         });
     }
 
@@ -1258,10 +1344,34 @@ final class LockLyrics {
             }
         }
         if (source == LyricSource.SRC_LYRIC_INFO) sSessionPkg = pkgOf(want);
-        if (!lines.isEmpty()) CACHE.put(want, new Cached(lines, source));
+        if (!lines.isEmpty()) {
+            CACHE.put(want, new Cached(lines, source));
+            persistReady(lines, source, false);
+        }
         setLines(lines, why);
         translateAsync(want, lines, sGen);
         // A payload that turned up while this was looking. See rereadIfNewPayload().
+        rereadIfNewPayload(want, sController);
+    }
+
+    /** Applies a complete queue result without starting a second provider or translation request. */
+    private static void settlePrefetched(String want, NextLyrics.Lyrics ahead) {
+        if (!NextLyrics.isCurrent(ahead.context)) return;
+        Main.main().removeCallbacks(LOOKUP_WATCHDOG);
+        sLoading = false;
+        sSource = ahead.source;
+        CACHE.put(want, new Cached(QueuedLyricCache.withoutOnline(ahead.lines), ahead.source));
+        NextLyrics.persistReady(sReadyPkg, sReadyMediaId, ahead.lines, ahead.source,
+                ahead.translated, ahead.context);
+        setLines(ahead.lines, ahead.translated ? "prefetched + online translation"
+                : "prefetched lyrics");
+        NextLyrics.onLyricsFinal();
+        if (!ahead.translated) translateAsync(want, CACHE.get(want).lines, sGen);
+        if (ahead.source == LyricSource.SRC_SPICY && !LyricSource.words(ahead.lines)) {
+            // Spicy identified this Spotify item exactly but supplied line timing. Keep it visible
+            // while the normal live path, with duration/album metadata, looks for word timing.
+            lookup(want, sController, true);
+        }
         rereadIfNewPayload(want, sController);
     }
 
@@ -1353,6 +1463,23 @@ final class LockLyrics {
     private static String pkgOf(String key) {
         int bar = key.indexOf('|');
         return bar < 0 ? key : key.substring(0, bar);
+    }
+
+    private static String mediaIdOf(MediaController controller) {
+        if (controller == null) return "";
+        try {
+            android.media.MediaMetadata metadata = Main.sessionMetadata(controller);
+            String id = metadata == null ? null
+                    : metadata.getString(android.media.MediaMetadata.METADATA_KEY_MEDIA_ID);
+            return id == null ? "" : id;
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private static void persistReady(List<LyricLine> lines, int source, boolean translated) {
+        NextLyrics.persistReady(sReadyPkg, sReadyMediaId, lines, source, translated,
+                NextLyrics.context());
     }
 
     /**
@@ -1602,7 +1729,7 @@ final class LockLyrics {
     }
 
     /** The SRC_ constant as something readable in a broadcast result. */
-    private static String srcName(int source) {
+    static String srcName(int source) {
         switch (source) {
             case LyricSource.SRC_LYRIC_INFO:
                 return "session";

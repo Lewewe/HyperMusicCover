@@ -14,6 +14,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.SystemClock;
+import android.os.Bundle;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -31,10 +32,9 @@ import java.util.List;
  * caught on TransportControls, ~0.8s before the player reports anything - hands the right one
  * straight to the wallpaper.
  *
- * Only Apple Music publishes one here. Measured 2026-09-17 with `op queue`: NetEase, Salt Player
- * and Bilibili all answer "no queue", so for them this does nothing at all and the cover waits
- * for the player exactly as it did. Nothing about it is Apple-specific though - the queue and the
- * artwork URI are both public MediaSession API, and any player that fills them in gets it too.
+ * Only Apple Music was originally observed publishing one here. Spotify can publish one too, but
+ * its active queue id can lag behind playback, so its current item is matched against metadata
+ * instead. Players without a queue still wait for their normal metadata update.
  *
  * Guessing is the whole idea, so being wrong has to be cheap: the prediction is only ever an
  * early push of a picture, and the player's own metadata arrives a moment later and is what
@@ -59,7 +59,7 @@ final class Prefetch {
     private static final int CACHE_MAX = 6;
 
     /** One queue item, reduced to what a cover and a lyric lookup need. */
-    private static final class Item {
+    static final class Item {
         final long id;
         final String title;
         final Uri icon;
@@ -72,13 +72,23 @@ final class Prefetch {
          * elsewhere. See NcmLyrics.terms().
          */
         final String artist;
+        /** Optional queue metadata; present on some players before the track becomes current. */
+        final String album;
+        final long durationMs;
 
         Item(long id, String title, Uri icon, String mediaId, String artist) {
+            this(id, title, icon, mediaId, artist, null, 0L);
+        }
+
+        Item(long id, String title, Uri icon, String mediaId, String artist, String album,
+             long durationMs) {
             this.id = id;
             this.title = title;
             this.icon = icon;
             this.mediaId = mediaId;
             this.artist = artist;
+            this.album = album;
+            this.durationMs = durationMs;
         }
 
         /** The same track: by the platform id where there is one, else by title. */
@@ -136,6 +146,11 @@ final class Prefetch {
 
     /** A prediction older than this is not worth matching against - the player never got there. */
     private static final long PREDICTION_TTL_MS = 4000L;
+    /** Spotify may publish queue and metadata on adjacent callbacks during a skip or shuffle. */
+    private static final int SPOTIFY_QUEUE_RETRIES = 2;
+    private static final long SPOTIFY_QUEUE_RETRY_MS = 300L;
+    private static Runnable sSpotifyQueueRetry;
+    private static int sSpotifyQueueRetryCount;
 
     private static synchronized Handler work() {
         if (sWork == null) {
@@ -158,15 +173,18 @@ final class Prefetch {
         if (c == null) {
             sItems = new ArrayList<>();
             sIndex = -1;
+            NextLyrics.setQueue(null, sItems, sIndex);
             return;
         }
         work().post(new Runnable() {
             @Override
             public void run() {
                 try {
-                    readQueue(c);
+                    boolean coherent = readQueue(c);
+                    if (coherent) cancelSpotifyQueueRetry();
+                    else scheduleSpotifyQueueRetry(c);
                     fetchAround();
-                    warmLyricAhead();
+                    NextLyrics.warm(sPkg, sItems, sIndex);
                 } catch (Throwable t) {
                     Xp.w(TAG + "queue read failed: " + t);
                 }
@@ -304,7 +322,7 @@ final class Prefetch {
                 fetchAround();
             }
         });
-        warmLyricAhead();
+        NextLyrics.warm(sPkg, sItems, sIndex);
         return b;
     }
 
@@ -407,14 +425,45 @@ final class Prefetch {
         }
         return "queue=" + items.size() + " at=" + sIndex + " history=" + back + " cached=" + n
                 + " predicted=" + sPredicted
-                // What reading ahead has in hand. The module's own log cannot be read back on
-                // this device, so this line is the only place the lyric prefetch is visible.
-                + " " + NcmLyrics.describeSearches() + " " + LyricSource.describeWarm();
+                + " " + NextLyrics.describe();
     }
+
+    /** The three tracks relevant to a previous/current/next prediction diagnostic. */
+    /** Queue diagnostics must read the session now: Spotify does not always callback on shuffle. */
+    static String describeTriplet(MediaController controller) {
+        if (controller != null) {
+            try {
+                if (readQueue(controller)) {
+                    // A probe is received on SystemUI's main thread. Queue inspection is cheap,
+                    // but artwork and provider I/O must remain on the prefetch worker.
+                    work().post(new Runnable() {
+                        @Override public void run() {
+                            fetchAround();
+                            NextLyrics.warm(sPkg, sItems, sIndex);
+                        }
+                    });
+                } else {
+                    scheduleSpotifyQueueRetry(controller);
+                }
+            } catch (Throwable t) {
+                Xp.w(TAG + "queue3 refresh failed: " + t);
+            }
+        }
+        Item previous = null;
+        synchronized (sHistory) {
+            if (!sHistory.isEmpty()) previous = sHistory.get(0);
+        }
+        List<Item> items = sItems;
+        int at = sIndex;
+        Item current = at >= 0 && at < items.size() ? items.get(at) : sCurrent;
+        Item next = at >= 0 && at + 1 < items.size() ? items.get(at + 1) : null;
+        return NextLyrics.describeTriplet(sPkg, previous, current, next);
+    }
+
 
     // ------------------------------------------------------------------ internals
 
-    private static void readQueue(MediaController c) {
+    private static boolean readQueue(MediaController c) {
         String pkg = c.getPackageName();
         if (sPkg != null && !sPkg.equals(pkg)) {
             // Another player's past is not this one's.
@@ -428,101 +477,139 @@ final class Prefetch {
         if (q == null || q.isEmpty()) {
             sItems = new ArrayList<>();
             sIndex = -1;
-            return;
+            NextLyrics.setQueue(sPkg, sItems, sIndex);
+            return true;
         }
         List<Item> items = new ArrayList<>(q.size());
         for (MediaSession.QueueItem qi : q) {
             MediaDescription d = qi.getDescription();
+            Bundle extras = d == null ? null : d.getExtras();
+            String title = d == null || d.getTitle() == null ? null : d.getTitle().toString();
+            String album = extraString(extras, MediaMetadata.METADATA_KEY_ALBUM, "album");
+            // A queue description is normally display text, not canonical metadata. Some
+            // players (including Cider) use it for the album, though, and publish neither an
+            // album extra nor duration. It is only supplemental matching evidence: a distinct
+            // description can raise an already exact title/artist match, never replace it.
+            if (album == null) {
+                String description = str(d == null ? null : d.getDescription());
+                if (description != null && !description.isEmpty() && !description.equals(title)) {
+                    album = description;
+                }
+            }
+            long duration = extraLong(extras, MediaMetadata.METADATA_KEY_DURATION,
+                    "duration", "duration_ms");
             items.add(new Item(qi.getQueueId(),
-                    d == null || d.getTitle() == null ? null : d.getTitle().toString(),
+                    title,
                     d == null ? null : d.getIconUri(),
                     d == null ? null : d.getMediaId(),
-                    str(d == null ? null : d.getSubtitle())));
+                    str(d == null ? null : d.getSubtitle()), album, duration));
         }
-        long active = -1L;
         PlaybackState ps = c.getPlaybackState();
         sState = ps;
-        if (ps != null) active = ps.getActiveQueueItemId();
-        int at = -1;
-        for (int n = 0; n < items.size(); n++) {
-            if (items.get(n).id == active) {
-                at = n;
-                break;
+        int at = activeQueuePosition(ps, items);
+        boolean coherent = true;
+        if ("com.spotify.music".equals(pkg)) {
+            int metadataAt = spotifyQueuePosition(c.getMetadata(), items);
+            // Spotify can update the queue and metadata on different callbacks.  A disagreement
+            // is not a hint to choose either neighbour: it is an unsafe queue, so wait for the
+            // next callback rather than warming lyrics for the wrong song.
+            if (metadataAt < 0 || metadataAt != at) {
+                at = -1;
+                coherent = false;
             }
         }
         sItems = items;
         sIndex = at;
+        NextLyrics.setQueue(sPkg, items, at);
         if (at >= 0) noteCurrent(items.get(at));
+        return coherent;
+    }
+
+    /** One short retry (twice at most), never a polling loop. Runs on the existing worker. */
+    private static void scheduleSpotifyQueueRetry(final MediaController controller) {
+        if (controller == null || !"com.spotify.music".equals(controller.getPackageName())
+                || sSpotifyQueueRetry != null || sSpotifyQueueRetryCount >= SPOTIFY_QUEUE_RETRIES) {
+            return;
+        }
+        sSpotifyQueueRetryCount++;
+        Runnable retry = new Runnable() {
+            @Override public void run() {
+                if (sSpotifyQueueRetry != this) return;
+                sSpotifyQueueRetry = null;
+                try {
+                    if (readQueue(controller)) {
+                        sSpotifyQueueRetryCount = 0;
+                        fetchAround();
+                        NextLyrics.warm(sPkg, sItems, sIndex);
+                    } else {
+                        scheduleSpotifyQueueRetry(controller);
+                    }
+                } catch (Throwable t) {
+                    Xp.w(TAG + "Spotify queue retry failed: " + t);
+                }
+            }
+        };
+        sSpotifyQueueRetry = retry;
+        work().postDelayed(retry, SPOTIFY_QUEUE_RETRY_MS);
+    }
+
+    private static void cancelSpotifyQueueRetry() {
+        Runnable retry = sSpotifyQueueRetry;
+        if (retry != null) work().removeCallbacks(retry);
+        sSpotifyQueueRetry = null;
+        sSpotifyQueueRetryCount = 0;
+    }
+
+    private static int activeQueuePosition(PlaybackState state, List<Item> items) {
+        long active = state == null ? -1L : state.getActiveQueueItemId();
+        for (int n = 0; n < items.size(); n++) {
+            if (items.get(n).id == active) return n;
+        }
+        return -1;
+    }
+
+    private static int spotifyQueuePosition(MediaMetadata metadata, List<Item> items) {
+        if (metadata == null || items.isEmpty()) return -1;
+        String[] mediaIds = new String[items.size()];
+        String[] titles = new String[items.size()];
+        String[] artists = new String[items.size()];
+        for (int n = 0; n < items.size(); n++) {
+            Item item = items.get(n);
+            mediaIds[n] = item.mediaId;
+            titles[n] = item.title;
+            artists[n] = item.artist;
+        }
+        return SpotifyQueuePosition.find(
+                metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
+                metadata.getString(MediaMetadata.METADATA_KEY_TITLE),
+                metadata.getString(MediaMetadata.METADATA_KEY_ARTIST),
+                mediaIds, titles, artists);
     }
 
     private static String str(CharSequence cs) {
         return cs == null ? null : cs.toString();
     }
 
-    /**
-     * The lyric for the track after this one, fetched into the caches the real lookup reads.
-     *
-     * One ahead, where the artwork takes two either side. The cases are not the same shape: a
-     * cover has to be right the instant a press lands, and two presses in a burst is what that
-     * reach exists for, where nobody reads the lyrics of a song they skipped past in a second.
-     * Going only forward and only one deep also keeps the request rate close to what it was,
-     * which matters for the by-name half - NetEase answers a client it has decided is searching
-     * too much by quietly leaving the right song out of the results.
-     *
-     * Apple Music only, which is not a limitation so much as a description: it is the one player
-     * here that publishes a queue at all (measured 2026-09-17 - NetEase, Salt and Bilibili all
-     * answer "no queue"), so for everyone else there is nothing to read ahead from.
-     */
-    private static void warmLyricAhead() {
-        String pkg = sPkg;
-        if (pkg == null || !pkg.contains("apple")) return;
-        List<Item> items = sItems;
-        int at = sIndex;
-        if (items.isEmpty() || at < 0 || at + 1 >= items.size()) return;
-        final Item it = items.get(at + 1);
-        final String dir = LyricSource.dirForPackage(pkg);
-        // Apple's queue items carry the title, the artist and the platform id, and no duration
-        // anywhere - the extras hold thirty of the player's own keys and not that one (measured
-        // 2026-09-22 with `op queue`). So the by-name half is asked for only as far as a
-        // duration is not needed, which is exactly as far as the search: NcmLyrics.warmSearch
-        // runs it and keeps the results, and the real lookup does the choosing once the session
-        // has told it how long the track is.
-        final boolean byName = it.title != null && !it.title.isEmpty()
-                && it.artist != null && !it.artist.isEmpty();
-        if (it.mediaId == null && !byName) return;
-        lyricWork().post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Xp.log(TAG + "reading ahead for \"" + it.title + "\" (id=" + it.mediaId
-                            + (byName ? ", searching \"" + it.artist + "\"" : ", no name search")
-                            + ")");
-                    LyricSource.warm(it.mediaId, dir, byName ? it.title : null,
-                            byName ? it.artist : null);
-                } catch (Throwable t) {
-                    Xp.w(TAG + "reading ahead failed: " + t);
-                }
-            }
-        });
+    private static String extraString(Bundle extras, String... keys) {
+        if (extras == null) return null;
+        for (String key : keys) {
+            try {
+                String value = extras.getString(key);
+                if (value != null && !value.isEmpty()) return value;
+            } catch (Throwable ignored) { }
+        }
+        return null;
     }
 
-    /**
-     * Its own thread, not the artwork's.
-     *
-     * The mirrors are allowed seconds and the by-name search is three round trips, and the
-     * artwork prefetch is what makes a press answerable at all - sharing one thread would put
-     * the cover behind the lyric of a song that has not started.
-     */
-    private static Handler sLyricWork;
-
-    private static synchronized Handler lyricWork() {
-        if (sLyricWork == null) {
-            HandlerThread t = new HandlerThread("mc-lyricahead",
-                    android.os.Process.THREAD_PRIORITY_BACKGROUND);
-            t.start();
-            sLyricWork = new Handler(t.getLooper());
+    private static long extraLong(Bundle extras, String... keys) {
+        if (extras == null) return 0L;
+        for (String key : keys) {
+            try {
+                long value = extras.getLong(key, 0L);
+                if (value > 0L) return value;
+            } catch (Throwable ignored) { }
         }
-        return sLyricWork;
+        return 0L;
     }
 
     /** Fetches the artwork either side of where we think we are, newest need first. */

@@ -72,6 +72,64 @@ final class LyricSource {
          * do - which it can only do if it knows what it is currently showing.
          */
         void onLines(List<LyricLine> lines, String why, int source);
+
+        /** The complete source pipeline is done; only now is an empty result a real miss. */
+        default void onFinished(boolean empty) { }
+    }
+
+    /** A by-name result prepared from a queue item, before a player starts that item. */
+    interface AheadCallback {
+        void onLines(List<LyricLine> lines, String why, int source);
+    }
+
+    /**
+     * Resolves sources that can be identified safely from a public queue entry. Session, local
+     * file and database routes need the actual playing session and deliberately stay out here.
+     */
+    static void loadAhead(String pkg, String title, String artist, String album, long durationMs,
+                          String mediaId,
+                          AheadCallback cb) {
+        List<LyricLine> lines = java.util.Collections.emptyList();
+        int source = SRC_NONE;
+        String why = "no queue lyric match";
+        try {
+            NcmLyrics.Query q = NcmLyrics.build(title, artist, album, durationMs);
+            OnlineLyrics.Lookup lookup = OnlineLyrics.wordFirst(pkg, q);
+            if (lookup != null && lookup.lines != null && !lookup.lines.isEmpty()) {
+                lines = lookup.lines;
+                source = lookup.found.source();
+                why = lines.size() + " lines from " + lookup.found.who();
+            }
+            // Spicy is an optional Spotify-only word-timing upgrade; normal providers above
+            // always remain enabled and are still used if this service has no answer.
+            if ("com.spotify.music".equals(pkg) && !words(lines)
+                    && LockLyrics.sSpicyLyricsEnabled) {
+                String spotifyId = spotifyTrackId(mediaId);
+                if (spotifyId != null && !LockLyrics.sSpicyLyricsApiKey.isEmpty()) {
+                    List<LyricLine> spicy = SpicyLyrics.fetch(spotifyId,
+                            LockLyrics.sSpicyLyricsApiKey);
+                    // Queue metadata may be too weak for a catalogue match. A line-timed
+                    // Spotify result is still a correct, immediate fallback; the live lookup
+                    // can later replace it with a provider's word timing.
+                    if (spicy != null && !spicy.isEmpty() && (lines.isEmpty() || words(spicy))) {
+                        lines = spicy;
+                        source = SRC_SPICY;
+                        why = lines.size() + " lines from Spicy Lyrics";
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            why = "queue lyric lookup failed";
+            Xp.w("[MCLyric] queue lyric lookup failed: " + t);
+        }
+        cb.onLines(lines, why, source);
+    }
+
+    private static String spotifyTrackId(String id) {
+        if (id == null) return null;
+        int at = Math.max(id.lastIndexOf(':'), id.lastIndexOf('/'));
+        String candidate = at >= 0 ? id.substring(at + 1) : id;
+        return candidate.matches("[A-Za-z0-9]{22}") ? candidate : null;
     }
 
     /**
@@ -644,7 +702,7 @@ final class LyricSource {
      * prefetch that proved the song is not in the database saves the real lookup the same four
      * mirrors it would have raced to learn that.
      */
-    private static final int WARM_MAX = 8;
+    private static final int WARM_MAX = 3;
     private static final java.util.LinkedHashMap<String, Answer> WARM =
             new java.util.LinkedHashMap<String, Answer>(WARM_MAX + 1, 0.75f, true) {
                 @Override
@@ -758,7 +816,10 @@ final class LyricSource {
         final String info = infoFor(c);
         final String dir = dirFor(c);
         final boolean extended = LockLyrics.sSearchMode == LockLyrics.SEARCH_EXTENDED;
-        final String spicyId = extended ? SpicyLyrics.spotifyId(c) : null;
+        // Spicy Lyrics is a Spotify-only endpoint. A coincidentally 22-character media id from
+        // another player must never send that player's metadata or request through this route.
+        final String spicyId = extended && "com.spotify.music".equals(c.getPackageName())
+                ? SpicyLyrics.spotifyId(c) : null;
         // An id is only worth having when there is a directory it belongs to; without one it
         // cannot be looked up anywhere, and pretending otherwise is how a lookup lands in the
         // wrong platform's id space.
@@ -775,6 +836,7 @@ final class LyricSource {
             Xp.log("[MCLyric] " + pkg + " publishes neither lyricInfo, a song id, nor a name");
             onMain(cb, java.util.Collections.<LyricLine>emptyList(),
                     "nothing to read from " + pkg, SRC_NONE);
+            onMainFinished(gen, cb, true);
             return;
         }
         new Thread(new Runnable() {
@@ -867,6 +929,7 @@ final class LyricSource {
                     } catch (Throwable t) {
                         Xp.w("[MCLyric] borrowing a translation failed: " + t);
                     }
+                    onMainFinished(gen, cb, r.lines.isEmpty());
                 } else {
                     Rows r = new Rows();
                     // A player of files is playing a file on this phone, and its lyric is the one
@@ -921,6 +984,7 @@ final class LyricSource {
                     } catch (Throwable t) {
                         Xp.w("[MCLyric] borrowing a translation failed: " + t);
                     }
+                    onMainFinished(gen, cb, r.lines.isEmpty());
                 }
             }
         }, "MCLyricSource").start();
@@ -1405,7 +1469,7 @@ final class LyricSource {
     }
 
     /** Whether a set of rows carries word timings, which is what the session route can add. */
-    private static boolean words(List<LyricLine> lines) {
+    static boolean words(List<LyricLine> lines) {
         if (lines == null || lines.isEmpty()) {
             return false;
         }
@@ -1631,6 +1695,14 @@ final class LyricSource {
             @Override
             public void run() {
                 cb.onLines(lines, why, source);
+            }
+        });
+    }
+
+    private static void onMainFinished(final int gen, final Callback cb, final boolean empty) {
+        Main.main().post(new Runnable() {
+            @Override public void run() {
+                if (!superseded(gen)) cb.onFinished(empty);
             }
         });
     }
