@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -901,21 +902,28 @@ private fun LyricEffectsControls(
                 onCheckedChange = {
                     onChange(module.copy(bpmEnabled = it))
                     ModuleBridge.setBpmConfig(context, it)
+                    if (!it) showBpmPlayers = false
                 },
             )
-            ArrowPreference(
-                title = stringResource(R.string.lyrics_bpm_players),
-                summary = if (module.bpmPlayers.isEmpty()) {
-                    stringResource(R.string.lyrics_bpm_players_all)
-                } else {
-                    stringResource(R.string.lyrics_bpm_players_selected, module.bpmPlayers.size)
-                },
-                enabled = enabled,
-                onClick = { showBpmPlayers = true },
-            )
+            if (module.bpmEnabled) {
+                ArrowPreference(
+                    title = stringResource(R.string.lyrics_bpm_players),
+                    summary = if (module.bpmPlayers.isEmpty()) {
+                        stringResource(R.string.lyrics_bpm_players_all)
+                    } else {
+                        pluralStringResource(
+                            R.plurals.lyrics_bpm_players_selected,
+                            module.bpmPlayers.size,
+                            module.bpmPlayers.size,
+                        )
+                    },
+                    enabled = enabled,
+                    onClick = { showBpmPlayers = true },
+                )
+            }
         }
     }
-    if (showBpmPlayers) {
+    if (showBpmPlayers && module.bpmEnabled) {
         BpmPlayerSelectionDialog(
             module = module,
             enabled = enabled,

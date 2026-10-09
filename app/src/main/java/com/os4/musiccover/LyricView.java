@@ -2248,8 +2248,9 @@ final class LyricView extends View {
         int bpm = LockLyrics.bpm();
         long beatAt = LockLyrics.bpmBeatAt();
         long sinceBeat = beatAt == 0L ? Long.MAX_VALUE : Math.max(0L, now() - beatAt);
-        float pulse = sinceBeat == Long.MAX_VALUE ? 0f : (float) Math.exp(-sinceBeat / 190f);
         boolean searchingLyrics = LockLyrics.bpmSearchingLyrics();
+        float pulse = searchingLyrics || sinceBeat == Long.MAX_VALUE
+                ? 0f : (float) Math.exp(-sinceBeat / 190f);
         String face = searchingLyrics ? LockLyrics.bpmSearchingFace() : LockLyrics.bpmFace();
         String label = searchingLyrics ? LockLyrics.bpmSearchingMessage() : LockLyrics.bpmMessage();
         postInvalidateOnAnimation();
@@ -2258,7 +2259,8 @@ final class LyricView extends View {
         p.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
         p.setAlpha((int) (255 * show * .82f));
         float cx = getWidth() * .5f, cy = (bandTop + bandBottom) * .5f;
-        float mirror = LockLyrics.bpmBeatDirection() < 0 ? -1f : 1f;
+        float mirror = searchingLyrics ? 1f
+                : (LockLyrics.bpmBeatDirection() < 0 ? -1f : 1f);
         float scale = 1f + pulse * .09f;
         canvas.save();
         canvas.scale(mirror * scale, scale, cx, cy);

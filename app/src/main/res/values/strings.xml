@@ -147,7 +147,6 @@
     <string name="lyrics_bpm_players">BPM media players</string>
     <string name="lyrics_bpm_players_summary">Choose which media players may drive the beat companion. Leave all unchecked to allow every player.</string>
     <string name="lyrics_bpm_players_all">All media players</string>
-    <string name="lyrics_bpm_players_selected">%1$d media players selected</string>
     <string name="lyrics_bpm_players_empty">No compatible media players were found yet. Start a player and reopen this menu.</string>
     <string name="lyrics_bpm_players_done">Done</string>
     <string name="lyrics_groups">Gentle lyric flow</string>

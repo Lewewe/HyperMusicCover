@@ -568,7 +568,7 @@ final class LockLyrics {
      * while its lyrics are still loading.
      */
     static boolean hasDisplayContent() {
-        return hasLyrics() || hasBpmCompanion();
+        return hasLyrics() || hasBpmCompanion() || bpmSearchingLyrics();
     }
 
     /** Whether the last settled answer - not one still loading - had lines. See hasLyrics(). */
@@ -585,7 +585,7 @@ final class LockLyrics {
                 && SystemClock.uptimeMillis() - sTrackChangedAt >= 3000L;
     }
     static boolean bpmSearchingLyrics() {
-        return sLoading;
+        return sBpmEnabled && !sKey.isEmpty() && sLines.isEmpty() && sLoading;
     }
     static int bpm() { return sBpm; }
     static long bpmFoundAt() { return sBpmFoundAt; }
@@ -618,12 +618,63 @@ final class LockLyrics {
             refresh();
             return;
         }
-        BpmEstimator.start(key, new BpmEstimator.Callback() { @Override public void onEstimated(int bpm) {
+        BpmEstimator.start(key, publishedBpm(controller), new BpmEstimator.Callback() { @Override public void onEstimated(int bpm) {
             if (!key.equals(sKey)) return;
             sBpm = bpm;
             if (bpm >= 40 && sBpmFoundAt == 0L) sBpmFoundAt = SystemClock.uptimeMillis();
             refresh();
         }});
+    }
+
+    /**
+     * Some players expose a catalog tempo in metadata extras. It is preferable to a mix-level
+     * estimate because FFT accents can represent a half-time drop or a double-time subdivision.
+     * Unknown metadata is deliberately ignored; the estimator remains the fallback.
+     */
+    private static int publishedBpm(MediaController controller) {
+        android.media.MediaMetadata metadata = Main.sessionMetadata(controller);
+        if (metadata == null) return 0;
+        android.os.Bundle extras = controller == null ? null : controller.getExtras();
+        String[] keys = {
+                "android.media.metadata.BPM",
+                "com.google.android.music.metainfo.BPM",
+                "bpm",
+                "tempo"
+        };
+        for (String key : keys) {
+            int direct = metadataBpm(metadata, key);
+            if (direct >= 40 && direct <= 220) return direct;
+            int bpm = metadataBpm(extras, key);
+            if (bpm >= 40 && bpm <= 220) return bpm;
+        }
+        return 0;
+    }
+
+    private static int metadataBpm(android.media.MediaMetadata metadata, String key) {
+        if (!metadata.containsKey(key)) return 0;
+        long integer = metadata.getLong(key);
+        if (integer != 0L) return (int) integer;
+        String text = metadata.getString(key);
+        if (text == null) return 0;
+        try {
+            return Math.round(Float.parseFloat(text.trim()));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private static int metadataBpm(android.os.Bundle extras, String key) {
+        if (extras == null || !extras.containsKey(key)) return 0;
+        Object value = extras.get(key);
+        if (value instanceof Number) return Math.round(((Number) value).floatValue());
+        if (value instanceof CharSequence) {
+            try {
+                return Math.round(Float.parseFloat(value.toString().trim()));
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     /** Re-check the current track after the user changes the local BPM companion setting. */
@@ -1149,9 +1200,10 @@ final class LockLyrics {
             rereadIfNewPayload(key, c);
             return;
         }
-        sArtworkPage.onTrackChanged(wantsAttached(), key.isEmpty());
         String lastKey = sKey;
         sKey = key;
+        sLoading = sEnabled && !key.isEmpty();
+        sArtworkPage.onTrackChanged(wantsAttached(), key.isEmpty());
         requestBpm(key, c);
         long lastChange = sTrackAt;
         sTrackChangedAt = SystemClock.uptimeMillis();
@@ -1180,7 +1232,6 @@ final class LockLyrics {
         // - two messages, in the middle of the track change's crossfade, which is exactly when
         // the wallpaper process holds a switch back to wait for the fade. Those two could then
         // land in the wrong order and leave the cover sharp.
-        sLoading = sEnabled && !key.isEmpty();
         setLines(Collections.<LyricLine>emptyList(), "track changed");
         if (!sEnabled || key.isEmpty()) return;
         NextLyrics.Lyrics ahead = NextLyrics.take(c);
@@ -1213,9 +1264,10 @@ final class LockLyrics {
         }
         Cached hit = CACHE.get(key);
         if (hit != null) {
-            sLoading = false;
             sSource = hit.source;
             setLines(hit.lines, "cached");
+            sLoading = false;
+            refresh();
             translateAsync(key, hit.lines, sGen);
             NextLyrics.onLyricsFinal();
             return;
@@ -1270,9 +1322,10 @@ final class LockLyrics {
             if (!sEnabled || sDemo || key.isEmpty()) return;
             Cached hit = CACHE.get(key);
             if (hit != null) {
-                sLoading = false;
                 sSource = hit.source;
                 setLines(hit.lines, "cached");
+                sLoading = false;
+                refresh();
                 translateAsync(key, hit.lines, sGen);
                 NextLyrics.onLyricsFinal();
                 return;
@@ -1400,7 +1453,6 @@ final class LockLyrics {
     /** Puts a lookup's answer up: the one place lines found for `want` reach the screen. */
     private static void settle(String want, List<LyricLine> lines, String why, int source) {
         Main.main().removeCallbacks(LOOKUP_WATCHDOG);
-        sLoading = false;
         sSource = source;
         // What the LAST lookup found, not what any lookup ever found.
         //
@@ -1430,6 +1482,8 @@ final class LockLyrics {
             persistReady(lines, source, false);
         }
         setLines(lines, why);
+        sLoading = false;
+        refresh();
         translateAsync(want, lines, sGen);
         // A payload that turned up while this was looking. See rereadIfNewPayload().
         rereadIfNewPayload(want, sController);
@@ -1439,13 +1493,14 @@ final class LockLyrics {
     private static void settlePrefetched(String want, NextLyrics.Lyrics ahead) {
         if (!NextLyrics.isCurrent(ahead.context)) return;
         Main.main().removeCallbacks(LOOKUP_WATCHDOG);
-        sLoading = false;
         sSource = ahead.source;
         CACHE.put(want, new Cached(QueuedLyricCache.withoutOnline(ahead.lines), ahead.source));
         NextLyrics.persistReady(sReadyPkg, sReadyMediaId, ahead.lines, ahead.source,
                 ahead.translated, ahead.context);
         setLines(ahead.lines, ahead.translated ? "prefetched + online translation"
                 : "prefetched lyrics");
+        sLoading = false;
+        refresh();
         NextLyrics.onLyricsFinal();
         if (!ahead.translated) translateAsync(want, CACHE.get(want).lines, sGen);
         if (ahead.source == LyricSource.SRC_SPICY && !LyricSource.words(ahead.lines)) {
@@ -1596,6 +1651,7 @@ final class LockLyrics {
     static void onPlaybackState(PlaybackState s) {
         sState = s;
         sStateReadAt = SystemClock.uptimeMillis();
+        BpmEstimator.onPlaybackState(s);
         LyricView v = sView;
         if (v != null) v.kick();
     }

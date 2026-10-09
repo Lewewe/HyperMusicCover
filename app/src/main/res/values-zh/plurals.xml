@@ -1,0 +1,5 @@
+<resources>
+    <plurals name="lyrics_bpm_players_selected">
+        <item quantity="other">已选择 %1$d 个媒体播放器</item>
+    </plurals>
+</resources>

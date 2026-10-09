@@ -157,7 +157,6 @@
     <string name="lyrics_bpm_players">节拍媒体播放器</string>
     <string name="lyrics_bpm_players_summary">选择哪些媒体播放器可以驱动节拍伴侣。全部取消选择则允许所有播放器。</string>
     <string name="lyrics_bpm_players_all">所有媒体播放器</string>
-    <string name="lyrics_bpm_players_selected">已选择 %1$d 个媒体播放器</string>
     <string name="lyrics_bpm_players_empty">暂未找到兼容的媒体播放器。启动播放器后重新打开此菜单。</string>
     <string name="lyrics_bpm_players_done">完成</string>
     <string name="hide_fingerprint">隐藏锁屏指纹图标</string>
