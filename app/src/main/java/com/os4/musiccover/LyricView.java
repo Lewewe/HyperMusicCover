@@ -373,16 +373,7 @@ final class LyricView extends View {
 
     /** The line the stack is on, the line whose interlude is showing (-1), and both as one key. */
     private int focus = -1;
-    private int simultaneousDropped = -1;
-    private float simultaneousTop;
-    private float simultaneousTopWant;
-    private boolean simultaneousTopSet;
-    private int simultaneousFirst = -1;
-    private int simultaneousSecond = -1;
-    private int simultaneousExitLine = -1;
-    private long simultaneousExitAt;
-    private float simultaneousExitFrom;
-    private static final long SIMULTANEOUS_HANDOFF_MS = 180L;
+    private final DuetLyrics duetLyrics = new DuetLyrics();
     private int dotsFor = -1;
     private RapidLyricGroups rapidGroups = new RapidLyricGroups(Collections.emptyList());
     /** The scroll anchor may stay on a group's first line while the singing focus advances. */
@@ -686,21 +677,7 @@ final class LyricView extends View {
         ms = smoothPosition(now);
         int n = lines.size();
         int idx = indexAt(ms);
-        updateSimultaneousDrop(n);
-        int simultaneousNow = simultaneousCount();
-        if (simultaneousNow >= 2) {
-            simultaneousExitLine = -1;
-        } else if (simultaneousExitLine < 0 && simultaneousFirst >= 0
-                && simultaneousSecond >= 0 && simultaneousNow == 1) {
-            int remaining = sungNow(simultaneousFirst) ? simultaneousFirst : simultaneousSecond;
-            float groupScale = simultaneousScale();
-            float gap = GAP_DP * density;
-            simultaneousExitLine = remaining;
-            simultaneousExitFrom = simultaneousTop
-                    + (remaining == simultaneousSecond
-                    ? (height[simultaneousFirst] + gap) * groupScale : 0f);
-            simultaneousExitAt = now + SIMULTANEOUS_HANDOFF_MS;
-        }
+        updateDuetLyrics(n);
 
         // Which line the stack is on, which can be ahead of the one being sung: Apple scrolls to
         // the next line about a second before its first word (measured 1.07s), once the line
@@ -735,7 +712,7 @@ final class LyricView extends View {
             // them to travel from. A seek travels: see the spring picked for it below.
             boolean first = focus < 0;
             boolean seek = !first && now - jumpedAt < SEEK_WINDOW_MS;
-            if (seek) simultaneousDropped = -1;
+            if (seek) duetLyrics.reset();
             focus = sf;
             dotsFor = dots;
             focusKey = key;
@@ -803,30 +780,9 @@ final class LyricView extends View {
             why |= 8;
         }
 
-        float simultaneousTarget = simultaneousGroupTop();
-        if (Float.isNaN(simultaneousTarget)) {
-            // Keep the last duet position through a one-line handoff. Clearing this state here
-            // lets a singer arriving immediately after an exit reseed from the ordinary stack,
-            // which makes the outgoing/incoming animation snap instead of continuing smoothly.
-            // A new song still clears it in layOut().
-        } else if (!simultaneousTopSet || still || dt <= 0f) {
-            if (!still && dt > 0f && simultaneousCount() >= 2) {
-                float seed = simultaneousEntryTop();
-                simultaneousTop = Float.isNaN(seed) ? simultaneousTarget : seed;
-            } else {
-                simultaneousTop = simultaneousTarget;
-            }
-            simultaneousTopWant = simultaneousTarget;
-            simultaneousTopSet = true;
-        } else {
-            simultaneousTopWant = simultaneousTarget;
-            simultaneousTop = approach(simultaneousTop, simultaneousTarget, dt, 0.16f);
-            simultaneousTopSet = true;
-        }
-        if (simultaneousExitLine >= 0 && now < simultaneousExitAt) {
-            changed = true;
-            why |= 256;
-        }
+        // Timing is updated after focus settles, so the duet model sees the same local window as
+        // the ordinary lyric stack. Its visual pose is advanced after that stack below.
+        updateDuetLyrics(n);
 
         float target = dotsFor >= 0 ? dotsTop[dotsFor] : base[readingFirst];
         // Band-relative so it means the same on any screen; the fallback is for the frames
@@ -889,10 +845,14 @@ final class LyricView extends View {
             // Finished lines in a Gentle lyric flow group keep their emphasis until it advances.
             // A simultaneous phrase is not a rapid sequence. It keeps both singers on the
             // stage even when Gentle lyric flow is grouping the ordinary, sequential rows.
-            boolean concurrentlySung = simultaneousVisible(i) && !focused;
+            boolean concurrentlySung = simultaneousDrawn(i) && !focused;
             boolean on = focused || retained(i) || concurrentlySung
                     || (dotsFor < 0 && i < focus && i >= focus - 2
-                    && ms >= l.start && ms < l.end);
+                    // Use DuetLyrics' liveness rather than the parent line end. A backing vocal
+                    // may extend the lead row, and a late final word can extend it too; fading
+                    // the row by the old timestamp while drawWords still fills that word was the
+                    // dim-highlight mismatch visible during duet handoffs.
+                    && sungNow(i));
             float eTo = on ? 1f : 0f;
             float e = approach(emph[i], eTo, dtTo, eTo > emph[i] ? TAU_EMPH_IN : TAU_EMPH_OUT);
             if (Math.abs(e - eTo) < 0.003f) e = eTo;
@@ -912,7 +872,7 @@ final class LyricView extends View {
                 why |= 64;
             }
             // Size: the focus at full size, the rest a little smaller, travelling with the scroll.
-            boolean sung = simultaneousVisible(i);
+            boolean sung = simultaneousDrawn(i);
             float scTo = focused || retained(i) || sung ? 1f : INACTIVE_SCALE;
             float sc = started ? approach(scale[i], scTo, dtTo, TAU_SCALE) : scale[i];
             if (Math.abs(sc - scTo) < 0.0005f) sc = scTo;
@@ -932,6 +892,8 @@ final class LyricView extends View {
                 why |= 128;
             }
         }
+        if (duetLyrics.animate(dt, still, anchorY(), base, scroll, height, bandTop, bandBottom,
+                GAP_DP * density)) why |= 256;
         if (!still && (wordsLive() || dotsLive())) why |= 256;
         LockLyrics.setGlowing(glowSoon());
         noteWhy(why);
@@ -950,8 +912,19 @@ final class LyricView extends View {
 
     /** Sung lines in the current fast group remain sharp and readable until the next group. */
     private boolean retained(int line) {
-        return LockLyrics.sRapidGroups && dotsFor < 0 && readingLast > readingFirst
+        boolean rapid = LockLyrics.sRapidGroups && dotsFor < 0 && readingLast > readingFirst
                 && line >= readingFirst && line <= focus;
+        return rapid || leavingSimultaneousStage(line);
+    }
+
+    /**
+     * Keep a duet's completed fill while the ordinary stack carries it away for the next line.
+     * Without this, the pair is no longer "currently simultaneous" as soon as the next focus
+     * starts, so word-timed rows fall back to their unfilled rendering mid-exit.
+     */
+    private boolean leavingSimultaneousStage(int line) {
+        if (dotsFor >= 0 || line >= focus || !duetLyrics.owns(line)) return false;
+        return moving(line) || moving(focus);
     }
 
     private boolean rapidGrouped(int line) {
@@ -1914,11 +1887,7 @@ final class LyricView extends View {
                 && oldVersion >= 0;
         for (int i = 0; i < n; i++) transFadeAt[i] = b.trans[i] != null && fxOn ? -1L : 0L;
         focus = -1;
-        simultaneousDropped = -1;
-        simultaneousTop = simultaneousTopWant = 0f;
-        simultaneousTopSet = false;
-        simultaneousFirst = simultaneousSecond = simultaneousExitLine = -1;
-        simultaneousExitAt = 0L;
+        duetLyrics.setLines(lines);
         dotsFor = -1;
         readingFirst = readingLast = -1;
         focusKey = Integer.MIN_VALUE;
@@ -2146,147 +2115,44 @@ final class LyricView extends View {
         return bandTop + ANCHOR * (bandBottom - bandTop) + anchorFix;
     }
 
-    private boolean sungNow(int i) {
-        return dotsFor < 0 && i >= 0 && i < lines.size()
-                && ms >= lines.get(i).start && ms < lines.get(i).end;
+    private void updateDuetLyrics(int n) {
+        if (dotsFor >= 0) {
+            duetLyrics.reset();
+            return;
+        }
+        duetLyrics.update(ms, Math.max(0, focus - 12), Math.min(n - 1, focus + 12));
     }
 
-    private void updateSimultaneousDrop(int n) {
-        int active = 0;
-        int oldest = -1;
-        int lo = Math.max(0, focus - 12), hi = Math.min(n - 1, focus + 12);
-        for (int i = lo; i <= hi; i++) {
-            if (!sungNow(i)) continue;
-            if (oldest < 0) oldest = i;
-            active++;
-        }
-        if (active == 0) {
-            simultaneousDropped = -1;
-        } else if (active >= 3 && simultaneousDropped < 0) {
-            simultaneousDropped = oldest;
-        } else if (simultaneousDropped >= 0
-                && (simultaneousDropped >= n
-                || ms >= lines.get(simultaneousDropped).end)) {
-            simultaneousDropped = -1;
-        }
+    private boolean sungNow(int i) {
+        return dotsFor < 0 && duetLyrics.active(i, ms);
     }
 
     /** The stage shows the two latest active rows; older overlapping rows are intentionally hidden. */
     private boolean simultaneousVisible(int i) {
-        if (!sungNow(i) || simultaneousSuppressed(i)) return false;
-        int latest = -1, previous = -1;
-        int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
-        for (int n = lo; n <= hi; n++) {
-            if (!sungNow(n)) continue;
-            previous = latest;
-            latest = n;
-        }
-        return i == latest || i == previous;
+        return sungNow(i) && duetLyrics.visible(i);
     }
 
     private boolean simultaneousSuppressed(int i) {
         // Once three voices overlap, keep the oldest one out for the rest of its phrase. This
         // prevents it returning through the normal stack when the middle voice ends first.
-        return i == simultaneousDropped && sungNow(i);
+        return duetLyrics.suppressed(i, ms);
     }
 
     private int simultaneousCount() {
-        int count = 0;
-        int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
-        for (int i = lo; i <= hi; i++) if (simultaneousVisible(i)) count++;
-        return count;
+        return dotsFor < 0 ? duetLyrics.count() : 0;
     }
 
     private float simultaneousScale() {
-        if (simultaneousCount() < 2) return 1f;
-        int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
-        float total = 0f;
-        float gap = GAP_DP * density;
-        int count = 0;
-        for (int i = lo; i <= hi; i++) {
-            if (!simultaneousVisible(i)) continue;
-            total += height[i];
-            count++;
-        }
-        if (count > 1) total += (count - 1) * gap;
-        float usable = Math.max(1f, bandBottom - bandTop - 8f * density);
-        return total <= usable ? 1f : Math.max(0.64f, usable / total);
+        return duetLyrics.scale(focus);
     }
 
     private float simultaneousHeight(int i) {
-        return sungNow(i) && simultaneousCount() > 1
-                ? height[i] * simultaneousScale() : height[i];
+        return duetLyrics.owns(i) ? height[i] * duetLyrics.scale(i) : height[i];
     }
 
-    private float simultaneousGroupTop() {
-        if (simultaneousCount() < 2) return Float.NaN;
-        int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
-        float total = 0f;
-        float gap = GAP_DP * density;
-        int count = 0;
-        int first = -1, second = -1;
-        for (int i = lo; i <= hi; i++) {
-            if (!simultaneousVisible(i)) continue;
-            if (first < 0) first = i;
-            else second = i;
-            total += height[i];
-            count++;
-        }
-        simultaneousFirst = first;
-        simultaneousSecond = second;
-        if (count > 1) total += (count - 1) * gap;
-        return bandTop + (bandBottom - bandTop - total * simultaneousScale()) * 0.5f;
-    }
-
-    /** Start a new duet at the existing singer's current stack position, not at its final center. */
-    private float simultaneousEntryTop() {
-        int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
-        float gap = GAP_DP * density;
-        float groupScale = simultaneousScale();
-        for (int i = lo; i <= hi; i++) {
-            if (!simultaneousVisible(i)) continue;
-            float current = anchorY() + base[i] - scroll[i];
-            float before = 0f;
-            for (int j = lo; j < i; j++) {
-                if (simultaneousVisible(j)) before += (height[j] + gap) * groupScale;
-            }
-            return current - before;
-        }
-        return Float.NaN;
-    }
-
-    /**
-     * Explicitly packs concurrently sung rows. The normal lyric stack must not be used here:
-     * its scroll target is intentionally based on one focus line and would displace a second
-     * singer as soon as the focus changes.
-     */
-    private float simultaneousY(int index) {
-        if (!sungNow(index)) return Float.NaN;
-        if (simultaneousCount() < 2) {
-            if (index != simultaneousExitLine || now() >= simultaneousExitAt) return Float.NaN;
-            float p = clamp01((now() - (simultaneousExitAt - SIMULTANEOUS_HANDOFF_MS))
-                    / (float) SIMULTANEOUS_HANDOFF_MS);
-            float target = anchorY() + base[index] - scroll[index];
-            return simultaneousExitFrom + (target - simultaneousExitFrom) * p;
-        }
-        int lo = Math.max(0, focus - 12), hi = Math.min(lines.size() - 1, focus + 12);
-        float gap = GAP_DP * density;
-        float total = 0f;
-        for (int i = lo; i <= hi; i++) {
-            if (simultaneousVisible(i)) total += height[i] + gap;
-        }
-        if (total > 0f) total -= gap;
-        float groupScale = simultaneousScale();
-        float targetTop = simultaneousTopSet ? simultaneousTop
-                : bandTop + (bandBottom - bandTop - total * groupScale) * 0.5f;
-        float y = targetTop;
-        for (int i = lo; i <= hi; i++) {
-            if (!simultaneousVisible(i)) continue;
-            if (i == index) return y;
-            y += (height[i] + gap) * groupScale;
-        }
-        return Float.NaN;
-    }
+    private float simultaneousY(int i) { return duetLyrics.y(i); }
+    private boolean simultaneousDrawn(int i) { return duetLyrics.owns(i); }
+    private float simultaneousDepartureAlpha(int i) { return duetLyrics.alpha(i); }
 
     // ------------------------------------------------------------------ drawing
 
@@ -2333,7 +2199,7 @@ final class LyricView extends View {
         }
         canvas.clipRect(0f, bandTop, getWidth(), bandBottom);
         for (int i = Math.max(0, focus - 12); i < n; i++) {
-            if (simultaneousStage && !simultaneousVisible(i)) continue;
+            if (simultaneousStage && !simultaneousDrawn(i)) continue;
             // The interlude slot above this line, if it has one: its dots move with the line, and
             // sit there dim from the start rather than leaving a hole until their turn.
             if (!simultaneousStage && !Float.isNaN(dotsTop[i])) {
@@ -2348,7 +2214,7 @@ final class LyricView extends View {
             }
             // Eye-candy never previews a future lyric line before its own timestamp.
             if (i > revealThrough) break;
-            if (simultaneousSuppressed(i)) continue;
+            if (simultaneousSuppressed(i) && !duetLyrics.owns(i)) continue;
             float simultaneousTop = simultaneousY(i);
             float y = Float.isNaN(simultaneousTop)
                     ? anchor + base[i] - scroll[i] : simultaneousTop;
@@ -2360,10 +2226,11 @@ final class LyricView extends View {
             float edge = Math.min(clamp01((y - bandTop) / fade),
                     clamp01((bandBottom - (y + renderedHeight)) / fade));
             float a = vis * edge;
+            a *= simultaneousDepartureAlpha(i);
             // Lines already sung, above the focus, sit further back than the ones to come.
             // Keep finished rows bright until their Gentle lyric flow group is released.
             if ((dotsFor >= 0 ? i < dotsFor : i < focus)
-                    && !retained(i) && (LockLyrics.sRapidGroups || !sungNow(i))) a *= ABOVE_ALPHA;
+                    && !retained(i) && !sungNow(i)) a *= ABOVE_ALPHA;
             if (a <= 0.003f) continue;
             drawLine(canvas, i, side, y, a);
         }
@@ -2442,7 +2309,7 @@ final class LyricView extends View {
         StaticLayout lay = main[i];
         float e = emph[i];
         float sc = scale[i];
-        if (simultaneousVisible(i) && simultaneousCount() > 1) sc *= simultaneousScale();
+        if (simultaneousDrawn(i)) sc *= duetLyrics.scale(i);
         // Pivot on the line's own edge, so a size change does not shift it sideways.
         Layout.Alignment align = alignFor(l.opposite, builtAlign);
         float pivotX = align == Layout.Alignment.ALIGN_CENTER ? lay.getWidth() / 2f
