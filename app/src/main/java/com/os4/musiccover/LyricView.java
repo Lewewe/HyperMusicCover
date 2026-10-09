@@ -2174,7 +2174,12 @@ final class LyricView extends View {
     private void drawLyrics(Canvas canvas) {
         drawCount++;
         if (show <= 0.003f) return;
-        if (lines.isEmpty()) { drawBpmCompanion(canvas); return; }
+        if (lines.isEmpty()) {
+            if (LockLyrics.hasBpmCompanion() || LockLyrics.bpmSearchingLyrics()) {
+                drawBpmCompanion(canvas);
+            }
+            return;
+        }
         if (focus < 0 || main.length != lines.size()) return;
         float bandH = bandBottom - bandTop;
         if (bandH <= 0f) return;
