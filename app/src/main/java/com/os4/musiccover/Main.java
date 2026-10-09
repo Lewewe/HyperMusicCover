@@ -2408,20 +2408,24 @@ public class Main extends XposedModule {
                             saveState();
                         }
                     } else if ("spicylyricscfg".equals(op)) {
+                        String previous = NextLyrics.configurationKey();
                         if (i.hasExtra("apikey")) {
                             String key = i.getStringExtra("apikey");
                             LockLyrics.sSpicyLyricsApiKey = key == null ? "" : key.trim();
                         }
                         if (i.hasExtra("on")) LockLyrics.sSpicyLyricsEnabled = i.getBooleanExtra("on", true);
+                        if (!previous.equals(NextLyrics.configurationKey())) LockLyrics.searchModeChanged();
                         Xp.log(TAG + "Spicy Lyrics settings updated");
                         saveState();
                      } else if ("lyricproviders".equals(op)) {
+                        String previous = NextLyrics.configurationKey();
                         LockLyrics.sProviderQq = i.getBooleanExtra("qq", LockLyrics.sProviderQq);
                         LockLyrics.sProviderNetease = i.getBooleanExtra("netease", LockLyrics.sProviderNetease);
                         LockLyrics.sProviderKuwo = i.getBooleanExtra("kuwo", LockLyrics.sProviderKuwo);
                         LockLyrics.sProviderKugou = i.getBooleanExtra("kugou", LockLyrics.sProviderKugou);
                         LockLyrics.sProviderLrcLib = i.getBooleanExtra("lrclib", LockLyrics.sProviderLrcLib);
                         LockLyrics.sProviderVariants = i.getBooleanExtra("variants", LockLyrics.sProviderVariants);
+                        if (!previous.equals(NextLyrics.configurationKey())) LockLyrics.searchModeChanged();
                         saveState();
                     } else if ("lyricofflinecache".equals(op)) {
                         boolean on = i.getBooleanExtra("on", LockLyrics.sOfflineCache);

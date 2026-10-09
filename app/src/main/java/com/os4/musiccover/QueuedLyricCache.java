@@ -21,8 +21,8 @@ final class QueuedLyricCache {
         }
     }
 
-    static Entry read(String pkg, String mediaId) {
-        JSONObject root = LyricDiskCache.read("ready", key(pkg, mediaId));
+    static Entry read(String pkg, String mediaId, String configuration) {
+        JSONObject root = LyricDiskCache.read("ready-config-v2", key(pkg, mediaId, configuration));
         if (root == null) return null;
         try {
             JSONArray rows = root.optJSONArray("lines");
@@ -40,9 +40,9 @@ final class QueuedLyricCache {
     }
 
     static void write(String pkg, String mediaId, List<LyricLine> lines, int source,
-                      boolean translated) {
+                      boolean translated, String configuration) {
         if (lines == null || lines.isEmpty()) return;
-        Entry old = read(pkg, mediaId);
+        Entry old = read(pkg, mediaId, configuration);
         // A live lookup may have richer metadata than queue prefetch, but it must not turn an
         // already cached word-timed lyric back into a merely line-timed one. A translated result
         // is also retained over an otherwise equal untranslated refresh.
@@ -56,12 +56,28 @@ final class QueuedLyricCache {
             JSONArray rows = new JSONArray();
             for (LyricLine line : lines) if (line != null) rows.put(json(line));
             root.put("lines", rows);
-            LyricDiskCache.write("ready", key(pkg, mediaId), root);
+            LyricDiskCache.write("ready-config-v2", key(pkg, mediaId, configuration), root);
         } catch (Throwable ignored) { }
     }
 
-    private static String key(String pkg, String mediaId) {
-        return pkg == null || mediaId == null || mediaId.isEmpty() ? "" : pkg + '|' + mediaId;
+    private static String key(String pkg, String mediaId, String configuration) {
+        return pkg == null || mediaId == null || mediaId.isEmpty() ? ""
+                : LyricCacheScope.track(configuration, pkg, mediaId);
+    }
+
+    /** Keep the live source cache independent of an online result stored in the queue cache. */
+    static List<LyricLine> withoutOnline(List<LyricLine> lines) {
+        ArrayList<LyricLine> nativeLines = new ArrayList<>(lines.size());
+        for (LyricLine line : lines) nativeLines.add(withoutOnline(line));
+        return nativeLines;
+    }
+
+    private static LyricLine withoutOnline(LyricLine line) {
+        if (line == null) return null;
+        LyricLine copy = new LyricLine(line.text, line.translation, line.roma, line.start, line.end,
+                line.opposite, line.sylStart, line.sylEnd, line.charEnd);
+        copy.bg = withoutOnline(line.bg);
+        return copy;
     }
 
     private static int quality(List<LyricLine> lines) {

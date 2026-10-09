@@ -21,15 +21,64 @@ final class NextLyrics {
     private static final String TAG = "[MCPre] ";
     private static final int READY_MAX = 3;
 
+    private static volatile long sConfigurationRevision;
+
+    static final class Context {
+        final String configuration;
+        final long revision;
+        Context(String configuration, long revision) {
+            this.configuration = configuration;
+            this.revision = revision;
+        }
+    }
+
+    static String configurationKey() {
+        return LyricCacheScope.digest("lyric-settings-v2",
+                String.valueOf(LockLyrics.sSearchMode),
+                String.valueOf(LockLyrics.sProviderQq), String.valueOf(LockLyrics.sProviderNetease),
+                String.valueOf(LockLyrics.sProviderKuwo), String.valueOf(LockLyrics.sProviderKugou),
+                String.valueOf(LockLyrics.sProviderLrcLib), String.valueOf(LockLyrics.sProviderVariants),
+                String.valueOf(LockLyrics.sSpicyLyricsEnabled), LockLyrics.sSpicyLyricsApiKey,
+                LockLyrics.sTranslateProvider, LockLyrics.sTranslateEndpoint,
+                LockLyrics.sTranslateSourceLang, LockLyrics.sTranslateTargetLang,
+                String.valueOf(LockLyrics.sOnlineTranslateMode), LockLyrics.sTranslateApiKey);
+    }
+
+    static Context context() {
+        synchronized (READY) {
+            return new Context(configurationKey(), sConfigurationRevision);
+        }
+    }
+
+    static boolean isCurrent(Context context) {
+        return context != null && LyricCacheScope.current(context.revision, context.configuration,
+                sConfigurationRevision, configurationKey());
+    }
+
+    /** Forget obsolete RAM results, leaving separately scoped disk entries available for reuse. */
+    static void configurationChanged() {
+        List<LyricsCallback> waiters = new ArrayList<>();
+        synchronized (READY) {
+            sConfigurationRevision++;
+            READY.clear();
+            LOADING.clear();
+            for (List<LyricsCallback> callbacks : WAITERS.values()) waiters.addAll(callbacks);
+            WAITERS.clear();
+        }
+        for (LyricsCallback waiter : waiters) waiter.onReady(null);
+        warmAhead();
+    }
+
     /** Complete provider result for one of previous/current/next, held only in RAM. */
     static final class Lyrics {
         final String pkg, mediaId, title, artist;
         final List<LyricLine> lines;
         final int source;
         final boolean translated;
+        final Context context;
 
         Lyrics(String pkg, Prefetch.Item item, List<LyricLine> lines, int source,
-               boolean translated) {
+               boolean translated, Context context) {
             this.pkg = pkg;
             this.mediaId = item.mediaId;
             this.title = item.title;
@@ -37,10 +86,11 @@ final class NextLyrics {
             this.lines = lines;
             this.source = source;
             this.translated = translated;
+            this.context = context;
         }
 
         Lyrics(String pkg, String mediaId, List<LyricLine> lines, int source,
-               boolean translated) {
+               boolean translated, Context context) {
             this.pkg = pkg;
             this.mediaId = mediaId;
             this.title = null;
@@ -48,6 +98,7 @@ final class NextLyrics {
             this.lines = lines;
             this.source = source;
             this.translated = translated;
+            this.context = context;
         }
 
         boolean matches(MediaController controller) {
@@ -102,17 +153,20 @@ final class NextLyrics {
         final Prefetch.Item item = items.get(at + 1);
         if (item.title == null || item.title.isEmpty() || item.artist == null
                 || item.artist.isEmpty()) return;
-        final String key = key(pkg, item);
+        final Context context = context();
+        final String key = key(pkg, item, context.configuration);
+        final String request = request(key, context);
         synchronized (READY) {
-            if (READY.containsKey(key) || !LOADING.add(key)) return;
+            if (READY.containsKey(key) || !LOADING.add(request)) return;
         }
         lyricWork().post(new Runnable() {
             @Override public void run() {
                 try {
-                    QueuedLyricCache.Entry cached = QueuedLyricCache.read(pkg, item.mediaId);
+                    if (!isCurrent(context)) return;
+                    QueuedLyricCache.Entry cached = QueuedLyricCache.read(pkg, item.mediaId, context.configuration);
                     if (cached != null) {
-                        complete(key, new Lyrics(pkg, item, cached.lines, cached.source,
-                                cached.translated));
+                        complete(key, request, context, new Lyrics(pkg, item, cached.lines, cached.source,
+                                cached.translated, context));
                         Xp.log(TAG + "restored ready lyrics for \"" + item.title + "\": "
                                 + cached.lines.size() + " lines");
                         return;
@@ -122,17 +176,19 @@ final class NextLyrics {
                             item.mediaId, new LyricSource.AheadCallback() {
                                 @Override public void onLines(final List<LyricLine> lines,
                                                               String why, final int source) {
-                                    LockLyrics.translateAhead(key, lines,
+                                    if (!isCurrent(context)) return;
+                                    LockLyrics.translateAhead(key, lines, context,
                                             new LockLyrics.AheadTranslationCallback() {
                                                 @Override public void onReady(List<LyricLine> merged,
                                                                               boolean translated) {
+                                                    if (!isCurrent(context)) return;
                                                     List<LyricLine> ready = merged == null
                                                             ? java.util.Collections.<LyricLine>emptyList()
                                                             : merged;
                                                     QueuedLyricCache.write(pkg, item.mediaId, ready,
-                                                            source, translated);
-                                                    complete(key, new Lyrics(pkg, item, ready, source,
-                                                            translated));
+                                                            source, translated, context.configuration);
+                                                    complete(key, request, context, new Lyrics(pkg, item, ready, source,
+                                                            translated, context));
                                                     Xp.log(TAG + "prepared \"" + item.title + "\": "
                                                             + (merged == null ? 0 : merged.size())
                                                             + " lines (" + why + ")");
@@ -141,7 +197,7 @@ final class NextLyrics {
                                 }
                             });
                 } catch (Throwable t) {
-                    complete(key, null);
+                    complete(key, request, context, null);
                     Xp.w(TAG + "reading ahead failed: " + t);
                 }
             }
@@ -152,7 +208,7 @@ final class NextLyrics {
         if (controller == null) return null;
         synchronized (READY) {
             for (Lyrics lyrics : READY.values()) {
-                if (!lyrics.lines.isEmpty() && lyrics.matches(controller)) return lyrics;
+                if (isCurrent(lyrics.context) && !lyrics.lines.isEmpty() && lyrics.matches(controller)) return lyrics;
             }
         }
         return null;
@@ -162,7 +218,8 @@ final class NextLyrics {
         if (controller == null || callback == null) return false;
         Prefetch.Item item = itemOf(controller);
         if (item == null) return false;
-        String key = key(controller.getPackageName(), item);
+        Context context = context();
+        String key = request(key(controller.getPackageName(), item, context.configuration), context);
         synchronized (READY) {
             if (!LOADING.contains(key)) return false;
             List<LyricsCallback> waiters = WAITERS.get(key);
@@ -181,15 +238,17 @@ final class NextLyrics {
     }
 
     static void persistReady(String pkg, String mediaId, List<LyricLine> lines, int source,
-                             boolean translated) {
+                             boolean translated, Context context) {
+        if (!isCurrent(context)) return;
         if (pkg == null || pkg.isEmpty() || mediaId == null || mediaId.isEmpty()
                 || lines == null || lines.isEmpty()) return;
-        QueuedLyricCache.write(pkg, mediaId, lines, source, translated);
-        String key = pkg + '|' + mediaId;
+        QueuedLyricCache.write(pkg, mediaId, lines, source, translated, context.configuration);
+        String key = LyricCacheScope.track(context.configuration, pkg, mediaId);
         synchronized (READY) {
+            if (!isCurrent(context)) return;
             Lyrics old = READY.get(key);
             if (old == null || !LyricSource.words(old.lines) || LyricSource.words(lines)) {
-                READY.put(key, new Lyrics(pkg, mediaId, lines, source, translated));
+                READY.put(key, new Lyrics(pkg, mediaId, lines, source, translated, context));
             }
         }
     }
@@ -216,9 +275,11 @@ final class NextLyrics {
         if (item == null) return "none";
         Lyrics ready;
         boolean loading;
+        Context context = context();
         synchronized (READY) {
-            ready = READY.get(key(pkg, item));
-            loading = LOADING.contains(key(pkg, item));
+            String key = key(pkg, item, context.configuration);
+            ready = READY.get(key);
+            loading = LOADING.contains(request(key, context));
         }
         String state;
         if (ready != null && !ready.lines.isEmpty()) {
@@ -234,19 +295,25 @@ final class NextLyrics {
                 + " " + state;
     }
 
-    private static void complete(String key, Lyrics lyrics) {
+    private static void complete(String key, String request, Context context, Lyrics lyrics) {
         List<LyricsCallback> waiters;
         synchronized (READY) {
-            LOADING.remove(key);
+            LOADING.remove(request);
+            waiters = WAITERS.remove(request);
+            if (!isCurrent(context)) return;
             if (lyrics != null) READY.put(key, lyrics);
-            waiters = WAITERS.remove(key);
         }
         if (waiters != null) for (LyricsCallback waiter : waiters) waiter.onReady(lyrics);
     }
 
-    private static String key(String pkg, Prefetch.Item item) {
-        return pkg + '|' + (item.mediaId != null && !item.mediaId.isEmpty()
-                ? item.mediaId : item.title + '|' + item.artist);
+    private static String key(String pkg, Prefetch.Item item, String configuration) {
+        String identity = item.mediaId != null && !item.mediaId.isEmpty() ? item.mediaId
+                : LyricCacheScope.digest(item.title, item.artist);
+        return LyricCacheScope.track(configuration, pkg, identity);
+    }
+
+    private static String request(String key, Context context) {
+        return context.revision + "|" + key;
     }
 
     private static Prefetch.Item itemOf(MediaController controller) {
