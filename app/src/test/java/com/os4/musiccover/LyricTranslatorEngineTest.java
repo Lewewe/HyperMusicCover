@@ -52,7 +52,7 @@ public class LyricTranslatorEngineTest {
     }
 
     @Test
-    public void latinLyricsTranslateWhileNativeTranslationsAreNotRequested() throws Exception {
+    public void onlineModeTranslatesLyricsEvenWhenTheProviderSuppliesTranslations() throws Exception {
         FakeTranslator translator = new FakeTranslator("translated: ");
         LyricLine nativeLine = line("native", "already translated", 0);
         List<LyricLine> lines = Arrays.asList(nativeLine, line("bonjour", null, 1000));
@@ -62,7 +62,7 @@ public class LyricTranslatorEngineTest {
         result.await();
         assertNull(result.failure);
         assertEquals(1, translator.requests);
-        assertSame(nativeLine, result.lines.get(0));
+        assertEquals("translated: native", result.lines.get(0).onlineTranslation);
         assertEquals("translated: bonjour", result.lines.get(1).onlineTranslation);
     }
 
@@ -92,19 +92,20 @@ public class LyricTranslatorEngineTest {
     }
 
     @Test
-    public void allNativeTranslationsAndDisabledModeNeverRequest() throws Exception {
+    public void onlineModeTranslatesAllNativeTranslationsButDisabledModeDoesNotRequest() throws Exception {
         FakeTranslator translator = new FakeTranslator("unexpected");
         Result nativeResult = new Result();
         translator.translate("all-native-engine-test", Arrays.asList(line("bonjour", "hello", 0)),
                 new LyricTranslator.Config("https://server.example", "", "auto", "en", 1), nativeResult);
         nativeResult.await();
-        assertNotNull(nativeResult.failure);
+        assertNull(nativeResult.failure);
+        assertEquals("unexpectedbonjour", nativeResult.lines.get(0).onlineTranslation);
         Result off = new Result();
         translator.translate("off-engine-test", Arrays.asList(line("bonjour", null, 0)),
                 new LyricTranslator.Config("https://server.example", "", "auto", "en", 0), off);
         off.await();
         assertNotNull(off.failure);
-        assertEquals(0, translator.requests);
+        assertEquals(1, translator.requests);
     }
 
     @Test

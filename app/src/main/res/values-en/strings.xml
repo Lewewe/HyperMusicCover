@@ -159,6 +159,10 @@
     <string name="lyrics_hdr">HDR highlight (experimental)</string>
     <string name="lyrics_hdr_summary">May drop frames</string>
     <string name="lyrics_keep_on">Keep the screen on for lyrics</string>
+    <string name="lyrics_offline_cache">Keep lyrics for offline playback</string>
+    <string name="lyrics_offline_cache_summary">Stores lyrics and online translations on this device. Useful on poor or unreliable internet connections. The cache will be updated if better lyrics are found. Turning this off will clear the cache.</string>
+    <string name="lyrics_close_without_lyrics">Close cover when lyrics are unavailable</string>
+    <string name="lyrics_close_without_lyrics_summary">When enabled, tapping the cover exits cover mode for tracks without lyrics.</string>
     <string name="hide_fingerprint">Hide lock screen fingerprint icon</string>
     <!-- See the default strings for how the items map onto the module's fpavoid values. -->
     <string name="fp_sink">Notifications sink</string>
@@ -258,11 +262,11 @@
     <string name="lyrics_online_endpoint_hint">Endpoint URL (LibreTranslate compatible)</string>
     <string name="lyrics_online_google_note">Lyrics go to Google Cloud. Enable Cloud Translation API and billing in your own project, restrict the key to this API and set quotas. Usage may incur charges. No bundled key.</string>
     <string name="lyrics_online_invalid_config">Enter a valid HTTP(S) URL for custom servers, or your API key for Google/DeepL, and valid language codes.</string>
-    <string name="lyrics_online_language_note">Use provider-supported language codes, e.g. auto → en, zh or ja. DeepL also supports target variants such as EN-US. Existing source translations are kept. Changing service clears the API key; backups never include it.</string>
+    <string name="lyrics_online_language_note">Use provider-supported language codes, e.g. auto → en, zh or ja. DeepL also supports target variants such as EN-US. Online mode replaces source translations. Changing service clears the API key; backups never include it.</string>
     <string name="lyrics_online_mode">Online translation</string>
     <string name="lyrics_online_mode_dual">Original + translation</string>
     <string name="lyrics_online_mode_off">Off</string>
-    <string name="lyrics_online_mode_summary">Translates asynchronously after parsing and keeps word timing untouched</string>
+    <string name="lyrics_online_mode_summary">Translates asynchronously after parsing, replaces provider translations, and keeps word timing untouched</string>
     <string name="lyrics_online_provider_custom">Custom · LibreTranslate</string>
     <string name="lyrics_online_provider_deepl_free">DeepL API · Free</string>
     <string name="lyrics_online_provider_deepl_pro">DeepL API · Pro</string>

@@ -669,6 +669,8 @@ public class Main extends XposedModule {
      * artwork does. Tapping again brings the cover back.
      */
     private static volatile boolean sTapToggle = true;
+    /** Optional: let a single tap leave cover mode when the current track has no lyrics. */
+    private static volatile boolean sCloseLyriclessCover;
     /**
      * Whether the wallpaper crossfades between the album cover and the lock wallpaper instead of
      * swapping in one frame. The fade itself runs in the wallpaper process, which is the only
@@ -1912,6 +1914,7 @@ public class Main extends XposedModule {
                             : "\nclockreference=" + ClockCollapse.sizeReferenceState())
                     + "\nmctap=" + (sMcTitleTap ? 1 : 0)
                     + "\ntap=" + (sTapToggle ? 1 : 0)
+                    + "\nlyriclessclose=" + (sCloseLyriclessCover ? 1 : 0)
                     + ShadeLayer.dumpCfg()
                     + "\nfadewp=" + (sFadeWp ? 1 : 0)
                     + "\nvcfade=" + (sVideoFade ? 1 : 0)
@@ -2046,6 +2049,7 @@ public class Main extends XposedModule {
                         // reachable from its own op, for the session.
                         else if ("mctap".equals(k)) sMcTitleTap = "1".equals(v);
                         else if ("tap".equals(k)) sTapToggle = "1".equals(v);
+                        else if ("lyriclessclose".equals(k)) sCloseLyriclessCover = "1".equals(v);
                         else if ("fadewp".equals(k)) sFadeWp = "1".equals(v);
                         else if ("vcfade".equals(k)) sVideoFade = "1".equals(v);
                         else if ("fsmode2".equals(k)) sFadeMode = Integer.parseInt(v);
@@ -2467,6 +2471,10 @@ public class Main extends XposedModule {
                         LockLyrics.sKeepOn = i.getBooleanExtra("on", !LockLyrics.sKeepOn);
                         Xp.log(TAG + "lyrics keep the screen on: " + LockLyrics.sKeepOn);
                         LockLyrics.refresh();
+                        saveState();
+                    } else if ("lyriclessclose".equals(op)) {
+                        sCloseLyriclessCover = i.getBooleanExtra("on", !sCloseLyriclessCover);
+                        Xp.log(TAG + "close lyricless cover on tap: " + sCloseLyriclessCover);
                         saveState();
                     } else if ("lyricdemo".equals(op)) {
                         // Plays a database file by id on its own clock, whatever is playing:
@@ -2903,6 +2911,7 @@ public class Main extends XposedModule {
                         out.putBoolean("mclyricart", sMcArtInLyrics);
                         out.putBoolean("mctap", sMcTitleTap);
                         out.putBoolean("tap", sTapToggle);
+                        out.putBoolean("lyriclessclose", sCloseLyriclessCover);
                         out.putBoolean("fadewp", sFadeWp);
                         out.putInt("fsmode2", sFadeMode);
                         out.putBoolean("vcfade", sVideoFade);
@@ -10358,8 +10367,9 @@ public class Main extends XposedModule {
         }
         if (y < top || y > bottom) return;
         if (sCoverMode) {
-            if (LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
-                // Keep the media player and clock in place; this is not a scene exit to pill.
+            if (!sCloseLyriclessCover && LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
+                // Default behaviour: without a lyric page, retain the cover scene and compact
+                // its artwork rather than treating a tap as a scene exit.
                 if (!LockLyrics.compactWithoutLyrics()) {
                     beginCompactArtworkMorph(false);
                     LockLyrics.setArtworkCompact(true);

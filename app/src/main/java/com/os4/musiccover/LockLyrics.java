@@ -1875,7 +1875,7 @@ final class LockLyrics {
     // ------------------------------------------------------------------ internals
 
     private static void setLines(List<LyricLine> lines, String why) {
-        sLines = lines == null ? Collections.<LyricLine>emptyList() : lines;
+        sLines = displayLines(lines);
         if (!sLines.isEmpty() && wanted()) sArtworkPage.preferCompact();
         // Only a settled answer: the empty set a track change puts up while it looks is not one.
         if (!sLoading) sHadLyrics = !sLines.isEmpty();
@@ -1883,6 +1883,33 @@ final class LockLyrics {
         sWhy = why;
         Xp.log(TAG + sLines.size() + " lines: " + why);
         refresh();
+    }
+
+    /**
+     * The source list remains in the cache untouched, but online mode must never hand a
+     * provider's translation to the renderer. Romanisation is retained as optional presentation
+     * data, placed beneath the online result when the user enables it. This keeps the display
+     * contract independent of which provider/parser produced the line and restores the source
+     * data automatically when online mode is switched off.
+     */
+    static List<LyricLine> displayLines(List<LyricLine> source) {
+        if (source == null || source.isEmpty()) return Collections.emptyList();
+        if (sOnlineTranslateMode == TR_MODE_OFF) return source;
+        ArrayList<LyricLine> displayed = new ArrayList<>(source.size());
+        boolean changed = false;
+        for (LyricLine line : source) {
+            if (line == null || line.translation == null) {
+                displayed.add(line);
+                continue;
+            }
+            LyricLine copy = new LyricLine(line.text, null, line.roma, line.start, line.end,
+                    line.opposite, line.sylStart, line.sylEnd, line.charEnd);
+            copy.onlineTranslation = line.onlineTranslation;
+            copy.bg = line.bg;
+            displayed.add(copy);
+            changed = true;
+        }
+        return changed ? displayed : source;
     }
 
     /** The session's position is re-read now and then, not per frame: it is a binder call. */
