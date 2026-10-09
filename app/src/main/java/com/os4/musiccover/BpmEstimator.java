@@ -52,6 +52,15 @@ final class BpmEstimator {
             "别担心，一切都会好起来的",
             "没有歌词.."
     };
+    private static final String[] SEARCH_FACES = {
+            "(・_・?)", "(・・ )", "(¬_¬)", "(・へ・)", "(⊙_⊙)"
+    };
+    private static final String[] SEARCH_MESSAGES_EN = {
+            "looking for your lyrics…", "checking for lyrics…", "searching for lyrics…"
+    };
+    private static final String[] SEARCH_MESSAGES_ZH = {
+            "正在寻找歌词…", "正在检查歌词…", "正在搜索歌词…"
+    };
 
     static String presentationFace(int seed) {
         return FACES[Math.floorMod(seed, FACES.length)];
@@ -60,6 +69,16 @@ final class BpmEstimator {
     static String presentationMessage(int seed) {
         String[] messages = Locale.getDefault().getLanguage().startsWith("zh")
                 ? MESSAGES_ZH : MESSAGES_EN;
+        return messages[Math.floorMod(seed, messages.length)];
+    }
+
+    static String searchingFace(int seed) {
+        return SEARCH_FACES[Math.floorMod(seed, SEARCH_FACES.length)];
+    }
+
+    static String searchingMessage(int seed) {
+        String[] messages = Locale.getDefault().getLanguage().startsWith("zh")
+                ? SEARCH_MESSAGES_ZH : SEARCH_MESSAGES_EN;
         return messages[Math.floorMod(seed, messages.length)];
     }
 

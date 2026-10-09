@@ -2249,8 +2249,9 @@ final class LyricView extends View {
         long beatAt = LockLyrics.bpmBeatAt();
         long sinceBeat = beatAt == 0L ? Long.MAX_VALUE : Math.max(0L, now() - beatAt);
         float pulse = sinceBeat == Long.MAX_VALUE ? 0f : (float) Math.exp(-sinceBeat / 190f);
-        String face = LockLyrics.bpmFace();
-        String label = LockLyrics.bpmMessage();
+        boolean searchingLyrics = LockLyrics.bpmSearchingLyrics();
+        String face = searchingLyrics ? LockLyrics.bpmSearchingFace() : LockLyrics.bpmFace();
+        String label = searchingLyrics ? LockLyrics.bpmSearchingMessage() : LockLyrics.bpmMessage();
         postInvalidateOnAnimation();
         TextPaint p = new TextPaint(paint);
         p.setTextSize(textPx * (1.18f + pulse * .09f));
@@ -2266,7 +2267,7 @@ final class LyricView extends View {
         p.setTextSize(textPx * .48f);
         p.setAlpha((int) (255 * show * .72f));
         canvas.drawText(label, cx - p.measureText(label) * .5f, cy + textPx * 1.22f, p);
-        if (bpm >= 40) {
+        if (!searchingLyrics && bpm >= 40) {
             long foundAt = LockLyrics.bpmFoundAt();
             float bpmFade = foundAt == 0L ? 0f
                     : Math.min(1f, Math.max(0L, now() - foundAt) / 900f);

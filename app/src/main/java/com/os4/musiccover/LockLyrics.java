@@ -584,6 +584,9 @@ final class LockLyrics {
         return sBpmEnabled && !sKey.isEmpty() && sLines.isEmpty()
                 && SystemClock.uptimeMillis() - sTrackChangedAt >= 3000L;
     }
+    static boolean bpmSearchingLyrics() {
+        return sLoading;
+    }
     static int bpm() { return sBpm; }
     static long bpmFoundAt() { return sBpmFoundAt; }
     static boolean bpmEstimating() { return BpmEstimator.estimating(); }
@@ -599,6 +602,12 @@ final class LockLyrics {
     }
     static String bpmMessage() {
         return BpmEstimator.presentationMessage(bpmPresentationSeed());
+    }
+    static String bpmSearchingFace() {
+        return BpmEstimator.searchingFace(bpmPresentationSeed());
+    }
+    static String bpmSearchingMessage() {
+        return BpmEstimator.searchingMessage(bpmPresentationSeed());
     }
     private static void requestBpm(final String key, MediaController controller) {
         sBpm = 0;
