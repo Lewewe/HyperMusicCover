@@ -162,8 +162,8 @@ final class LyricView extends View {
     private static final int LIFT_RETURN_MS = 280;
     /** Karaoke letters ease in over a short, softly blurred offset. */
     private static final int KARAOKE_LETTER_FLY_MS = 250;
-    /** Eye-candy's deliberately theatrical entrance: a word arrives with a visible overshoot. */
-    private static final int EYE_WORD_FLY_MS = 420;
+    /** The last timed token needs a finite, calm focus transition. */
+    private static final int EYE_WORD_FLY_MS = 200;
     /** A syllable at least this long is a held note, and glows. */
     private static final int GLOW_MIN_MS = 1000;
     private static final float GLOW_DP = 9f;
@@ -2894,24 +2894,37 @@ final class LyricView extends View {
             if (!aliveEffects) {
                 float wordRise = smoothUnit(clamp01((ms - s) / (float) BASIC_WORD_RISE_MS));
                 lift = glowOn ? liftPx * 1.65f * e * wordRise : 0f;
+            } else if (AliveLyricsEffects.eyeCandy(fx)) {
+                // Eye-candy supplies the same rise per shaped grapheme in its reveal pass.
+                // Do not lift the whole syllable first or the individual rises would stack.
+                lift = 0f;
             } else {
                 // Alive motion is part of the lyric effect and is layered on this shared rise.
                 lift = liftPx * liftScale * e * letterRise(syllableProgress, end);
             }
-            float glow = 0f;
+            // The visual tail is allowed on every completed token, but HDR is deliberately
+            // reserved for a held note. Coupling the two made every short word flash above
+            // white as its tail began, especially on character-timed lyrics.
+            float sustainedGlow = 0f;
             boolean syllableStarted = sungChars > cs;
             if (LockLyrics.sHdr && glowOn && syllableStarted
                     && dur >= GLOW_MIN_MS) {
-                glow = ms < end ? clamp01((ms - s) / (dur * 0.3f))
+                sustainedGlow = ms < end ? clamp01((ms - s) / (dur * 0.3f))
                         : 1f - clamp01((ms - end) / (float) GLOW_TAIL_MS);
-                glow *= e;
+                sustainedGlow *= e;
             }
+            float glow = sustainedGlow;
             if (aliveEffects && glowOn) {
                 float trail = AliveLyricsEffects.wordTrailIntensity(fx, ms, end, dur, GLOW_MIN_MS);
                 if (trail > 0f) glow = Math.max(glow, trail * e);
             }
+            float hdrGlow = 0f;
             if (glow > 0f) {
-                glow = clamp01(glow * AliveLyricsEffects.glowMultiplier(fx));
+                float multiplier = AliveLyricsEffects.glowMultiplier(fx);
+                glow = clamp01(glow * multiplier);
+                // Never let a short-token trail change the canvas' HDR brightness. It is an
+                // SDR halo only; a long, still-held note is the one intentional HDR event.
+                hdrGlow = clamp01(sustainedGlow * multiplier);
             }
             float x0 = xs[cs];
             if (glow > 0.01f) {
@@ -2920,7 +2933,7 @@ final class LyricView extends View {
                 float widthScale = AliveLyricsEffects.glowWidthScale(fx, dur, GLOW_MIN_MS, glow);
                 float swell = 1f + GLOW_SWELL * glow * widthScale;
                 c.scale(swell, swell, (x0 + x1) / 2f, baseline);
-                float g = glowGain(glow);
+                float g = glowGain(hdrGlow);
                 long halo = white(GLOW_ALPHA * glow, g);
                 p.setShadowLayer(glowPx * glow * widthScale, 0f, 0f, halo);
                 // The glowing syllable itself goes above white with its halo: its sung part
@@ -3026,7 +3039,7 @@ final class LyricView extends View {
                 drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, baseline, false, gain);
             } else {
                 setWordEntrance(l, syllable, cs, phraseOnset, true);
-                drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, phraseOnset,
+                drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, phraseOnset, start, end,
                         phraseOnset,
                         AliveLyricsEffects.wordEntranceMs(LockLyrics.sAliveFx, true),
                         baseline, whiteness, lead, gain, eyeWordMotion[0],
@@ -3047,15 +3060,16 @@ final class LyricView extends View {
         if (eyeCandy && usesWordPreview(l)) {
             int wordPreviewAfter = syllable == 0 ? l.start : l.sylStart[syllable - 1];
             setWordEntrance(l, syllable, cs, entranceStart, true);
-            drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, entranceStart,
-                    wordPreviewAfter, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+            drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, entranceStart, start, end,
+                    wordPreviewAfter, AliveLyricsEffects.wordEntranceMs(
+                            LockLyrics.sAliveFx, backing), baseline, whiteness, lead, gain,
                     eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
             return;
         }
         if (ends == null || !canSplitClusters(lay, xs, ends, cs, ce, re)) {
             setWordEntrance(l, syllable, cs, entranceStart, eyeCandy);
             drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re,
-                    entranceStart, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+                    entranceStart, start, end, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
                     eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
             return;
         }
@@ -3065,7 +3079,7 @@ final class LyricView extends View {
             if (next <= ch || next > ce) {
                 setWordEntrance(l, syllable, cs, start, eyeCandy);
                 drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re,
-                        start, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+                        start, start, end, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
                         eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
                 return;
             }
@@ -3074,20 +3088,22 @@ final class LyricView extends View {
             int following = next < ce ? clusterStartAt(next, from, syllableEnd, start, end)
                     : ce < syllableEnd ? clusterStartAt(ce, from, syllableEnd, start, end)
                     : syllable + 1 < l.sylStart.length ? l.sylStart[syllable + 1]
-                    : onset + KARAOKE_LETTER_FLY_MS;
+                    : onset + (eyeCandy ? EYE_WORD_FLY_MS : KARAOKE_LETTER_FLY_MS);
+            int flightCap = eyeCandy ? AliveLyricsEffects.wordEntranceMs(
+                    LockLyrics.sAliveFx, backing) : KARAOKE_LETTER_FLY_MS;
             int flightMs = following > onset
-                    ? Math.min(KARAOKE_LETTER_FLY_MS, Math.max(80, following - onset))
-                    : KARAOKE_LETTER_FLY_MS;
+                    ? Math.min(flightCap, Math.max(80, following - onset))
+                    : flightCap;
             setWordEntrance(l, syllable, ch, onset, eyeCandy);
             drawKaraokeCluster(c, l, lay, p, xs, ch, next, rs, re,
-                    onset, previousToken, flightMs, baseline, whiteness, lead, gain, eyeWordMotion[0],
+                    onset, start, end, previousToken, flightMs, baseline, whiteness, lead, gain, eyeWordMotion[0],
                     eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
             previousToken = onset;
             ch = next;
         }
     }
 
-    /** A word's letters arrive as a soft wave, with one stable direction for the whole word. */
+    /** A token resolves from one stable side; no per-letter wobble or overshoot. */
     private void setWordEntrance(LyricLine l, int syllable, int charAt, int onset,
                                  boolean eyeCandy) {
         eyeWordMotion[0] = 0f;
@@ -3107,18 +3123,19 @@ final class LyricView extends View {
         int seed = l.text.hashCode() * 31 + l.start * 17 + syllable * 13
                 + (backing ? 1 : 0);
         float direction = (seed & 1) == 0 ? -1f : 1f;
-        float wave = (float) Math.sin((charAt + l.start * 0.001f) * 0.55f);
         float offset = AliveLyricsEffects.wordEntranceOffsetDp(mode, backing);
-        eyeWordMotion[1] = direction * offset * density * (1f - settle)
-                + wave * 2f * density * (1f - settle);
-        eyeWordMotion[2] = smoothUnit(clamp01(t / 0.18f));
+        eyeWordMotion[1] = direction * offset * density * (1f - settle);
+        // First bring the staged token into focus at its existing dim brightness. Only after
+        // that does it gain opacity; resolving blur and brightening together read as a flash.
+        eyeWordMotion[2] = 0.40f + 0.60f * smoothUnit(clamp01((t - 0.55f) / 0.45f));
         eyeWordMotion[3] = AliveLyricsEffects.wordEntranceBlurDp(mode, backing) * density
-                * (1f - smoothUnit(clamp01(t / 0.65f)));
+                * (1f - smoothUnit(clamp01(t / 0.55f)));
     }
 
     private void drawKaraokeCluster(Canvas c, LyricLine l, StaticLayout lay, TextPaint p,
                                     float[] xs, int cs, int ce, int rs, int re, int onset,
-                                    int previewAfter, int flightMs, float baseline, float whiteness, boolean lead,
+                                    int syllableStart, int syllableEnd, int previewAfter, int flightMs,
+                                    float baseline, float whiteness, boolean lead,
                                     float gain, float wordX, float wordOffset, float wordAlpha,
                                     float wordBlur) {
         if (ms < onset) {
@@ -3126,35 +3143,62 @@ final class LyricView extends View {
             // one is readable, but later words remain hidden until their own predecessor starts.
             if (!AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx) || ms < previewAfter
                     || hasEarlierTimedToken(l, onset)) return;
+            // The preview is the initial reveal frame, not a separate sharp drawing. Keeping
+            // its transform, alpha and softness identical prevents a sharp -> blurred -> sharp
+            // handoff as the next token becomes active.
+            int save = c.save();
+            c.translate(wordX, 0f);
             int oldAlpha = p.getAlpha();
-            p.setAlpha(Math.round(oldAlpha * 0.40f));
+            Shader oldShader = p.getShader();
+            long oldColor = p.getColorLong();
+            float oldRowAt = rowAt;
+            android.graphics.MaskFilter oldMask = p.getMaskFilter();
+            float oldRadius = p.getShadowLayerRadius(), oldDx = p.getShadowLayerDx();
+            float oldDy = p.getShadowLayerDy();
+            long oldShadow = p.getShadowLayerColorLong();
+            // A preview must not inherit the current token's white karaoke fill edge or HDR
+            // shimmer. It is always the deliberately dim, unsung ink until its own onset.
+            p.setShader(null);
+            rowAt = Float.NaN;
+            // setAlpha() overwrites the alpha packed into ink(...). Reset it before assigning
+            // the colour, otherwise the 40%-ish unsung ink becomes fully opaque white.
+            p.setAlpha(255);
+            p.setColor(ink(rowUnsungA, 0f));
+            // Match the normal unsung letters exactly. Blur is Eye-candy's only added cue;
+            // an extra opacity animation made the staged word brighter than its neighbours.
+            if (wordBlur > 0.15f) {
+                // Blur the glyph edge itself. A shadow halo always changes apparent lightness,
+                // even when tinted, whereas this preserves the ordinary unsung ink exactly.
+                p.clearShadowLayer();
+                p.setMaskFilter(new BlurMaskFilter(wordBlur, BlurMaskFilter.Blur.NORMAL));
+            }
             drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, baseline, false, gain);
+            p.setShader(oldShader);
+            p.setColor(oldColor);
+            rowAt = oldRowAt;
+            p.setMaskFilter(oldMask);
             p.setAlpha(oldAlpha);
+            if (oldRadius > 0f) p.setShadowLayer(oldRadius, oldDx, oldDy, oldShadow);
+            else p.clearShadowLayer();
+            c.restoreToCount(save);
             return;
         }
         float progress = clamp01((ms - onset) / (float) Math.max(1, flightMs));
         float remaining = 1f - progress;
         float settled = 1f - remaining * remaining * remaining;
-        float alpha = (0.68f + 0.32f * settled) * wordAlpha;
+        // The row's karaoke gradient owns brightness. Eye-candy only supplies position and
+        // focus, so a token cannot flash white merely because its entrance has started.
+        float alpha = 1f;
         // The line itself already moves as the previous lyric is handed off. Keep Eye-candy
         // entrances on that shared baseline instead of adding a second vertical wave.
         float y = baseline;
         int save = c.save();
         c.translate(wordX, 0f);
-        float softBlur = density * 1.2f * (1f - settled) + wordBlur;
-        boolean theatrical = AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx);
+        float softBlur = wordBlur;
         boolean backing = !lead;
         float settleScale = 1f + AliveLyricsEffects.wordEntranceScale(
                 LockLyrics.sAliveFx, backing) * (1f - settled);
         c.scale(settleScale, settleScale, xs[cs], baseline);
-        if (theatrical) {
-            int seed = l.text.hashCode() * 31 + cs * 13 + (lead ? 0 : 1);
-            float direction = (seed & 1) == 0 ? -1f : 1f;
-            c.rotate(direction * AliveLyricsEffects.wordEntranceRotation(
-                    LockLyrics.sAliveFx, backing) * (1f - settled), xs[cs], baseline);
-            softBlur += density * AliveLyricsEffects.wordEntranceBlurDp(
-                    LockLyrics.sAliveFx, backing) * (1f - settled);
-        }
         Shader oldShader = p.getShader();
         long oldColor = p.getColorLong();
         int oldAlpha = p.getAlpha();
@@ -3163,6 +3207,7 @@ final class LyricView extends View {
         float oldShadowDx = p.getShadowLayerDx();
         float oldShadowDy = p.getShadowLayerDy();
         long oldShadowColor = p.getShadowLayerColorLong();
+        android.graphics.MaskFilter oldMask = p.getMaskFilter();
         boolean colorFill = false;
         if (oldShader != null) {
             p.setShader(oldShader);
@@ -3174,17 +3219,56 @@ final class LyricView extends View {
             p.setColor(oldColor);
             p.setAlpha(Math.round(oldAlpha * alpha));
         }
-        if (softBlur > 0.15f) {
-            float radius = Math.max(oldShadowRadius, softBlur);
-            float blurAlpha = clamp01(0.44f * (1f - settled) + wordBlur / (density * 3f));
-            long color = oldShadowRadius > 0f ? oldShadowColor : white(blurAlpha, gain);
-            p.setShadowLayer(radius, oldShadowDx, oldShadowDy, color);
+        // A token may enter its timing interval before its first grapheme has advanced. Keep
+        // that interval visually identical to the staged preview: the row's active white fill
+        // belongs to sung characters, never to an upcoming token.
+        boolean tokenUnfilled = AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)
+                && l.sungChars(ms) <= cs;
+        if (tokenUnfilled) {
+            p.setShader(null);
+            rowAt = Float.NaN;
+            p.setAlpha(255);
+            p.setColor(ink(rowUnsungA, 0f));
         }
-        drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, y, colorFill, gain);
+        if (softBlur > 0.15f) {
+            if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)) {
+                p.setMaskFilter(new BlurMaskFilter(softBlur, BlurMaskFilter.Blur.NORMAL));
+            } else {
+                float radius = Math.max(oldShadowRadius, softBlur);
+                float blurAlpha = clamp01(0.44f * (1f - settled) + wordBlur / (density * 3f));
+                long color = oldShadowRadius > 0f ? oldShadowColor : white(blurAlpha, gain);
+                p.setShadowLayer(radius, oldShadowDx, oldShadowDy, color);
+            }
+        }
+        int[] ends = rowLeadIndex >= 0 && rowLeadIndex < clusterEnd.length
+                ? (l == lines.get(rowLeadIndex).bg
+                    ? clusterEndBg[rowLeadIndex] : clusterEnd[rowLeadIndex]) : null;
+        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)
+                && ends != null && canSplitClusters(lay, xs, ends, cs, ce, re)) {
+            // Keep Eye-candy's preview/reveal transform for the word as a whole, then give
+            // each shaped letter the same timed rise used by Dramatic.
+            float sung = l.sungChars(ms);
+            for (int ch = cs; ch < ce; ) {
+                int next = ends[ch];
+                if (next <= ch || next > ce) {
+                    drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, y, colorFill, gain);
+                    break;
+                }
+                float letterProgress = (sung - ch) / Math.max(1f, next - ch);
+                int completedAt = clusterCompletionAt(l, ch, next, syllableStart, syllableEnd);
+                float letterY = y - liftPx * 1.65f * whiteness
+                        * letterRise(letterProgress, completedAt);
+                drawSyllableRun(c, l, lay, p, xs, ch, next, rs, re, letterY, colorFill, gain);
+                ch = next;
+            }
+        } else {
+            drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, y, colorFill, gain);
+        }
         p.setShader(oldShader);
         p.setColor(oldColor);
         p.setAlpha(oldAlpha);
         rowAt = oldRowAt;
+        p.setMaskFilter(oldMask);
         if (oldShadowRadius > 0f) {
             p.setShadowLayer(oldShadowRadius, oldShadowDx, oldShadowDy, oldShadowColor);
         } else {

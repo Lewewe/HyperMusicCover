@@ -13,7 +13,8 @@ final class AliveLyricsEffects {
     private static final int TRAIL_MS_DRAMATIC = 420;
     private static final int TRANS_MS_SUBTLE = 260;
     private static final int TRANS_MS_DRAMATIC = 340;
-    private static final int TRANS_MS_EYE_CANDY = 520;
+    /** A translation follows the lyric, but should finish before it competes with the next word. */
+    private static final int TRANS_MS_EYE_CANDY = 400;
 
     static int clampMode(int mode) {
         if (mode <= OFF) return OFF;
@@ -30,31 +31,36 @@ final class AliveLyricsEffects {
 
     static int wordEntranceMs(int mode, boolean backing) {
         int m = clampMode(mode);
-        if (m == EYE_CANDY) return backing ? 300 : 420;
+        // Eye-candy is a quick focus pull, not a spring. Backing vocals remain a little quieter.
+        if (m == EYE_CANDY) return backing ? 180 : 200;
         return m >= DRAMATIC ? 250 : 210;
     }
 
     static float wordEntranceOffsetDp(int mode, boolean backing) {
         int m = clampMode(mode);
-        if (m == EYE_CANDY) return backing ? 8f : 14f;
+        // The preview stays in its final text position; its soft focus alone signals "next".
+        if (m == EYE_CANDY) return 0f;
         return m >= DRAMATIC ? 3f : 1.5f;
     }
 
     static float wordEntranceRotation(int mode, boolean backing) {
         int m = clampMode(mode);
-        if (m == EYE_CANDY) return backing ? 1.2f : 2.2f;
+        // Rotation reads as a bounce when several lyric tokens arrive in quick succession.
+        if (m == EYE_CANDY) return 0f;
         return 0f;
     }
 
     static float wordEntranceScale(int mode, boolean backing) {
         int m = clampMode(mode);
-        if (m == EYE_CANDY) return backing ? 0.02f : 0.035f;
+        if (m == EYE_CANDY) return backing ? 0.004f : 0.008f;
         return m >= DRAMATIC ? 0.01f : 0f;
     }
 
     static float wordEntranceBlurDp(int mode, boolean backing) {
         int m = clampMode(mode);
-        if (m == EYE_CANDY) return backing ? 2.5f : 4.5f;
+        // The staged token should read like the current word's unsung letters, with only a
+        // hint of depth to say "next" rather than a visibly separate fuzzy layer.
+        if (m == EYE_CANDY) return backing ? 0.6f : 0.9f;
         return m >= DRAMATIC ? 1.2f : 0f;
     }
 
@@ -114,7 +120,7 @@ final class AliveLyricsEffects {
 
     static float translationLiftDp(int mode, float fade) {
         if (!enabled(mode)) return 0f;
-        float max = mode >= DRAMATIC ? 5f : 3f;
+        float max = mode == EYE_CANDY ? 2f : mode >= DRAMATIC ? 5f : 3f;
         float t = 1f - clamp01(fade);
         return max * t * t;
     }
