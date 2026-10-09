@@ -161,9 +161,10 @@ final class CoverCardStyle {
         float room = Math.min((width - 2f * gap) / widthRatio,
                 (bottom - top) / heightRatio);
         float least = 96f * density;
-        if (room < least || !Float.isFinite(room)) return null;
-        // A small share of a tight room is held at the least size rather than dropped.
-        float side = Math.max(least, room * fill);
+        if (!(room > 0f) || !Float.isFinite(room)) return null;
+        // The clock normally reserves least-sized room. During the reservation and its
+        // transition, use the actual positive room rather than dropping or clipping the card.
+        float side = Math.min(room, Math.max(least, room * fill));
         float artHeight = side * heightRatio;
         float y = top + (bottom - top - artHeight) * pos - (side - artHeight) / 2f;
         return new Rect((width - side) * 0.5f, y, side);

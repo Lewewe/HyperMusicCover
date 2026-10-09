@@ -1123,6 +1123,7 @@ final class ClockCollapse {
                 && (Float.isNaN(natural) || derived <= natural);
         float floor = sane ? derived : (Float.isNaN(natural) ? FALLBACK_FLOOR_DP * Main.density()
                 : natural);
+        floor = reserveCoverRoom(floor);
         if (Float.isNaN(sFloor) || Math.abs(floor - sFloor) >= 1f) {
             Xp.log(TAG + "clock: squeeze floor y=" + Main.r1(floor) + " ("
                     + (sane ? how : "no squeeze: derived " + Main.r1(derived)) + ", read at y="
@@ -1130,6 +1131,27 @@ final class ClockCollapse {
         }
         sFloor = floor;
         return floor;
+    }
+
+    /**
+     * Move the cover-mode clock up far enough for its minimum card before the card morph is
+     * targeted. The card geometry still clamps to the live room while the OEM layout settles.
+     */
+    private static float reserveCoverRoom(float floor) {
+        if (!Main.sCoverMode || Main.sCoverCardStyle.mode != CoverCardStyle.CARD
+                || CoverCardLayer.currentArt() == null) return floor;
+        float media = Main.liveMediaTop();
+        float content = contentBottomOnScreen();
+        float density = Main.density();
+        if (!Float.isFinite(media) || !Float.isFinite(content) || !(density > 0f)) return floor;
+        android.graphics.Bitmap art = CoverCardLayer.currentArt();
+        float aspect = CoverCardStyle.aspect(art.getWidth(), art.getHeight());
+        float heightRatio = Math.min(1f, 1f / aspect);
+        float least = 96f * density;
+        float gap = CoverCardStyle.GAP_DP * density;
+        float allowed = media - 2f * gap - least * heightRatio;
+        if (content <= allowed || !Float.isFinite(allowed)) return floor;
+        return Math.max(0f, floor - (content - allowed));
     }
 
     /**
