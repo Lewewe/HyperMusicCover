@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import com.os4.musiccover.ExtrasActivity
 import com.os4.musiccover.CoverActivity
+import com.os4.musiccover.DictionaryActivity
 import com.os4.musiccover.TranslationProvider
 import com.os4.musiccover.ModuleBridge
 import com.os4.musiccover.R
@@ -286,6 +287,15 @@ internal fun ExtrasPageView(
     val context = LocalContext.current
     var module by remember { mutableStateOf(ModuleBridge.State()) }
     LaunchedEffect(refreshKey) { module = ModuleBridge.queryAlive(context) }
+    // The dictionary is downloaded by the injected SystemUI process, so poll only while that
+    // short-lived job is running. This keeps the row honest without a permanent background poll.
+    LaunchedEffect(module.alive, module.onDeviceTransliterationState) {
+        if (!module.alive || module.onDeviceTransliterationState != 1) return@LaunchedEffect
+        while (module.onDeviceTransliterationState == 1) {
+            delay(400)
+            module = ModuleBridge.query(context)
+        }
+    }
     PageScaffold(
         title = stringResource(R.string.extras_section),
         isBlurEnabled = isBlurEnabled,
@@ -559,6 +569,24 @@ private fun LyricDisplayControls(
                 ModuleBridge.setLyricsRoma(context, it)
             },
         )
+        if (module.lyricsRoma) {
+            SwitchPreference(
+                title = stringResource(R.string.lyrics_on_device_transliteration),
+                summary = stringResource(R.string.lyrics_on_device_transliteration_summary),
+                checked = module.onDeviceTransliteration,
+                enabled = enabled,
+                onCheckedChange = {
+                    onChange(module.copy(onDeviceTransliteration = it))
+                    ModuleBridge.setOnDeviceTransliteration(context, it)
+                },
+            )
+            if (module.onDeviceTransliteration) ArrowPreference(
+                title = stringResource(R.string.lyrics_dictionaries),
+                summary = stringResource(R.string.lyrics_dictionaries_summary),
+                enabled = enabled,
+                onClick = { context.startActivity(Intent(context, DictionaryActivity::class.java)) },
+            )
+        }
 
     }
 
