@@ -2249,17 +2249,8 @@ final class LyricView extends View {
         long beatAt = LockLyrics.bpmBeatAt();
         long sinceBeat = beatAt == 0L ? Long.MAX_VALUE : Math.max(0L, now() - beatAt);
         float pulse = sinceBeat == Long.MAX_VALUE ? 0f : (float) Math.exp(-sinceBeat / 190f);
-        String[] faces = {
-                "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧", "( •̀ ω •́ )✧", "(づ｡◕‿‿◕｡)づ",
-                "(≧▽≦)", "(っ˘ω˘ς )", "(・_・?)", "(ง •̀_•́)ง"
-        };
-        String[] messages = {
-                "we have no lyrics, but here's a friend", "dance alongside the kaomoji for now..", "this song has no lyrics, but the beat is still here",
-                "don't worry buddy, it'll be alright", "there are no lyrics.."
-        };
-        int seed = LockLyrics.bpmPresentationSeed();
-        String face = faces[seed % faces.length];
-        String label = messages[seed % messages.length];
+        String face = LockLyrics.bpmFace();
+        String label = LockLyrics.bpmMessage();
         postInvalidateOnAnimation();
         TextPaint p = new TextPaint(paint);
         p.setTextSize(textPx * (1.18f + pulse * .09f));

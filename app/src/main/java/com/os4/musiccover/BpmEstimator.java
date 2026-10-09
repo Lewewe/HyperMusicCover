@@ -4,6 +4,7 @@ import android.media.audiofx.Visualizer;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /** Local, low-fidelity tempo estimate from the system output mix. It never records audio to disk. */
@@ -31,8 +32,36 @@ final class BpmEstimator {
     private static volatile float learnedBeatMs;
     private static volatile boolean analysisReady;
     private static boolean resultDelivered;
-    private static final float[] tempoSupport = new float[191];
+    private static final float[] tempoSupport = new float[201];
     private static int stableBpm;
+    private static final String[] FACES = {
+            "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧", "( •̀ ω •́ )✧", "(づ｡◕‿‿◕｡)づ",
+            "(≧▽≦)", "(っ˘ω˘ς )", "(・_・?)", "(ง •̀_•́)ง"
+    };
+    private static final String[] MESSAGES_EN = {
+            "we have no lyrics, but here's a friend",
+            "dance alongside the kaomoji for now..",
+            "this song has no lyrics, but the beat is still here",
+            "don't worry buddy, it'll be alright",
+            "there are no lyrics.."
+    };
+    private static final String[] MESSAGES_ZH = {
+            "我们没有歌词，但还有一个朋友陪着你",
+            "暂时和颜文字一起跳舞吧..",
+            "这首歌没有歌词，但节拍依然在",
+            "别担心，一切都会好起来的",
+            "没有歌词.."
+    };
+
+    static String presentationFace(int seed) {
+        return FACES[Math.floorMod(seed, FACES.length)];
+    }
+
+    static String presentationMessage(int seed) {
+        String[] messages = Locale.getDefault().getLanguage().startsWith("zh")
+                ? MESSAGES_ZH : MESSAGES_EN;
+        return messages[Math.floorMod(seed, messages.length)];
+    }
 
     static void start(String key, final Callback cb) {
         stop(); track = key == null ? "" : key;

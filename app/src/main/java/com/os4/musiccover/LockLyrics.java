@@ -594,6 +594,12 @@ final class LockLyrics {
     static int bpmPresentationSeed() {
         return sKey == null ? 0 : sKey.hashCode() & Integer.MAX_VALUE;
     }
+    static String bpmFace() {
+        return BpmEstimator.presentationFace(bpmPresentationSeed());
+    }
+    static String bpmMessage() {
+        return BpmEstimator.presentationMessage(bpmPresentationSeed());
+    }
     private static void requestBpm(final String key, MediaController controller) {
         sBpm = 0;
         sBpmFoundAt = 0L;

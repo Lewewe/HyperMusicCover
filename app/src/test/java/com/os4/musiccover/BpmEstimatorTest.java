@@ -32,4 +32,16 @@ public class BpmEstimatorTest {
 
         assertEquals(130, BpmEstimator.estimateTempo(onset, rate), 4);
     }
+
+    @Test
+    public void tempoSupportCoversTheFullCandidateRange() {
+        float rate = 20f;
+        float[] onset = new float[360];
+        int beatSpacing = Math.round(rate * 60f / 190f);
+        for (int i = 0; i < onset.length; i++) {
+            if (i % beatSpacing == 0) onset[i] = 1f;
+        }
+
+        assertEquals(190, BpmEstimator.estimateTempo(onset, rate), 5);
+    }
 }
