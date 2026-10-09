@@ -17,7 +17,15 @@ public final class LyricLine {
      * Kept apart from the translation because it has a switch of its own (LockLyrics.sRoma);
      * drawn over it when both are on (under()).
      */
+    /** Provider-supplied romanisation. Kept intact as a fallback and for cache compatibility. */
     final String roma;
+    /**
+     * Locally generated Japanese romanisation. This is deliberately derived data rather than a
+     * replacement for {@link #roma}: a dictionary update can improve it without losing what the
+     * provider originally sent us, and unsupported scripts still have their provider fallback.
+     */
+    String localRoma;
+    int localRomaRevision;
     final int start;
     /** Not final: a background vocal hung under this line can outlast it, and extends it. */
     int end;
@@ -154,12 +162,23 @@ public final class LyricLine {
         return usesRomaAsMain() ? roma : text;
     }
 
+    String displayRoma() {
+        return localRoma != null && localRomaRevision == LocalRomanizer.REVISION ? localRoma : roma;
+    }
+
+    /** Presentation value: Japanese provider roma is intentionally never a fallback. */
+    String renderedRoma() {
+        return LockLyrics.sOnDeviceTransliteration && localRoma != null
+                && localRomaRevision == LocalRomanizer.REVISION ? localRoma
+                : LocalRomanizer.handles(text) ? null : roma;
+    }
+
     /**
      * The text drawn under the line for the switches in mode (LockLyrics.below()): the
      * romanisation over the translation, either alone, or null for nothing.
      */
     String under(int mode) {
-        String r = (mode & LockLyrics.BELOW_ROMA) != 0 ? roma : null;
+        String r = (mode & LockLyrics.BELOW_ROMA) != 0 ? displayRoma() : null;
         String t = (mode & LockLyrics.BELOW_TRANS) != 0 ? translation : null;
         if (r == null) return t;
         return t == null ? r : r + "\n" + t;

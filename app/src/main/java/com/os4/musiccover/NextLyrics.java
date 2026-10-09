@@ -33,7 +33,9 @@ final class NextLyrics {
     }
 
     static String configurationKey() {
-        return LyricCacheScope.digest("lyric-settings-v2",
+        // v3 keeps queue entries made before per-line target-language filtering from restoring
+        // stale online translations (notably English-to-English rows) into the renderer.
+        return LyricCacheScope.digest("lyric-settings-v3",
                 String.valueOf(LockLyrics.sSearchMode),
                 String.valueOf(LockLyrics.sProviderQq), String.valueOf(LockLyrics.sProviderNetease),
                 String.valueOf(LockLyrics.sProviderKuwo), String.valueOf(LockLyrics.sProviderKugou),
@@ -165,6 +167,7 @@ final class NextLyrics {
                     if (!isCurrent(context)) return;
                     QueuedLyricCache.Entry cached = QueuedLyricCache.read(pkg, item.mediaId, context.configuration);
                     if (cached != null) {
+                        LocalRomanizer.apply(cached.lines);
                         complete(key, request, context, new Lyrics(pkg, item, cached.lines, cached.source,
                                 cached.translated, context));
                         Xp.log(TAG + "restored ready lyrics for \"" + item.title + "\": "
@@ -177,6 +180,7 @@ final class NextLyrics {
                                 @Override public void onLines(final List<LyricLine> lines,
                                                               String why, final int source) {
                                     if (!isCurrent(context)) return;
+                                    LocalRomanizer.apply(lines);
                                     LockLyrics.translateAhead(key, lines, context,
                                             new LockLyrics.AheadTranslationCallback() {
                                                 @Override public void onReady(List<LyricLine> merged,
@@ -262,6 +266,20 @@ final class NextLyrics {
         }
         return "lyricReady=" + ready + "(" + readyLines + " lyrics) "
                 + NcmLyrics.describeSearches();
+    }
+
+    /** Runs the dictionary on the lyric worker, never on SystemUI's main thread. */
+    static void romanizeAsync(final List<LyricLine> lines, final Runnable onReady) {
+        if (!LocalRomanizer.needsApply(lines)) {
+            onReady.run();
+            return;
+        }
+        lyricWork().post(new Runnable() {
+            @Override public void run() {
+                LocalRomanizer.apply(lines);
+                Main.main().post(onReady);
+            }
+        });
     }
 
     static String describeTriplet(String pkg, Prefetch.Item previous, Prefetch.Item current,

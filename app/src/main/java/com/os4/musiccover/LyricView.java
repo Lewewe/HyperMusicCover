@@ -276,6 +276,7 @@ final class LyricView extends View {
 
     private final TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint transPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint romaPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint onlineTransPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint bgPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -311,6 +312,7 @@ final class LyricView extends View {
     private int layoutWidth = -1;
     private StaticLayout[] main = new StaticLayout[0];
     private StaticLayout[] trans = new StaticLayout[0];
+    private StaticLayout[] roma = new StaticLayout[0];
     private StaticLayout[] onlineTrans = new StaticLayout[0];
     private StaticLayout[] bgLay = new StaticLayout[0];
     /** Top of each line in content coordinates, and its full height with translation. */
@@ -451,6 +453,7 @@ final class LyricView extends View {
         blurPad = (int) Math.ceil((BLUR_NEXT_DP + BLUR_DP_PER_ROW * BLUR_MAX_ROWS) * density * 2f);
         paint.setColor(0xFFFFFFFF);
         transPaint.setColor(0xFFFFFFFF);
+        romaPaint.setColor(0xFFFFFFFF);
         onlineTransPaint.setColor(0xFFFFFFFF);
         bgPaint.setColor(0xFFFFFFFF);
         applyPaintStyle(LockLyrics.sStyle);
@@ -480,8 +483,10 @@ final class LyricView extends View {
         paint.setTypeface(Typeface.create(Typeface.DEFAULT, style.weight, false));
         transPaint.setTextSize(textPx * TRANS_SP / TEXT_SP);
         transPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
+        romaPaint.setTextSize(textPx * ONLINE_TRANS_SP / TEXT_SP);
+        romaPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
         onlineTransPaint.setTextSize(textPx * ONLINE_TRANS_SP / TEXT_SP);
-        onlineTransPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
+        onlineTransPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, true));
         bgPaint.setTextSize(textPx * BG_SP / TEXT_SP);
         bgPaint.setTypeface(Typeface.create(Typeface.DEFAULT, BG_WEIGHT, false));
     }
@@ -1635,14 +1640,16 @@ final class LyricView extends View {
         bp.setTextSize(buildTextPx * BG_SP / TEXT_SP);
         final TextPaint tp = new TextPaint(transPaint);
         tp.setTextSize(buildTextPx * TRANS_SP / TEXT_SP);
+        final TextPaint rp = new TextPaint(romaPaint);
         final TextPaint op = new TextPaint(onlineTransPaint);
+        rp.setTextSize(buildTextPx * ONLINE_TRANS_SP / TEXT_SP);
         op.setTextSize(buildTextPx * ONLINE_TRANS_SP / TEXT_SP);
         if (ls.isEmpty()) {
             wantVersion = wantWidth = -1;
             wantTrans = transOn;
             wantAlign = alignOn;
             wantStyle = null;
-            apply(build(v, width, ls, p, bp, tp, op, transOn, alignOn, style,
+            apply(build(v, width, ls, p, bp, tp, rp, op, transOn, alignOn, style,
                     buildTextPx, buildSidePx));
             return true;
         }
@@ -1654,7 +1661,7 @@ final class LyricView extends View {
         layoutHandler().post(new Runnable() {
             @Override
             public void run() {
-                final Built b = build(v, width, ls, p, bp, tp, op, transOn, alignOn,
+                final Built b = build(v, width, ls, p, bp, tp, rp, op, transOn, alignOn,
                         style, buildTextPx, buildSidePx);
                 post(new Runnable() {
                     @Override
@@ -1693,7 +1700,7 @@ final class LyricView extends View {
         /** The alignment pref this layout was made under; see LockLyrics.sAlign. */
         int align;
         List<LyricLine> lines;
-        StaticLayout[] main, trans, onlineTrans, bgLay;
+        StaticLayout[] main, trans, roma, onlineTrans, bgLay;
         float[] base, height, dotsTop;
         float[][] charX, charXBg;
         int[][] clusterEnd, clusterEndBg;
@@ -1713,9 +1720,14 @@ final class LyricView extends View {
         return right ? Layout.Alignment.ALIGN_OPPOSITE : Layout.Alignment.ALIGN_NORMAL;
     }
 
+    /** Online mode owns the secondary translation row, including while its request is in flight. */
+    static String translationFor(LyricLine line) {
+        return LyricTranslationLogic.translationFor(line, LockLyrics.sOnlineTranslateMode);
+    }
+
     /** Touches nothing of the view's but its constants, so it can run off the UI thread. */
     private Built build(int v, int width, List<LyricLine> ls, TextPaint p, TextPaint bp,
-                        TextPaint tp, TextPaint op, int transOn, int alignOn, LyricStyle style,
+                        TextPaint tp, TextPaint rp, TextPaint op, int transOn, int alignOn, LyricStyle style,
                         float buildTextPx, float buildSidePx) {
         long t0 = SystemClock.uptimeMillis();
         Built b = new Built();
@@ -1730,6 +1742,7 @@ final class LyricView extends View {
         b.w = w;
         b.main = new StaticLayout[n];
         b.trans = new StaticLayout[n];
+        b.roma = new StaticLayout[n];
         b.onlineTrans = new StaticLayout[n];
         b.bgLay = new StaticLayout[n];
         b.base = new float[n];
@@ -1781,50 +1794,22 @@ final class LyricView extends View {
             // Left out of the layout entirely when the switch is off, rather than laid out and
             // skipped in the draw: the rows it would have taken are most of a line's height, and
             // a gap there would leave every line floating with a hole under it.
-            if ((transOn & LockLyrics.BELOW_TRANS) != 0) {
-                boolean onlineMode = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF;
-                String nativeSecondary = onlineMode ? null
-                        : (l.onlineTranslation == null ? l.under(transOn) : null);
-                String onlineSecondary = l.onlineTranslation;
-                // Online mode owns the translation row; optional provider romanisation is a
-                // supplement to that result, never a competing provider translation.
-                if (onlineMode && onlineSecondary != null && LockLyrics.sRoma
-                        && l.roma != null) {
-                    onlineSecondary += "\n" + l.roma;
-                }
-                if (nativeSecondary != null) {
-                    b.trans[i] = StaticLayout.Builder.obtain(nativeSecondary, 0,
-                                    nativeSecondary.length(), tp, w)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    h += TRANS_GAP_DP * density + b.trans[i].getHeight();
-                    if (onlineSecondary != null) {
-                        b.onlineTrans[i] = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                        onlineSecondary.length(), op, w)
-                                .setAlignment(align)
-                                .setIncludePad(false)
-                                .build();
-                        h += ONLINE_TRANS_GAP_DP * density + b.onlineTrans[i].getHeight();
-                    }
-                } else if (onlineSecondary != null) {
-                    // With no native secondary, use the normal translation row and size.
-                    b.trans[i] = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                    onlineSecondary.length(), tp, w)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    h += TRANS_GAP_DP * density + b.trans[i].getHeight();
-                }
-            }
-            String under = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF
-                    ? null : l.under(transOn);
-            if (under != null && b.trans[i] == null && b.onlineTrans[i] == null) {
-                b.trans[i] = StaticLayout.Builder.obtain(under, 0, under.length(), tp, w)
+            String localRoma = (transOn & LockLyrics.BELOW_ROMA) != 0 ? l.renderedRoma() : null;
+            String translation = (transOn & LockLyrics.BELOW_TRANS) != 0 ? translationFor(l) : null;
+            if (localRoma != null) {
+                b.roma[i] = StaticLayout.Builder.obtain(localRoma, 0, localRoma.length(), rp, w)
                         .setAlignment(align)
                         .setIncludePad(false)
                         .build();
-                h += TRANS_GAP_DP * density + b.trans[i].getHeight();
+                h += TRANS_GAP_DP * density + b.roma[i].getHeight();
+            }
+            if (translation != null) {
+                b.onlineTrans[i] = StaticLayout.Builder.obtain(translation, 0, translation.length(), op, w)
+                        .setAlignment(align)
+                        .setIncludePad(false)
+                        .build();
+                h += (b.roma[i] == null ? TRANS_GAP_DP : ONLINE_TRANS_GAP_DP) * density
+                        + b.onlineTrans[i].getHeight();
             }
             b.base[i] = y;
             b.height[i] = h;
@@ -1855,6 +1840,7 @@ final class LyricView extends View {
         int n = lines.size();
         main = b.main;
         trans = b.trans;
+        roma = b.roma;
         onlineTrans = b.onlineTrans;
         bgLay = b.bgLay;
         charXBg = b.charXBg;
@@ -1885,7 +1871,10 @@ final class LyricView extends View {
         transFadeAt = new long[n];
         boolean fxOn = AliveLyricsEffects.enabled(LockLyrics.sAliveFx) && !LockLyrics.still()
                 && oldVersion >= 0;
-        for (int i = 0; i < n; i++) transFadeAt[i] = b.trans[i] != null && fxOn ? -1L : 0L;
+        for (int i = 0; i < n; i++) {
+            boolean hasSecondary = b.trans[i] != null || b.roma[i] != null || b.onlineTrans[i] != null;
+            transFadeAt[i] = hasSecondary && fxOn ? -1L : 0L;
+        }
         focus = -1;
         duetLyrics.setLines(lines);
         dotsFor = -1;
@@ -2103,6 +2092,14 @@ final class LyricView extends View {
             anchorIndex = focus;
         }
         float stageH = base[stageLast] - base[stageFirst] + height[stageLast];
+        // A long original plus romaji and translation can be taller than the lit keyguard's
+        // clock-to-card lane while still fitting in AOD. Centring that block puts both ends past
+        // the clip; drawLyrics then (correctly for ordinary rows) fades it to zero. Pin its top
+        // inside the lane instead, preserving the actual lyric before any secondary row is cut.
+        if (stageH > bandH) {
+            return bandTop + Math.min(8f * density, bandH * 0.08f)
+                    + base[anchorIndex] - base[stageFirst] - anchor;
+        }
         return bandTop + (bandH - stageH) / 2f + base[anchorIndex] - base[stageFirst] - anchor;
     }
 
@@ -2223,8 +2220,12 @@ final class LyricView extends View {
             if (y + renderedHeight < bandTop) continue;
             // Faded by the row's own top against the top edge and its own bottom against the
             // bottom edge, so a line is already gone by the time it would be cut.
-            float edge = Math.min(clamp01((y - bandTop) / fade),
-                    clamp01((bandBottom - (y + renderedHeight)) / fade));
+            // A focused row that is taller than the band is intentionally top-pinned above.
+            // It must be clipped, not faded to zero merely because its secondary rows extend
+            // below the card; otherwise the complete lyric vanishes on the lit lock screen.
+            float edge = i == focus && renderedHeight > bandH ? 1f
+                    : Math.min(clamp01((y - bandTop) / fade),
+                            clamp01((bandBottom - (y + renderedHeight)) / fade));
             float a = vis * edge;
             a *= simultaneousDepartureAlpha(i);
             // Lines already sung, above the focus, sit further back than the ones to come.
@@ -2475,6 +2476,7 @@ final class LyricView extends View {
         final float radius = blurFor(rows);
         final TextPaint p = new TextPaint(paint);
         final TextPaint tp = new TextPaint(transPaint);
+        final TextPaint rp = new TextPaint(romaPaint);
         final TextPaint op = new TextPaint(onlineTransPaint);
         final TextPaint bp = new TextPaint(bgPaint);
         final int pad = blurPad;
@@ -2485,7 +2487,7 @@ final class LyricView extends View {
         blurHandler().post(new Runnable() {
             @Override
             public void run() {
-                final Bitmap b = makeBlurred(l, width, fullW, fullH, pad, radius, p, tp, op, bp,
+                final Bitmap b = makeBlurred(l, width, fullW, fullH, pad, radius, p, tp, rp, op, bp,
                         transGap, onlineTransGap, bgGap, down, alignOn);
                 post(new Runnable() {
                     @Override
@@ -2506,7 +2508,7 @@ final class LyricView extends View {
      * canvas.
      */
     private static Bitmap makeBlurred(LyricLine l, int width, int fullW, int fullH, int pad,
-                                      float radius, TextPaint p, TextPaint tp, TextPaint op,
+                                      float radius, TextPaint p, TextPaint tp, TextPaint rp, TextPaint op,
                                       TextPaint bp, float transGap, float onlineTransGap,
                                       float bgGap, int down, int alignOn) {
         try {
@@ -2546,59 +2548,29 @@ final class LyricView extends View {
                 c.restoreToCount(save);
                 below += bgGap + bl.getHeight();
             }
-            boolean onlineMode = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF;
-            String nativeSecondary = onlineMode ? null
-                    : (l.onlineTranslation == null ? l.under(LockLyrics.below()) : null);
-            String onlineSecondary = l.onlineTranslation;
-            if (LockLyrics.sTrans) {
-                if (onlineMode && onlineSecondary != null && LockLyrics.sRoma
-                        && l.roma != null) {
-                    onlineSecondary += "\n" + l.roma;
-                }
-                if (nativeSecondary != null) {
-                    tp.setAlpha(Math.round(255f * TRANS_ALPHA));
-                    tp.setMaskFilter(mf);
-                    StaticLayout t = StaticLayout.Builder.obtain(nativeSecondary, 0,
-                                    nativeSecondary.length(), tp, width)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    c.translate(0f, below + transGap);
-                    t.draw(c);
-                    below += transGap + t.getHeight();
-                    if (onlineSecondary != null) {
-                        op.setAlpha(Math.round(255f * TRANS_ALPHA));
-                        op.setMaskFilter(mf);
-                        StaticLayout ot = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                        onlineSecondary.length(), op, width)
-                                .setAlignment(align)
-                                .setIncludePad(false)
-                                .build();
-                        c.translate(0f, onlineTransGap);
-                        ot.draw(c);
-                    }
-                } else if (onlineSecondary != null) {
-                    tp.setAlpha(Math.round(255f * TRANS_ALPHA));
-                    tp.setMaskFilter(mf);
-                    StaticLayout t = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                    onlineSecondary.length(), tp, width)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    c.translate(0f, below + transGap);
-                    t.draw(c);
-                }
-            }
-            String under = onlineMode ? null : l.under(LockLyrics.below());
-            boolean secondaryDrawn = nativeSecondary != null || onlineSecondary != null;
-            if (under != null && !secondaryDrawn) {
-                tp.setAlpha(Math.round(255f * TRANS_ALPHA));
-                tp.setMaskFilter(mf);
-                StaticLayout t = StaticLayout.Builder.obtain(under, 0, under.length(), tp, width)
+            int belowMode = LockLyrics.below();
+            String localRoma = (belowMode & LockLyrics.BELOW_ROMA) != 0 ? l.renderedRoma() : null;
+            String translation = (belowMode & LockLyrics.BELOW_TRANS) != 0 ? translationFor(l) : null;
+            float romaHeight = 0f;
+            if (localRoma != null) {
+                rp.setAlpha(Math.round(255f * TRANS_ALPHA));
+                rp.setMaskFilter(mf);
+                StaticLayout r = StaticLayout.Builder.obtain(localRoma, 0, localRoma.length(), rp, width)
                         .setAlignment(align)
                         .setIncludePad(false)
                         .build();
                 c.translate(0f, below + transGap);
+                r.draw(c);
+                romaHeight = r.getHeight();
+            }
+            if (translation != null) {
+                op.setAlpha(Math.round(255f * TRANS_ALPHA));
+                op.setMaskFilter(mf);
+                StaticLayout t = StaticLayout.Builder.obtain(translation, 0, translation.length(), op, width)
+                        .setAlignment(align)
+                        .setIncludePad(false)
+                        .build();
+                c.translate(0f, localRoma == null ? below + transGap : romaHeight + onlineTransGap);
                 t.draw(c);
             }
             return b;
@@ -2680,8 +2652,9 @@ final class LyricView extends View {
 
     private void drawTranslation(Canvas c, int i, float a) {
         StaticLayout t = trans[i];
+        StaticLayout r = roma[i];
         StaticLayout online = onlineTrans[i];
-        if (t == null && online == null) return;
+        if (t == null && r == null && online == null) return;
         float fade = 1f;
         float lift = 0f;
         int fx = LockLyrics.sAliveFx;
@@ -2705,8 +2678,13 @@ final class LyricView extends View {
         if (t != null) {
             drawTranslationLayout(c, t, a, fade, fx);
         }
-        if (online != null) {
+        if (r != null) {
             if (t != null) c.translate(0f, t.getHeight() + ONLINE_TRANS_GAP_DP * density);
+            drawTranslationLayout(c, r, a, fade, fx);
+        }
+        if (online != null) {
+            if (r != null) c.translate(0f, r.getHeight() + ONLINE_TRANS_GAP_DP * density);
+            else if (t != null) c.translate(0f, t.getHeight() + ONLINE_TRANS_GAP_DP * density);
             drawTranslationLayout(c, online, a, fade, fx);
         }
         c.restoreToCount(save);

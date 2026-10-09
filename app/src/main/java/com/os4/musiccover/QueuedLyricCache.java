@@ -76,6 +76,8 @@ final class QueuedLyricCache {
         if (line == null) return null;
         LyricLine copy = new LyricLine(line.text, line.translation, line.roma, line.start, line.end,
                 line.opposite, line.sylStart, line.sylEnd, line.charEnd);
+        copy.localRoma = line.localRoma;
+        copy.localRomaRevision = line.localRomaRevision;
         copy.bg = withoutOnline(line.bg);
         return copy;
     }
@@ -88,7 +90,8 @@ final class QueuedLyricCache {
     private static JSONObject json(LyricLine l) throws Exception {
         JSONObject o = new JSONObject();
         o.put("text", l.text); o.put("translation", l.translation); o.put("online", l.onlineTranslation);
-        o.put("roma", l.roma); o.put("start", l.start); o.put("end", l.end); o.put("opposite", l.opposite);
+        o.put("roma", l.roma); o.put("localRoma", l.localRoma); o.put("localRomaRev", l.localRomaRevision);
+        o.put("start", l.start); o.put("end", l.end); o.put("opposite", l.opposite);
         o.put("ss", array(l.sylStart)); o.put("se", array(l.sylEnd)); o.put("ce", array(l.charEnd));
         if (l.bg != null) o.put("bg", json(l.bg));
         return o;
@@ -100,6 +103,9 @@ final class QueuedLyricCache {
                 o.optString("roma", null), o.optInt("start"), o.optInt("end"),
                 o.optBoolean("opposite"), ints(o.optJSONArray("ss")), ints(o.optJSONArray("se")),
                 ints(o.optJSONArray("ce")));
+        String localRoma = o.optString("localRoma", null);
+        l.localRoma = localRoma == null || localRoma.trim().isEmpty() ? null : localRoma.trim();
+        l.localRomaRevision = o.optInt("localRomaRev", 0);
         l.onlineTranslation = o.optString("online", null);
         l.bg = line(o.optJSONObject("bg"));
         return l;

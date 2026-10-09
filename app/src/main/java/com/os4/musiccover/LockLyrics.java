@@ -154,6 +154,13 @@ final class LockLyrics {
      * the translation it is laid out, not fetched: switching it redraws what is already there.
      */
     static volatile boolean sRoma = false;
+    /** Downloads and enables the optional local Japanese reading dictionary. */
+    static volatile boolean sOnDeviceTransliteration = false;
+    /** Small built-in reading engines, individually opt-in from Dictionaries. */
+    static volatile boolean sLocalChinese = false;
+    static volatile boolean sLocalKorean = false;
+    static volatile boolean sLocalCyrillic = false;
+    static volatile boolean sLocalGreek = false;
     /** Optional retention of quick successive lyrics in readable groups of up to four lines. */
     static volatile boolean sRapidGroups = false;
     /** The two switches together, as LyricLine.under() and the layout read them. */
@@ -527,6 +534,12 @@ final class LockLyrics {
 
     static List<LyricLine> lines() {
         return sLines;
+    }
+
+    /** The optional Japanese dictionary has finished downloading in SystemUI's storage. */
+    static void localRomanizationReady() {
+        if (!sOnDeviceTransliteration || sLines == null || sLines.isEmpty()) return;
+        setLines(sLines, "on-device transliteration ready");
     }
 
     /**
@@ -1318,6 +1331,20 @@ final class LockLyrics {
 
     /** Puts a lookup's answer up: the one place lines found for `want` reach the screen. */
     private static void settle(String want, List<LyricLine> lines, String why, int source) {
+        // Loading UniDic touches a sizeable dictionary. Keep it off SystemUI's main thread and
+        // do not briefly show the provider's character-spaced roma before the local reading wins.
+        if (LocalRomanizer.needsApply(lines)) {
+            final int generation = sGen;
+            final List<LyricLine> pending = lines;
+            NextLyrics.romanizeAsync(pending, new Runnable() {
+                @Override public void run() {
+                    if (generation == sGen && want.equals(sKey) && !sDemo) {
+                        settle(want, pending, why, source);
+                    }
+                }
+            });
+            return;
+        }
         Main.main().removeCallbacks(LOOKUP_WATCHDOG);
         sLoading = false;
         sSource = source;
@@ -1888,6 +1915,21 @@ final class LockLyrics {
     // ------------------------------------------------------------------ internals
 
     private static void setLines(List<LyricLine> lines, String why) {
+        // Current/memory-cache answers bypass settle(), so give them the same off-main-thread
+        // local reading pass as fresh provider answers. The version check prevents an older
+        // callback from replacing a translation result that arrived while it was working.
+        if (LocalRomanizer.needsApply(lines)) {
+            final int generation = sGen;
+            final int expectedVersion = sVersion + 1;
+            final List<LyricLine> pending = lines;
+            NextLyrics.romanizeAsync(pending, new Runnable() {
+                @Override public void run() {
+                    if (generation == sGen && sVersion == expectedVersion) {
+                        setLines(pending, why + " + local romaji");
+                    }
+                }
+            });
+        }
         sLines = displayLines(lines);
         if (!sLines.isEmpty() && wanted()) sArtworkPage.preferCompact();
         // Only a settled answer: the empty set a track change puts up while it looks is not one.
@@ -1907,22 +1949,10 @@ final class LockLyrics {
      */
     static List<LyricLine> displayLines(List<LyricLine> source) {
         if (source == null || source.isEmpty()) return Collections.emptyList();
-        if (sOnlineTranslateMode == TR_MODE_OFF) return source;
-        ArrayList<LyricLine> displayed = new ArrayList<>(source.size());
-        boolean changed = false;
-        for (LyricLine line : source) {
-            if (line == null || line.translation == null) {
-                displayed.add(line);
-                continue;
-            }
-            LyricLine copy = new LyricLine(line.text, null, line.roma, line.start, line.end,
-                    line.opposite, line.sylStart, line.sylEnd, line.charEnd);
-            copy.onlineTranslation = line.onlineTranslation;
-            copy.bg = line.bg;
-            displayed.add(copy);
-            changed = true;
-        }
-        return changed ? displayed : source;
+        // Online translation is preferred when it exists, not a reason to discard a provider's
+        // translation. While the online request is warming (or when it fails), the native row is
+        // still a useful translation and belongs under the local romaji.
+        return source;
     }
 
     /** The session's position is re-read now and then, not per frame: it is a binder call. */
