@@ -36,7 +36,7 @@ final class BpmEstimator {
     private static int stableBpm;
     private static final String[] FACES = {
             "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧", "( •̀ ω •́ )✧", "(づ｡◕‿‿◕｡)づ",
-            "(≧▽≦)", "(っ˘ω˘ς )", "(・_・?)", "(ง •̀_•́)ง"
+            "(≧▽≦)", "(っ˘ω˘ς )", "(ง •̀_•́)ง"
     };
     private static final String[] MESSAGES_EN = {
             "we have no lyrics, but here's a friend",
