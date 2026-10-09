@@ -612,7 +612,12 @@ final class LockLyrics {
     private static void requestBpm(final String key, MediaController controller) {
         sBpm = 0;
         sBpmFoundAt = 0L;
-        if (!sBpmEnabled || key == null || key.isEmpty()) return;
+        if (!sBpmEnabled || key == null || key.isEmpty()
+                || !Main.bpmPlayerAllowed(controller)) {
+            BpmEstimator.stop();
+            refresh();
+            return;
+        }
         BpmEstimator.start(key, new BpmEstimator.Callback() { @Override public void onEstimated(int bpm) {
             if (!key.equals(sKey)) return;
             sBpm = bpm;

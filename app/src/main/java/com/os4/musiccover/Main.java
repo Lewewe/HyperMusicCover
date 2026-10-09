@@ -24,6 +24,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import android.util.Log;
 import android.view.Choreographer;
 import android.view.GestureDetector;
@@ -490,6 +493,8 @@ public class Main extends XposedModule {
     static volatile String sTrackKey = "";
     private static MediaSessionManager sMsm;
     private static MediaSessionManager.OnActiveSessionsChangedListener sSessionsCb;
+    /** Empty means every media player; otherwise the BPM companion is limited to these packages. */
+    private static final Set<String> sBpmPlayers = new HashSet<>();
 
     /**
      * Composing the wallpaper is a full-screen bitmap plus a multi-pass blur. That was fine as a
@@ -1941,6 +1946,7 @@ public class Main extends XposedModule {
                     + "\nlyrictrkey=" + LockLyrics.sTranslateApiKey
                     + "\nspicylyricskey=" + LockLyrics.sSpicyLyricsApiKey
                     + "\nbpmenabled=" + (LockLyrics.sBpmEnabled ? 1 : 0)
+                    + "\n" + bpmPlayersState()
                     + "\nlyrictrsource=" + LockLyrics.sTranslateSourceLang
                     + "\nlyrictrtarget=" + LockLyrics.sTranslateTargetLang
                     + "\nlyricalive=" + LockLyrics.sAliveFx
@@ -2073,6 +2079,7 @@ public class Main extends XposedModule {
                         else if ("lyrictrkey".equals(k)) LockLyrics.sTranslateApiKey = v;
                         else if ("spicylyricskey".equals(k)) LockLyrics.sSpicyLyricsApiKey = v;
                         else if ("bpmenabled".equals(k)) LockLyrics.sBpmEnabled = "1".equals(v);
+                        else if ("bpmplayers".equals(k)) setBpmPlayers(v);
                         else if ("lyrictrsource".equals(k)) LockLyrics.sTranslateSourceLang =
                                 v.isEmpty() ? "auto" : v;
                         else if ("lyrictrtarget".equals(k)) LockLyrics.sTranslateTargetLang =
@@ -2421,6 +2428,10 @@ public class Main extends XposedModule {
                         saveState();
                     } else if ("bpmcfg".equals(op)) {
                         LockLyrics.sBpmEnabled = i.getBooleanExtra("on", LockLyrics.sBpmEnabled);
+                        LockLyrics.refreshBpm();
+                        saveState();
+                    } else if ("bpmplayers".equals(op)) {
+                        setBpmPlayers(i.getStringExtra("packages"));
                         LockLyrics.refreshBpm();
                         saveState();
                      } else if ("lyricproviders".equals(op)) {
@@ -2945,6 +2956,11 @@ public class Main extends XposedModule {
                         out.putString("lyrictrkey", LockLyrics.sTranslateApiKey);
                         out.putString("spicylyricskey", LockLyrics.sSpicyLyricsApiKey);
                         out.putBoolean("bpmenabled", LockLyrics.sBpmEnabled);
+                        synchronized (sBpmPlayers) {
+                            out.putStringArrayList("bpmplayers",
+                                    new java.util.ArrayList<>(sBpmPlayers));
+                        }
+                        putBpmPlayerOptions(c, out);
                         out.putString("lyrictrsource", LockLyrics.sTranslateSourceLang);
                         out.putString("lyrictrtarget", LockLyrics.sTranslateTargetLang);
                         out.putInt("lyricalive", LockLyrics.sAliveFx);
@@ -5314,6 +5330,7 @@ public class Main extends XposedModule {
                     bestScore = score;
                     best = c;
                 }
+
             }
             if (best != null) {
                 Xp.log(TAG + "media session -> " + best.getPackageName()
@@ -5324,6 +5341,72 @@ public class Main extends XposedModule {
             Xp.w(TAG + "getActiveSessions failed: " + t);
             return null;
         }
+    }
+
+    static boolean bpmPlayerAllowed(MediaController controller) {
+        if (controller == null) return false;
+        synchronized (sBpmPlayers) {
+            return sBpmPlayers.isEmpty() || sBpmPlayers.contains(controller.getPackageName());
+        }
+    }
+
+    private static String bpmPlayersState() {
+        synchronized (sBpmPlayers) {
+            if (sBpmPlayers.isEmpty()) return "bpmplayers=";
+            return "bpmplayers=" + android.text.TextUtils.join(",", sBpmPlayers);
+        }
+    }
+
+    private static void setBpmPlayers(String value) {
+        synchronized (sBpmPlayers) {
+            sBpmPlayers.clear();
+            if (value != null && !value.isEmpty()) {
+                for (String packageName : value.split(",")) {
+                    if (!packageName.isEmpty()) sBpmPlayers.add(packageName);
+                }
+            }
+        }
+    }
+
+    /** Installed packages that expose a standard media-session browser service. */
+    private static void putBpmPlayerOptions(Context ctx, android.os.Bundle out) {
+        LinkedHashMap<String, String> players = new LinkedHashMap<>();
+        try {
+            android.content.pm.PackageManager pm = ctx.getPackageManager();
+            Intent query = new Intent(android.service.media.MediaBrowserService.SERVICE_INTERFACE);
+            List<android.content.pm.ResolveInfo> services =
+                    pm.queryIntentServices(query, android.content.pm.PackageManager.MATCH_ALL);
+            for (android.content.pm.ResolveInfo info : services) {
+                if (info.serviceInfo == null || info.serviceInfo.packageName == null) continue;
+                String packageName = info.serviceInfo.packageName;
+                CharSequence label = info.loadLabel(pm);
+                players.put(packageName, label == null ? packageName : label.toString());
+            }
+            MediaSessionManager msm = (MediaSessionManager) ctx.getSystemService(
+                    Context.MEDIA_SESSION_SERVICE);
+            if (msm != null) {
+                for (MediaController controller : msm.getActiveSessions(null)) {
+                    String packageName = controller.getPackageName();
+                    if (!players.containsKey(packageName)) {
+                        CharSequence label = pm.getApplicationLabel(
+                                pm.getApplicationInfo(packageName, 0));
+                        players.put(packageName, label == null ? packageName : label.toString());
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            Xp.w(TAG + "media player list failed: " + t);
+        }
+        java.util.ArrayList<String> packages = new java.util.ArrayList<>(players.keySet());
+        java.util.Collections.sort(packages);
+        String[] packageArray = new String[packages.size()];
+        String[] labelArray = new String[packages.size()];
+        for (int n = 0; n < packages.size(); n++) {
+            packageArray[n] = packages.get(n);
+            labelArray[n] = players.get(packages.get(n));
+        }
+        out.putStringArray("bpmplayerpackages", packageArray);
+        out.putStringArray("bpmplayerlabels", labelArray);
     }
 
     static Bitmap albumArt(Context ctx) {

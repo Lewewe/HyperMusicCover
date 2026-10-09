@@ -845,6 +845,7 @@ private fun LyricEffectsControls(
     onChange: (ModuleBridge.State) -> Unit,
 ) {
     val context = LocalContext.current
+    var showBpmPlayers by remember { mutableStateOf(false) }
     Column {
         SmallTitle(text = stringResource(R.string.extras_lyric_effects))
         Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
@@ -902,7 +903,68 @@ private fun LyricEffectsControls(
                     ModuleBridge.setBpmConfig(context, it)
                 },
             )
+            ArrowPreference(
+                title = stringResource(R.string.lyrics_bpm_players),
+                summary = if (module.bpmPlayers.isEmpty()) {
+                    stringResource(R.string.lyrics_bpm_players_all)
+                } else {
+                    stringResource(R.string.lyrics_bpm_players_selected, module.bpmPlayers.size)
+                },
+                enabled = enabled,
+                onClick = { showBpmPlayers = true },
+            )
         }
+    }
+    if (showBpmPlayers) {
+        BpmPlayerSelectionDialog(
+            module = module,
+            enabled = enabled,
+            onChange = onChange,
+            onDismiss = { showBpmPlayers = false },
+        )
+    }
+}
+
+@Composable
+private fun BpmPlayerSelectionDialog(
+    module: ModuleBridge.State,
+    enabled: Boolean,
+    onChange: (ModuleBridge.State) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    var selected by remember(module.bpmPlayers) { mutableStateOf(module.bpmPlayers) }
+    WindowDialog(
+        show = true,
+        title = stringResource(R.string.lyrics_bpm_players),
+        summary = stringResource(R.string.lyrics_bpm_players_summary),
+        onDismissRequest = onDismiss,
+    ) {
+        val dismiss = LocalDismissState.current
+        if (module.bpmPlayerOptions.isEmpty()) {
+            MiuixText(stringResource(R.string.lyrics_bpm_players_empty))
+        } else {
+            module.bpmPlayerOptions.forEach { player ->
+                SwitchPreference(
+                    title = player.label,
+                    summary = player.packageName,
+                    checked = selected.contains(player.packageName),
+                    enabled = enabled,
+                    onCheckedChange = { checked ->
+                        selected = if (checked) selected + player.packageName
+                        else selected - player.packageName
+                        val updated = module.copy(bpmPlayers = selected)
+                        onChange(updated)
+                        ModuleBridge.setBpmPlayers(context, selected)
+                    },
+                )
+            }
+        }
+        TextButton(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            text = stringResource(R.string.lyrics_bpm_players_done),
+            onClick = { dismiss?.invoke() ?: onDismiss() },
+        )
     }
 }
 

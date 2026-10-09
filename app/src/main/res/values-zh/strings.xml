@@ -154,6 +154,12 @@
     <string name="lyrics_hdr">HDR 高光歌词（实验性功能）</string>
     <string name="lyrics_hdr_summary">可能引起掉帧</string>
     <string name="lyrics_keep_on">播放歌词时屏幕常亮</string>
+    <string name="lyrics_bpm_players">节拍媒体播放器</string>
+    <string name="lyrics_bpm_players_summary">选择哪些媒体播放器可以驱动节拍伴侣。全部取消选择则允许所有播放器。</string>
+    <string name="lyrics_bpm_players_all">所有媒体播放器</string>
+    <string name="lyrics_bpm_players_selected">已选择 %1$d 个媒体播放器</string>
+    <string name="lyrics_bpm_players_empty">暂未找到兼容的媒体播放器。启动播放器后重新打开此菜单。</string>
+    <string name="lyrics_bpm_players_done">完成</string>
     <string name="hide_fingerprint">隐藏锁屏指纹图标</string>
     <!-- Sinking is the notification staying where the system put it. The module's own word for
          the other direction is avoidance - it is the OEM's, and it is what the hook overrides -
