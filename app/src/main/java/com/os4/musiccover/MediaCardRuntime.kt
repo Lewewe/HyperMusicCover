@@ -226,10 +226,10 @@ object MediaCardRuntime {
         val owner = WeakReference(owner)
         val albumView = field(holder, "albumView") as? View ?: album
         val background = (field(holder, "mediaBg") ?: field(holder, "mediaBgView")) as? View
-        val originalOutline = album.outlineProvider
-        val originalClip = album.clipToOutline
-        val originalParentOutline = albumView.outlineProvider
-        val originalParentClip = albumView.clipToOutline
+        var originalOutline = album.outlineProvider
+        var originalClip = album.clipToOutline
+        var originalParentOutline = albumView.outlineProvider
+        var originalParentClip = albumView.clipToOutline
         val originalBackground = background?.background
         val originalAlpha = background?.alpha ?: 1f
         val originalContext = owner.let { field(it, "context") as? Context }
@@ -282,6 +282,18 @@ object MediaCardRuntime {
         fun applyElements() {
             val cover = setting(scope, "cover")
             val round = cover == 1 || cover == 2
+            if (round) {
+                // Controllers can be observed before attachment finishes installing native
+                // rounding. Capture the live shape when taking ownership, never our own oval.
+                if (album.outlineProvider !== oval) {
+                    originalOutline = album.outlineProvider
+                    originalClip = album.clipToOutline
+                }
+                if (albumView.outlineProvider !== oval) {
+                    originalParentOutline = albumView.outlineProvider
+                    originalParentClip = albumView.clipToOutline
+                }
+            }
             if (round || roundApplied) {
                 val imageOutline = if (round) oval else originalOutline
                 val parentOutline = if (round) oval else originalParentOutline
@@ -290,6 +302,10 @@ object MediaCardRuntime {
                 if (albumView.outlineProvider !== parentOutline) albumView.outlineProvider = parentOutline
                 val parentClip = if (round) false else originalParentClip
                 if (albumView.clipToOutline != parentClip) albumView.clipToOutline = parentClip
+                if (roundApplied != round) {
+                    album.invalidateOutline()
+                    albumView.invalidateOutline()
+                }
             }
             roundApplied = round
             if (cover == 3) {
