@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">HyperMusicCover-Enhanced</string>
-    <string name="about_original_source">原始项目</string>
-    <string name="about_original_source_summary">https://github.com/zyl6932/HyperMusicCover</string>
     <string name="about_source_code_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced</string>
     <string name="about_telegram">Telegram群组</string>
-    <string name="about_telegram_summary">https://t.me/HyperMusicCover</string>
-    <string name="about_qq_group">QQ群组</string>
-    <string name="about_qq_group_summary">https://qm.qq.com/q/RcLbYXgBy2</string>
+    <string name="about_telegram_summary">https://t.me/HyperMusicCoverEnhanced</string>
     <string name="about_feedback">反馈与建议</string>
     <string name="about_feedback_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced/issues</string>
     <string name="cover_bias">封面纵向位置</string>
@@ -108,13 +104,10 @@
     <string name="home_unknown">未知</string>
     <string name="home_loading">加载中…</string>
     <string name="donate_title">捐赠支持</string>
-    <string name="donate_home_summary">模块免费，请作者喝杯咖啡</string>
+    <string name="donate_home_summary">模块免费，支持 Enhanced 版本持续维护</string>
     <string name="donate_thanks_title">感谢你的支持</string>
-    <string name="donate_thanks_summary">HyperMusicCover 一直免费且开源。如果它让你的锁屏好看了一点，随意打赏一点就够了，多少都是鼓励。</string>
-    <string name="donate_wechat">微信</string>
-    <string name="donate_alipay">支付宝</string>
-    <string name="donate_scan_hint">用另一台手机扫码，或保存到相册后在支付 App 里从相册识别</string>
-    <string name="donate_xiaoai_tip">Tips：可以用超级小爱的识屏功能直接付款哦</string>
+    <string name="donate_thanks_summary">HyperMusicCover-Enhanced 免费且开源。你的支持将用于维护这个版本、修复问题和改进锁屏体验。</string>
+    <string name="donate_scan_hint">扫描二维码，或将图片保存到相册，在爱发电支持 HyperMusicCover-Enhanced。</string>
     <string name="donate_save">保存到相册</string>
     <string name="donate_saved">已保存到相册</string>
     <string name="donate_save_failed">保存失败</string>
@@ -324,4 +317,10 @@
     <string name="mini_notification_size">通知胶囊大小</string>
     <string name="mini_notification_drop">通知胶囊下移距离</string>
     <string name="lyrics_dictionary_use">使用此词典</string>
+    <string name="fp_sink_summary">控制媒体播放器和通知是否避让屏下指纹区域，更改后请重启系统界面以生效。</string>
+    <string name="fp_sink_restart_hint">请重启系统界面以应用此更改。</string>
+    <string name="fp_sink_restart_failed">无法重启系统界面，请检查 Root 权限后重试。</string>
+    <string name="credits_original_author">HyperMusicCover 原作者，为这个 Enhanced 版本提供了最初的锁屏音乐界面和模块基础。</string>
+    <string name="donate_afdian">爱发电</string>
+    <string name="donate_open_afdian">打开爱发电</string>
 </resources>

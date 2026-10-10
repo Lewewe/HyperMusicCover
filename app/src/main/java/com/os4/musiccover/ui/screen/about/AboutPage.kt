@@ -61,7 +61,6 @@ import com.os4.musiccover.ui.component.effect.BgEffectBackground
 import com.os4.musiccover.ui.util.BlurredBar
 import com.os4.musiccover.ui.util.ColorBlendToken
 import com.os4.musiccover.ui.util.isInDarkTheme
-import com.os4.musiccover.ui.util.openQqGroup
 import com.os4.musiccover.ui.util.openTelegramGroup
 import com.os4.musiccover.ui.util.pageContentPadding
 import com.os4.musiccover.ui.util.pageScrollModifiers
@@ -342,28 +341,12 @@ private fun AboutContent(
                             onClick = { uriHandler.openUri("https://github.com/Lewewe/HyperMusicCover-Enhanced") },
                         )
                         ArrowPreference(
-                            title = stringResource(R.string.about_original_source),
-                            summary = stringResource(R.string.about_original_source_summary),
-                            onClick = { uriHandler.openUri("https://github.com/zyl6932/HyperMusicCover") },
-                        )
-                        ArrowPreference(
                             title = stringResource(R.string.about_telegram),
                             summary = stringResource(R.string.about_telegram_summary),
                             onClick = {
                                 // Falls back to the browser only when no Telegram client answered.
-                                if (!ctx.openTelegramGroup("https://t.me/HyperMusicCover")) {
-                                    uriHandler.openUri("https://t.me/HyperMusicCover")
-                                }
-                            },
-                        )
-                        ArrowPreference(
-                            title = stringResource(R.string.about_qq_group),
-                            summary = stringResource(R.string.about_qq_group_summary),
-                            onClick = {
-                                // The group number, not the qm.qq.com link, is what QQ's card
-                                // route takes; the link is only here for the browser fallback.
-                                if (!ctx.openQqGroup("392493127")) {
-                                    uriHandler.openUri("https://qm.qq.com/q/RcLbYXgBy2")
+                                if (!ctx.openTelegramGroup("https://t.me/HyperMusicCoverEnhanced")) {
+                                    uriHandler.openUri("https://t.me/HyperMusicCoverEnhanced")
                                 }
                             },
                         )

@@ -18,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +39,9 @@ import com.os4.musiccover.ShadeActivity
 import com.os4.musiccover.MiniPlayerActivity
 import com.os4.musiccover.ui.util.PageScaffold
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -1019,6 +1024,10 @@ private fun CardGroup(
     onChange: (ModuleBridge.State) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sinkRestartPending by rememberSaveable { mutableStateOf(false) }
+    var sinkRestarting by remember { mutableStateOf(false) }
+    var sinkRestartFailed by remember { mutableStateOf(false) }
     Column {
         // Two switches were here and are gone: hiding the card's thumbnail, and bringing it back
         // while the lyrics are up. Both are on and neither is a setting - the artwork is the
@@ -1078,14 +1087,51 @@ private fun CardGroup(
         val avoidIndex = module.fpAvoid.coerceIn(0, avoidModes.lastIndex)
         WindowDropdownPreference(
             title = stringResource(R.string.fp_sink),
+            summary = stringResource(R.string.fp_sink_summary),
             items = avoidModes,
             selectedIndex = avoidIndex,
             enabled = enabled,
             onSelectedIndexChange = {
-                onChange(module.copy(fpAvoid = it))
-                ModuleBridge.setFingerprintAvoid(context, it)
+                if (it != avoidIndex) {
+                    onChange(module.copy(fpAvoid = it))
+                    ModuleBridge.setFingerprintAvoid(context, it)
+                    sinkRestartPending = true
+                    sinkRestartFailed = false
+                }
             },
         )
+        if (sinkRestartPending) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                MiuixText(
+                    text = stringResource(
+                        if (sinkRestartFailed) R.string.fp_sink_restart_failed
+                        else R.string.fp_sink_restart_hint,
+                    ),
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                TextButton(
+                    text = stringResource(R.string.restart_systemui),
+                    enabled = enabled && !sinkRestarting,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        sinkRestarting = true
+                        scope.launch {
+                            try {
+                                val restarted = withContext(Dispatchers.IO) {
+                                    ModuleBridge.restartSystemUi()
+                                }
+                                sinkRestartFailed = !restarted
+                                if (restarted) sinkRestartPending = false
+                            } finally {
+                                sinkRestarting = false
+                            }
+                        }
+                    },
+                )
+            }
+        }
     }
 }
 

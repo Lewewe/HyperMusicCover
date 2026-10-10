@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!--
-        The About page opens QQ and Telegram on their own deep links, and both are probed with
-        resolveActivity first, which package visibility would otherwise answer with null. The
-        tg scheme entry covers every Telegram client; the three packages cover QQ, TIM and QQ
-        International, which is all openQqGroup ever aims at.
-    -->
+    <!-- Telegram deep links require visibility so resolveActivity can find installed clients. -->
     <!--
         The self-updater. INTERNET is install-time and never prompted. The APK is handed to an
         installer app rather than installed here, but REQUEST_INSTALL_PACKAGES is still declared:
@@ -23,9 +18,6 @@
              lookup throws NameNotFound even when the package is there. -->
         <package android:name="com.lidesheng.lyricinfo" />
         <package android:name="com.lidesheng.lyricinfo.lite" />
-        <package android:name="com.tencent.mobileqq" />
-        <package android:name="com.tencent.tim" />
-        <package android:name="com.tencent.mobileqqi" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="tg" />

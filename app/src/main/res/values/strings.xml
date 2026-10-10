@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">HyperMusicCover-Enhanced</string>
-    <string name="about_original_source">Original Source</string>
-    <string name="about_original_source_summary">https://github.com/zyl6932/HyperMusicCover</string>
     <string name="about_source_code_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced</string>
     <string name="about_telegram">Telegram Group</string>
-    <string name="about_telegram_summary">https://t.me/HyperMusicCover</string>
-    <string name="about_qq_group">QQ Group</string>
-    <string name="about_qq_group_summary">https://qm.qq.com/q/RcLbYXgBy2</string>
+    <string name="about_telegram_summary">https://t.me/HyperMusicCoverEnhanced</string>
     <string name="about_feedback">Feedback</string>
     <string name="about_feedback_summary">https://github.com/Lewewe/HyperMusicCover-Enhanced/issues</string>
     <string name="cover_bias">Vertical position</string>
@@ -108,13 +104,10 @@
     <string name="home_unknown">Unknown</string>
     <string name="home_loading">Loading…</string>
     <string name="donate_title">Donate</string>
-    <string name="donate_home_summary">The module is free — buy the author a coffee</string>
+    <string name="donate_home_summary">The module is free — support its continued development</string>
     <string name="donate_thanks_title">Thank you for your support</string>
-    <string name="donate_thanks_summary">HyperMusicCover is free and open source. If it made your lock screen a little nicer, anything at all is encouragement.</string>
-    <string name="donate_wechat">WeChat</string>
-    <string name="donate_alipay">Alipay</string>
-    <string name="donate_scan_hint">Scan with another phone, or save the code and pick it from your album in the payment app</string>
-    <string name="donate_xiaoai_tip">Tip: XiaoAI’s screen recognition can pay straight from this page</string>
+    <string name="donate_thanks_summary">HyperMusicCover-Enhanced is free and open source. Your support helps maintain this version and improve the lock screen experience.</string>
+    <string name="donate_scan_hint">Scan the QR code or save this image to support HyperMusicCover-Enhanced on Afdian.</string>
     <string name="donate_save">Save to album</string>
     <string name="donate_saved">Saved to album</string>
     <string name="donate_save_failed">Could not save</string>
@@ -316,4 +309,10 @@
     <string name="mini_notification_size">Notification pill size</string>
     <string name="mini_notification_drop">Notification pill downward offset</string>
     <string name="lyrics_dictionary_use">Use this dictionary</string>
+    <string name="fp_sink_summary">Choose whether the media player and notifications avoid the fingerprint sensor area. Restart System UI after changing this option.</string>
+    <string name="fp_sink_restart_hint">Restart System UI to apply this change.</string>
+    <string name="fp_sink_restart_failed">Could not restart System UI. Check root access and try again.</string>
+    <string name="credits_original_author">Original author of HyperMusicCover, providing the lock screen music interface and module foundation for this Enhanced version.</string>
+    <string name="donate_afdian">Afdian</string>
+    <string name="donate_open_afdian">Open Afdian</string>
 </resources>
