@@ -11,7 +11,7 @@
     <string name="cover_style_full">Full-screen cover</string>
     <string name="cover_style_card">Square card</string>
     <string name="cover_clock_section">Cover &amp; clock</string>
-    <string name="clock_size">Clock size</string>
+    <string name="clock_size">Clock size with big cover art</string>
     <string name="clock_force_colon">Always show the clock colon</string>
     <string name="clock_force_colon_summary">No effect on some styles</string>
     <string name="restart_menu">Restart</string>
@@ -315,4 +315,5 @@
     <string name="credits_original_author">Original author of HyperMusicCover, providing the lock screen music interface and module foundation for this Enhanced version.</string>
     <string name="donate_afdian">Afdian</string>
     <string name="donate_open_afdian">Open Afdian</string>
+    <string name="clock_size_summary">Size of the reduced clock while big cover art is open, up to 55% of its original size.</string>
 </resources>

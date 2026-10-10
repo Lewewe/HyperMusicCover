@@ -388,14 +388,13 @@ private fun ClockGroup(
 ) {
     val context = LocalContext.current
     Column {
-        // A fraction of the style's own full clock, the one shown with cover mode off. The
-        // collapse cannot make a clock bigger than that, so 100% is the top. Cut with the others
-        // below on 2026-09-28 and put back on its own two days later (user).
+        // Cap the collapsed clock at 55% to leave enough space for the big artwork.
         ValueSlider(
             title = stringResource(R.string.clock_size),
+            summary = stringResource(R.string.clock_size_summary),
             value = (if (module.clockSize > 0f) module.clockSize else DEFAULT_CLOCK_SIZE)
-                .coerceIn(CLOCK_SIZE_MIN, 1f),
-            valueRange = CLOCK_SIZE_MIN..1f,
+                .coerceIn(CLOCK_SIZE_MIN, 0.55f),
+            valueRange = CLOCK_SIZE_MIN..0.55f,
             detent = DEFAULT_CLOCK_SIZE,
             enabled = enabled,
             label = { "${(it * 100f).roundToInt()}%" },

@@ -327,6 +327,29 @@ final class ClockCollapse {
         return pt[1] + LOC[1];
     }
 
+    private static final android.graphics.Matrix DRAWN_BOUNDS_MATRIX = new android.graphics.Matrix();
+    private static final float[] DRAWN_ORIGIN = new float[2];
+
+    /** Map local artwork/clock bounds into the same screen space, including AOD zoom. */
+    static void boundsOnScreen(View view, RectF bounds) {
+        DRAWN_BOUNDS_MATRIX.reset();
+        view.transformMatrixToGlobal(DRAWN_BOUNDS_MATRIX);
+        DRAWN_ORIGIN[0] = DRAWN_ORIGIN[1] = 0f;
+        DRAWN_BOUNDS_MATRIX.mapPoints(DRAWN_ORIGIN);
+        view.getLocationOnScreen(LOC);
+        DRAWN_BOUNDS_MATRIX.mapRect(bounds);
+        bounds.offset(LOC[0] - DRAWN_ORIGIN[0], LOC[1] - DRAWN_ORIGIN[1]);
+    }
+
+    static boolean clockBoundsOnScreen(RectF bounds) {
+        View view = firstTarget();
+        RectF ink = Main.glyphBox(true);
+        if (view == null || !view.isShown() || ink == null || ink.isEmpty()) return false;
+        bounds.set(ink);
+        boundsOnScreen(view, bounds);
+        return !bounds.isEmpty();
+    }
+
     static Phase phase() {
         return sPhase;
     }

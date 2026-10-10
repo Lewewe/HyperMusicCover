@@ -3978,7 +3978,7 @@ public class Main extends XposedModule {
         if (Float.isNaN(v) || v <= 0f) {
             sClockSize = Float.NaN;
         } else {
-            sClockSize = v < CLOCK_SIZE_MIN ? CLOCK_SIZE_MIN : (v > 1f ? 1f : v);
+            sClockSize = Math.max(CLOCK_SIZE_MIN, Math.min(0.55f, v));
         }
         Xp.log(TAG + "clock size = " + sClockSize);
     }
@@ -6670,6 +6670,7 @@ public class Main extends XposedModule {
         sCoverMode = false;
         StatusBarArtwork.refresh();
         sAodArtworkPolicy.clear();
+        sAodClockArtworkCompact = false;
         sAodArtworkExpanded = false;
         sAodArtworkFromCompact = false;
         LockLyrics.setNotificationCompact(false);
@@ -6976,6 +6977,22 @@ public class Main extends XposedModule {
     private static final AodArtworkPolicy sAodArtworkPolicy = new AodArtworkPolicy();
     private static boolean sAodArtworkExpanded;
     private static boolean sAodArtworkFromCompact;
+    private static boolean sAodClockArtworkCompact;
+
+    static boolean aodClockArtworkCompact() {
+        return sAodClockArtworkCompact && !sScreenOn
+                && ClockCollapse.phase() == ClockCollapse.Phase.AOD;
+    }
+
+    static void compactArtworkForAodClock() {
+        if (sScreenOn || ClockCollapse.phase() != ClockCollapse.Phase.AOD
+                || !sCoverMode || sAodClockArtworkCompact || LockLyrics.wantsCompactArtwork()) return;
+        sAodClockArtworkCompact = true;
+        refreshMediaCardForMorph();
+        LockLyrics.refresh();
+        CoverCardLayer.refresh();
+        Xp.log(TAG + "AOD artwork compacted to avoid the clock");
+    }
 
     static boolean aodArtworkFromCompact() {
         return sAodArtworkFromCompact;
@@ -7009,6 +7026,12 @@ public class Main extends XposedModule {
     }
 
     static void restoreAwakeArtwork() {
+        if (sAodClockArtworkCompact) {
+            sAodClockArtworkCompact = false;
+            refreshMediaCardForMorph();
+            LockLyrics.refresh();
+            CoverCardLayer.refresh();
+        }
         if (!sAodArtworkExpanded) return;
         if (sAodArtworkPolicy.wakePending()) return;
         if (sCoverMode && keyguardShowing()) {

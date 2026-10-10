@@ -11,7 +11,7 @@
     <string name="cover_style_full">全屏封面</string>
     <string name="cover_style_card">方形卡片</string>
     <string name="cover_clock_section">封面与时钟</string>
-    <string name="clock_size">时钟大小</string>
+    <string name="clock_size">大封面时的时钟大小</string>
     <string name="clock_force_colon">时钟强制显示冒号</string>
     <string name="clock_force_colon_summary">部分样式不生效</string>
     <string name="restart_menu">重启</string>
@@ -323,4 +323,5 @@
     <string name="credits_original_author">HyperMusicCover 原作者，为这个 Enhanced 版本提供了最初的锁屏音乐界面和模块基础。</string>
     <string name="donate_afdian">爱发电</string>
     <string name="donate_open_afdian">打开爱发电</string>
+    <string name="clock_size_summary">大封面展开时，时钟缩小后的大小，最高为原始大小的 55%。</string>
 </resources>

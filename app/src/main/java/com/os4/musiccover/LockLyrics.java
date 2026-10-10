@@ -585,7 +585,7 @@ final class LockLyrics {
 
     /** Whether the view belongs in the keyguard right now. */
     static boolean wantsAttached() {
-        return !Main.aodArtworkExpanded() && !sNotificationCompact && wanted() && Main.coverModeOn() && hasLyrics();
+        return !Main.aodClockArtworkCompact() && !Main.aodArtworkExpanded() && !sNotificationCompact && wanted() && Main.coverModeOn() && hasLyrics();
     }
 
     /** The native media player keeps its thumbnail without opening an empty lyric view. */
@@ -594,6 +594,7 @@ final class LockLyrics {
     }
 
     static boolean compactWithoutLyricsOnEntry() {
+        if (Main.aodClockArtworkCompact()) return true;
         return !Main.aodArtworkExpanded()
                 && (sNotificationCompact || sArtworkPage.compactWithoutLyrics(sEnabled, hasLyrics()));
     }
