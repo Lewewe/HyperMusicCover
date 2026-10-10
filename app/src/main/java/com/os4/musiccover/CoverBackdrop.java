@@ -8,13 +8,25 @@ final class CoverBackdrop {
     private static volatile long decision;
     private static android.view.View dimLayer;
     private static float dimTarget = Float.NaN;
+    private static boolean nativeWallpaper;
 
     static boolean hidden() {
         return Main.sHidePlayerBackground;
     }
 
+    static boolean nativeWallpaperScene() {
+        return Main.coverModeOn() && hidden() && LockLyrics.compactWithoutLyrics()
+                && !LockLyrics.hasLyrics();
+    }
+
     static void sync(boolean force) {
+        syncClock();
         updateDim();
+        boolean wallpaper = nativeWallpaperScene();
+        if (force || wallpaper != nativeWallpaper) {
+            nativeWallpaper = wallpaper;
+            StatusBarArtwork.refresh();
+        }
         boolean next = hidden();
         long previous = decision;
         if (!force && previous != 0L && ((previous & 1L) != 0L) == next) return;
@@ -25,6 +37,18 @@ final class CoverBackdrop {
         if (Main.sAppCtx != null) ProbeGuard.send(Main.sAppCtx, out);
         if (Main.sVideoWallpaper && Main.sCover != null)
             Main.sCover.setVisibility(next ? android.view.View.INVISIBLE : android.view.View.VISIBLE);
+    }
+
+    /** A lyricless compact player leaves the native wallpaper and clock unobstructed. */
+    private static void syncClock() {
+        if (!Main.coverModeOn()) return;
+        boolean nativeScene = nativeWallpaperScene();
+        boolean held = LockHold.heldBy(LockHold.Owner.COVER);
+        if (nativeScene && held) {
+            LockHold.give(LockHold.Owner.COVER, Main.screenOnCached());
+        } else if (!nativeScene && !held) {
+            LockHold.take(LockHold.Owner.COVER, Main.screenOnCached(), "wallpaper artwork");
+        }
     }
 
     private static void updateDim() {
@@ -65,7 +89,9 @@ final class CoverBackdrop {
             parent.addView(dimLayer, index, new android.view.ViewGroup.LayoutParams(-1, -1));
             dimTarget = Float.NaN;
         }
-        float alpha = Main.sHidePlayerBackground && Main.coverModeOn() ? Main.sWallpaperDim / 100f : 0f;
+        boolean dimScene = Main.coverModeOn() && (!LockLyrics.wantsCompactArtwork()
+                || LockLyrics.hasLyrics() && LockLyrics.wantsWindow());
+        float alpha = Main.sHidePlayerBackground && dimScene ? Main.sWallpaperDim / 100f : 0f;
         if (alpha == dimTarget) return;
         dimTarget = alpha;
         dimLayer.animate().cancel();

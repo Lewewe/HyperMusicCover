@@ -496,7 +496,8 @@ final class ClockCollapse {
         }
         captureFrom();
         sCardFrom = Main.cardProgress();
-        sCardTo = 0f;
+        // Returning only the clock must retain the compact player's current appearance.
+        sCardTo = Main.coverModeOn() ? sCardFrom : 0f;
         sGlassFrom = sGlassP;
         sGlassTo = 0f;
         sYFrom = currentY(natural);

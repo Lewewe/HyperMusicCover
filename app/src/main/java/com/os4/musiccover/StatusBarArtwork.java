@@ -27,7 +27,7 @@ final class StatusBarArtwork {
                 if (!ownsColors()) return chain.proceed();
                 Object wallpaperLight = Xp.getObjectField(view, "mLightLockScreenWallpaper");
                 Xp.setObjectField(view, "mLightLockScreenWallpaper",
-                        StatusBarContrast.darkIcons(sLuminance));
+                        darkIcons());
                 try {
                     // Native code updates signal icons, battery, carrier and alarm together.
                     return chain.proceed();
@@ -55,10 +55,16 @@ final class StatusBarArtwork {
 
     private static boolean ownsColors() {
         MiniPlayerScene scene = MiniPlayerScene.INSTANCE;
-        return StatusBarContrast.ownsColors(Main.sCoverMode, Main.keyguardLocked(),
+        return StatusBarContrast.ownsColors(
+                Main.sCoverMode && !CoverBackdrop.nativeWallpaperScene(), Main.keyguardLocked(),
                 scene.getBlocksMiniPlayer() || scene.getControlCenterIsActive()
                         || scene.getKeyguardGoingAway(),
-                scene.getAodActive(), sLuminance);
+                scene.getAodActive(), Main.sHidePlayerBackground ? 0d : sLuminance);
+    }
+
+    /** Wallpaper-backed artwork and lyrics use white icons over their dimmed backdrop. */
+    private static boolean darkIcons() {
+        return !Main.sHidePlayerBackground && StatusBarContrast.darkIcons(sLuminance);
     }
 
     /** Called on the existing composition worker, once per new composed artwork. */
@@ -105,7 +111,7 @@ final class StatusBarArtwork {
     static String describe() {
         View view = sView.get();
         String state = "view=" + (view != null) + " luma=" + sLuminance
-                + " owns=" + ownsColors() + " dark=" + StatusBarContrast.darkIcons(sLuminance);
+                + " owns=" + ownsColors() + " dark=" + darkIcons();
         if (view != null) {
             try {
                 state += " nativeWallpaperLight=" + Xp.getObjectField(view, "mLightLockScreenWallpaper")
