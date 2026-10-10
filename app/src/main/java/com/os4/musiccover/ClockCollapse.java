@@ -682,7 +682,7 @@ final class ClockCollapse {
         sAodTop = sFromTop;
         sAodUnit = sFromUnit;
         sAodDate = sFromDate;
-        if (Main.sCoverCardStyle.mode != CoverCardStyle.CARD || !Main.coverModeOn()
+        if (Main.effectiveCoverStyle().mode != CoverCardStyle.CARD || !Main.coverModeOn()
                 || LockLyrics.wantsCompactArtwork()) return;
         android.graphics.Bitmap art = CoverCardLayer.currentArt();
         if (art != null && !art.isRecycled()) {
@@ -778,7 +778,7 @@ final class ClockCollapse {
                 || CanvasHostBridge.nativeClockScene())
                 && !ImmersiveHost.holdsClock();
         android.graphics.Bitmap art = CoverCardLayer.currentArt();
-        boolean coverVisible = Main.sCoverCardStyle.mode == CoverCardStyle.CARD
+        boolean coverVisible = Main.effectiveCoverStyle().mode == CoverCardStyle.CARD
                 && !LockLyrics.wantsCompactArtwork() && !ImmersiveHost.holdsClock()
                 && art != null && !art.isRecycled();
         float aspect = coverVisible ? CoverCardStyle.aspect(art.getWidth(), art.getHeight()) : 1f;

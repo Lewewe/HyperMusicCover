@@ -394,4 +394,11 @@
     <string name="hypercanvas_note">实验性功能。Spotify 加载 Canvas 时才会收集数据，可能需要先打开正在播放页面。没有可用 Canvas 的歌曲仍使用原有封面背景，最多缓存当前歌曲及前后歌曲的三个视频，仅使用 Spotify 已提供的 Canvas。关闭 HyperCanvas 后清空缓存，屏幕关闭后停止播放视频。</string>
     <string name="hypercanvas_show_in_pill">在药丸模式中显示 Canvas</string>
     <string name="hypercanvas_show_in_pill_summary">播放器收起为药丸后继续显示 Canvas，关闭后会隐藏并暂停视频。</string>
+    <string name="cover_hide_player_background">使用锁屏壁纸背景</string>
+    <string name="cover_hide_player_background_summary">使用锁屏壁纸代替封面模糊背景，搭配悬浮封面和歌词，并可调节壁纸暗度。暂停 HyperCanvas 并禁用其开关，若已安装，更改此选项会重启 Spotify 和系统界面。</string>
+    <string name="hypercanvas_background_blocked">已暂停：请先关闭“使用锁屏壁纸背景”。</string>
+    <string name="media_visualization_tab">音频可视化</string>
+    <string name="media_appearance_tab">外观</string>
+    <string name="cover_wallpaper_dim">壁纸暗度</string>
+    <string name="cover_wallpaper_dim_summary">显示悬浮封面或歌词时使壁纸变暗，提高可读性。</string>
 </resources>

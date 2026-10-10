@@ -386,4 +386,11 @@
     <string name="hypercanvas_note">Experimental. Canvas is collected when Spotify loads it, you may need to open its Now Playing page first. Tracks without an available Canvas keep the normal cover background. Keeps up to three videos around the current track when Spotify provides them. Turning off HyperCanvas clears its cache. Video playback stops when the screen turns off.</string>
     <string name="hypercanvas_show_in_pill">Show Canvas in pill mode</string>
     <string name="hypercanvas_show_in_pill_summary">Keep Canvas visible when the player folds into the pill. When off, the video is hidden and paused.</string>
+    <string name="cover_hide_player_background">Use wallpaper background</string>
+    <string name="cover_hide_player_background_summary">Use your wallpaper behind a floating cover and lyrics instead of the blurred artwork background. Suspends HyperCanvas and disables its switch. If installed, changing this option restarts Spotify and SystemUI.</string>
+    <string name="hypercanvas_background_blocked">Suspended. Turn off “Use wallpaper background” to use HyperCanvas.</string>
+    <string name="media_visualization_tab">Audio visualization</string>
+    <string name="media_appearance_tab">Appearance</string>
+    <string name="cover_wallpaper_dim">Wallpaper dimming</string>
+    <string name="cover_wallpaper_dim_summary">Darken the wallpaper while the floating cover or lyrics are displayed.</string>
 </resources>

@@ -257,7 +257,7 @@ internal fun CoverPageView(
             // Framed as the islands' page frames its demonstration: a card, three plays in it.
             Card(Modifier.padding(horizontal = 12.dp)) {
                 CoverDemo(
-                    coverStyle = module.coverStyle,
+                    coverStyle = if (module.hidePlayerBackground) 1 else module.coverStyle,
                     bias = module.bias,
                     clockSize = module.clockSize,
                     modifier = Modifier.padding(top = 16.dp),
@@ -354,18 +354,48 @@ private fun CoverGroup(
     onChange: (ModuleBridge.State) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var changingBackdrop by remember { mutableStateOf(false) }
     Column {
         WindowDropdownPreference(
             title = stringResource(R.string.cover_style),
             items = listOf(stringResource(R.string.cover_style_full),
                 stringResource(R.string.cover_style_card)),
-            selectedIndex = module.coverStyle.coerceIn(0, 1),
-            enabled = enabled,
+            selectedIndex = if (module.hidePlayerBackground) 1 else module.coverStyle.coerceIn(0, 1),
+            enabled = enabled && !module.hidePlayerBackground,
             onSelectedIndexChange = {
                 onChange(module.copy(coverStyle = it))
                 ModuleBridge.setCoverStyle(context, "mode", it.toFloat())
             },
         )
+        SwitchPreference(
+            title = stringResource(R.string.cover_hide_player_background),
+            summary = stringResource(R.string.cover_hide_player_background_summary),
+            checked = module.hidePlayerBackground,
+            enabled = enabled && !changingBackdrop,
+            onCheckedChange = { hide ->
+                changingBackdrop = true
+                scope.launch {
+                    try {
+                        if (ModuleBridge.applyHidePlayerBackground(context, hide)) {
+                            onChange(module.copy(hidePlayerBackground = hide))
+                        }
+                    } finally {
+                        changingBackdrop = false
+                    }
+                }
+            },
+        )
+        if (module.hidePlayerBackground) {
+            ValueSlider(title = stringResource(R.string.cover_wallpaper_dim),
+                summary = stringResource(R.string.cover_wallpaper_dim_summary),
+                value = module.wallpaperDim.toFloat(), valueRange = 0f..80f,
+                enabled = enabled && !changingBackdrop, detent = 35f,
+                label = { "${it.toInt()}%" }, onValueChange = {
+                    onChange(module.copy(wallpaperDim = it.toInt()))
+                    ModuleBridge.setWallpaperDim(context, it.toInt())
+                })
+        }
         // The square's size, place and corners were sliders here and are fixed - it fills the room
         // it has, sits in the middle of it, and takes the media card's own corner radius, all of
         // which are the same answer on every device. See CoverCardStyle.
@@ -373,7 +403,7 @@ private fun CoverGroup(
         // The one slider left belongs to the full-screen cover alone, and it is the one that has
         // to stay a slider: where the cover sits vertically is a share of the screen, and the
         // screen is not the same on every phone.
-        if (module.coverStyle == 0) {
+        if (module.coverStyle == 0 && !module.hidePlayerBackground) {
             ValueSlider(
                 title = stringResource(R.string.cover_bias),
                 value = module.bias,

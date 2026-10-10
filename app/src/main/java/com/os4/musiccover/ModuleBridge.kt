@@ -43,6 +43,8 @@ object ModuleBridge {
         val auto: Boolean = false,
         val bias: Float = 0.34f,
         val coverStyle: Int = 0,
+        val hidePlayerBackground: Boolean = false,
+        val wallpaperDim: Int = 35,
         /**
          * The square's side as a share of the room between the clock and the media card, and
          * where it sits in the height that leaves. Both fixed on the module side and neither
@@ -425,6 +427,19 @@ object ModuleBridge {
     }
 
     fun setAuto(context: Context, on: Boolean) = send(context, "auto") { putExtra("on", on) }
+
+    suspend fun applyHidePlayerBackground(context: Context, on: Boolean): Boolean {
+        val command = intent("hideplayerbackground").putExtra("on", on)
+        if (!deliver(context.applicationContext, command)) return false
+        HyperCanvasBridge.synchronizeBlock(context, on)
+        return true
+    }
+
+    fun setWallpaperDim(context: Context, value: Int) =
+        send(context, "wallpaperdim") { putExtra("v", value) }
+
+    fun setHidePlayerBackground(context: Context, on: Boolean) =
+        send(context, "hideplayerbackground") { putExtra("on", on) }
 
     fun setCover(context: Context, on: Boolean) = send(context, "pushart") { putExtra("on", on) }
 
@@ -866,6 +881,8 @@ object ModuleBridge {
             auto = b.getBoolean("auto", false),
             bias = b.getFloat("bias", 0.34f),
             coverStyle = b.getInt("coverstyle", 0),
+            hidePlayerBackground = b.getBoolean("hideplayerbackground", false),
+            wallpaperDim = b.getInt("wallpaperdim", 35),
             coverCardFill = b.getFloat("covercardfill", 1f),
             coverCardPos = b.getFloat("covercardpos", 0.5f),
             clockHeightDp = b.getFloat("clock", 36f),
@@ -986,6 +1003,13 @@ object ModuleBridge {
      * cover ever ends up wrong on screen, this is what re-reads it from disk.
      */
     fun restartWallpaper(): Boolean = kill("com.miui.miwallpaper")
+
+    /** Only the extension's two shipped scopes, after its blocking policy has been persisted. */
+    fun restartCanvasScopes(): Boolean {
+        val spotify = killTree("com.spotify.music")
+        val systemUi = restartSystemUi()
+        return spotify && systemUi
+    }
 
     /**
      * Every process the module is loaded into, in one go.

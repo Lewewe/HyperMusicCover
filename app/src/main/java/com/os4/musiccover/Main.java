@@ -423,6 +423,19 @@ public class Main extends XposedModule {
      */
     static final float DEFAULT_CLOCK_SIZE = 0.09f;
     static volatile float sClockSize = DEFAULT_CLOCK_SIZE;
+    static volatile boolean sHidePlayerBackground;
+    static volatile int sWallpaperDim = 35;
+
+    private static CoverCardStyle sWallpaperStyleOf, sWallpaperCoverStyle;
+    static CoverCardStyle effectiveCoverStyle() {
+        CoverCardStyle saved = sCoverCardStyle;
+        if (!sHidePlayerBackground || saved.mode == CoverCardStyle.CARD) return saved;
+        if (sWallpaperStyleOf != saved) {
+            sWallpaperCoverStyle = new CoverCardStyle(CoverCardStyle.CARD, saved.fill, saved.pos, saved.corner);
+            sWallpaperStyleOf = saved;
+        }
+        return sWallpaperCoverStyle;
+    }
     /** The smallest size the clock can be set to. */
     static final float CLOCK_SIZE_MIN = 0.05f;
     /**
@@ -1027,9 +1040,9 @@ public class Main extends XposedModule {
                     if (sVideoWallpaper) sCover = null;
                     CoverPush.pushArtAsync(true, false);
                 }
-                if (sCoverMode && sCoverCardStyle.mode == CoverCardStyle.CARD) {
+                if (sCoverMode && effectiveCoverStyle().mode == CoverCardStyle.CARD) {
                     CoverCardLayer.attach(CoverPush.coverLayer());
-                    CoverCardLayer.style(sCoverCardStyle);
+                    CoverCardLayer.style(effectiveCoverStyle());
                     CoverCardLayer.playback(sCoverCardPlaying);
                 }
                 // Re-apply on keyguard rebuild. Measured: the system never re-shows the
@@ -1932,6 +1945,8 @@ public class Main extends XposedModule {
                     // A measurement rather than a setting, and kept for the same reason the
                     // geometry is: a fresh SystemUI should not have to relearn it to use it.
                     + "\ncovergap=" + CoverPush.sCoverFadeGapMs
+                    + "\nwallpaperdim=" + sWallpaperDim
+                    + "\nhideplayerbackground=" + (sHidePlayerBackground ? 1 : 0)
                     + "\nhidefp=" + (sHideFp ? 1 : 0)
                     // aodsmall and lyrics are not written: both are fixed on, and loadState does
                     // not read them. lyrichidden still is - the two-finger tap is the one way the
@@ -2075,6 +2090,8 @@ public class Main extends XposedModule {
                         else if ("vcfade".equals(k)) sVideoFade = "1".equals(v);
                         else if ("fsmode2".equals(k)) sFadeMode = Integer.parseInt(v);
                         else if ("covergap".equals(k)) CoverPush.sCoverFadeGapMs = Long.parseLong(v);
+                        else if ("wallpaperdim".equals(k)) sWallpaperDim = Math.max(0, Math.min(80, Integer.parseInt(v)));
+                        else if ("hideplayerbackground".equals(k)) sHidePlayerBackground = "1".equals(v);
                         else if ("hidefp".equals(k)) sHideFp = "1".equals(v);
                         else if ("colon".equals(k)) HyperTweaks.sForceColon = "1".equals(v);
                         else if ("seekglow".equals(k)) HyperTweaks.sBarGlow = "1".equals(v);
@@ -2772,6 +2789,18 @@ public class Main extends XposedModule {
                         Xp.log(TAG + "media bar glow " + (HyperTweaks.sBarGlow ? "on" : "off")
                                 + " - " + r);
                         setResultData((HyperTweaks.sBarGlow ? "on " : "off ") + r);
+                    } else if ("wallpaperdim".equals(op)) {
+                        sWallpaperDim = Math.max(0, Math.min(80, i.getIntExtra("v", 35)));
+                        saveState();
+                        CoverBackdrop.sync(true);
+                    } else if ("hideplayerbackground".equals(op)) {
+                        sHidePlayerBackground = i.getBooleanExtra("on", false);
+                        saveState();
+                        CanvasHostBridge.suspendForBackdrop();
+                        CoverCardLayer.style(effectiveCoverStyle());
+                        CoverBackdrop.sync(true);
+                        if (sCoverMode) CoverPush.pushArtAsync(true, false);
+                        LockLyrics.refresh();
                     } else if ("hidefp".equals(op)) {
                         sHideFp = i.getBooleanExtra("on", !sHideFp);
                         saveState();
@@ -2980,6 +3009,8 @@ public class Main extends XposedModule {
                         out.putBoolean("auto", sAuto);
                         out.putFloat("bias", sBias);
                         out.putInt("coverstyle", sCoverCardStyle.mode);
+                        out.putBoolean("hideplayerbackground", sHidePlayerBackground);
+                        out.putInt("wallpaperdim", sWallpaperDim);
                         out.putFloat("covercardfill", sCoverCardStyle.fill);
                         out.putFloat("covercardpos", sCoverCardStyle.pos);
                         // No covercardcorner: the square's corners are the media card's own, and
@@ -6737,9 +6768,9 @@ public class Main extends XposedModule {
         // the clock's own frames instead of blinking away before the clock has begun to move.
         // Without an animation there is nothing to fade, and the settled look goes on directly.
         sCardP = animate ? 0f : 1f;
-        if (sCoverCardStyle.mode == CoverCardStyle.CARD) {
+        if (effectiveCoverStyle().mode == CoverCardStyle.CARD) {
             CoverCardLayer.attach(CoverPush.coverLayer());
-            CoverCardLayer.style(sCoverCardStyle);
+            CoverCardLayer.style(effectiveCoverStyle());
             CoverCardLayer.playback(sCoverCardPlaying);
         }
         // The lyrics exception is decided here, before anything has moved. With the lyrics up
@@ -7139,7 +7170,7 @@ public class Main extends XposedModule {
 
     static void prepareAodArtwork(boolean heldAod) {
         if (sAodArtworkExpanded || !AodArtworkPolicy.shouldExpand(sCoverMode,
-                sCoverCardStyle.mode == CoverCardStyle.CARD, heldAod,
+                effectiveCoverStyle().mode == CoverCardStyle.CARD, heldAod,
                 sAodArtworkPolicy.notificationsExpanded(
                         LockIslands.INSTANCE.notificationArtworkExpanded()),
                 LockLyrics.userWantsCompactArtwork())) return;
@@ -7187,7 +7218,7 @@ public class Main extends XposedModule {
     /** The full-screen AOD may show a faint static colour wash even with the square hidden. */
     static boolean coverCardBackdropInAod() {
         View c = sContainer;
-        return sCoverMode && sCoverCardStyle.mode == CoverCardStyle.CARD && !sScreenOn
+        return sCoverMode && effectiveCoverStyle().mode == CoverCardStyle.CARD && !sScreenOn
                 && ClockCollapse.phase() == ClockCollapse.Phase.AOD
                 && ClockCollapse.aodFullScreen() && keyguardShowing()
                 && c != null && c.isShown();
@@ -7298,7 +7329,7 @@ public class Main extends XposedModule {
     }
 
     static boolean coverMorphCardMode() {
-        return sCoverCardStyle.mode == CoverCardStyle.CARD;
+        return effectiveCoverStyle().mode == CoverCardStyle.CARD;
     }
 
     /** A manual entry must keep its moving artwork until the asynchronous backdrop can take it. */
@@ -7312,7 +7343,7 @@ public class Main extends XposedModule {
     /** The full-screen destination is the sharp band in CoverCompose.composeWallpaper(). */
     static CoverMorphMotion.Box coverMorphTarget(Bitmap art) {
         if (art == null || art.isRecycled()) return null;
-        if (sCoverCardStyle.mode == CoverCardStyle.FULL) {
+        if (effectiveCoverStyle().mode == CoverCardStyle.FULL) {
             if (sScreenW <= 0 || sScreenH <= 0 || art.getWidth() <= 0) return null;
             float height = art.getHeight() * (sScreenW / (float) art.getWidth());
             float top = (sScreenH - height) * Math.max(0f, Math.min(1f, sBias));
@@ -7334,13 +7365,13 @@ public class Main extends XposedModule {
         // Use the same aspect-aware placement as the card that receives the moving artwork.
         // A square reservation makes video thumbnails land small and grow again at handoff.
         float aspect = CoverCardStyle.aspect(art.getWidth(), art.getHeight());
-        CoverCardStyle.Rect r = sCoverCardStyle.place(layer.getWidth(), layer.getHeight(),
+        CoverCardStyle.Rect r = effectiveCoverStyle().place(layer.getWidth(), layer.getHeight(),
                 layer.getResources().getDisplayMetrics().density,
                 ClockCollapse.contentBottomFor(layer) - xy[1],
                 ClockCollapse.unzoomY(layer, mediaTop) - xy[1], aspect);
         // Start the morph even when the old native clock has not made room for the cover yet.
         if (r == null && sScreenOn && CoverCardStyle.usesNativeClock(aspect)) {
-            r = sCoverCardStyle.place(layer.getWidth(), layer.getHeight(),
+            r = effectiveCoverStyle().place(layer.getWidth(), layer.getHeight(),
                     layer.getResources().getDisplayMetrics().density,
                     ClockCollapse.compactContentBottomFor(layer) - xy[1],
                     ClockCollapse.unzoomY(layer, mediaTop) - xy[1], aspect);

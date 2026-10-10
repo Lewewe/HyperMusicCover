@@ -179,7 +179,7 @@ final class CoverPush {
         if (!currentPush(gen, key)) return;
         long t0 = android.os.SystemClock.uptimeMillis();
         Intent out = wallpaperIntent("art");
-        out.putExtra("cardmode", Main.sCoverCardStyle.mode == CoverCardStyle.CARD);
+        out.putExtra("cardmode", Main.effectiveCoverStyle().mode == CoverCardStyle.CARD);
         // The blur travels with the cover. A lyricblur broadcast is one shot - dropped, or
         // overtaken on the other side - and nothing else ever corrected it, so a song could play
         // out sharp under its lyrics. This makes every track change an agreement between the two
@@ -192,6 +192,7 @@ final class CoverPush {
         // has said the opposite. The time is what lets that side drop the older of the two
         // instead of taking whichever arrived last. See LockLyrics.putBlurOn.
         LockLyrics.putBlurOn(out);
+        CoverBackdrop.putState(out);
         // This side's half of the timeline, for `op timing` over there. See sCtTrack.
         out.putExtra("t0", Main.sCtTrack);
         out.putExtra("tskip", sSkipAt);
@@ -226,7 +227,7 @@ final class CoverPush {
             return;
         }
         if (art == null) { Xp.log(Main.TAG + "pushart: no album art"); return; }
-        if (Main.sCoverMode && Main.sCoverCardStyle.mode == CoverCardStyle.CARD) {
+        if (Main.sCoverMode && Main.effectiveCoverStyle().mode == CoverCardStyle.CARD) {
             CoverCardLayer.publish(art, temporaryThumbnail, gen, key);
         }
         if (!currentPush(gen, key)) return;
@@ -267,7 +268,7 @@ final class CoverPush {
                 // picture every time (trace 2026-09-30), so the same key takes the last answer.
                 String tintKey = artPrint(src) + ":" + src.getWidth() + "x" + src.getHeight()
                         + ":" + w + "x" + h + ":" + Main.sBias + ":" + Main.bandKey() + ":"
-                        + Main.sCoverCardStyle.mode;
+                        + Main.effectiveCoverStyle().mode;
                 boolean reused = tintKey.equals(sTintKey);
                 if (reused) {
                     Main.sCoverTint = sTintValue;
@@ -311,7 +312,7 @@ final class CoverPush {
         if (Main.sVideoWallpaper) {
             final Bitmap srcArt = art;
             final int fw = w, fh = h;
-            final boolean cardMode = Main.sCoverCardStyle.mode == CoverCardStyle.CARD;
+            final boolean cardMode = Main.effectiveCoverStyle().mode == CoverCardStyle.CARD;
             final float fb = cardMode ? 0.5f : Main.sBias;
             frostTask = new java.util.concurrent.FutureTask<>(
                     () -> CoverCompose.frostedFor(srcArt, fw, fh, fb, cardMode));
@@ -459,9 +460,9 @@ final class CoverPush {
                                 ViewGroup.LayoutParams.MATCH_PARENT));
                         Main.sCover = iv;
                     }
-                    if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) {
+                    if (Main.effectiveCoverStyle().mode == CoverCardStyle.CARD) {
                         CoverCardLayer.attach(layer);
-                        CoverCardLayer.style(Main.sCoverCardStyle);
+                        CoverCardLayer.style(Main.effectiveCoverStyle());
                         // The backdrop is this view here, not the wallpaper process, so nothing
                         // over there will say it is up: this line is.
                         CoverCardLayer.releaseHeld();
@@ -500,6 +501,7 @@ final class CoverPush {
                     // exactly the way deducted_image_view did on the image path.
                     Main.setDepthHidden(true);
                     guardVideoCover(iv);
+                    iv.setVisibility(CoverBackdrop.hidden() ? View.INVISIBLE : View.VISIBLE);
 
                     // Fade in to bridge FastPlayer's first frame render (~120-150ms), so the
                     // background and the card's blur do not change on two different frames. OWED
@@ -2488,7 +2490,7 @@ final class CoverPush {
      * mode the wallpaper is only the blurred backdrop - the square itself is CoverCardLayer.
      */
     private static Bitmap composeWallpaper(Bitmap src, int w, int h, float bias) {
-        return Main.sCoverCardStyle.mode == CoverCardStyle.CARD
+        return Main.effectiveCoverStyle().mode == CoverCardStyle.CARD
                 ? CoverCompose.cardBackground(src, w, h)
                 : CoverCompose.composeWallpaper(src, w, h, bias);
     }

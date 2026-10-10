@@ -9,6 +9,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.os4.musiccover.HyperCanvasBridge
+import com.os4.musiccover.ModuleBridge
 import com.os4.musiccover.R
 import com.os4.musiccover.ui.screen.features.ValueSlider
 import com.os4.musiccover.ui.util.PageScaffold
@@ -24,8 +25,16 @@ internal fun ExtensionsPageView(isBlurEnabled: Boolean, isCurrent: Boolean, extr
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(Bundle()) }
+    var hostBlocked by remember { mutableStateOf(false) }
     LaunchedEffect(isCurrent) {
-        if (isCurrent) while (true) { state = HyperCanvasBridge.query(context); delay(2500L) }
+        if (isCurrent) while (true) {
+            val host = ModuleBridge.query(context)
+            if (host.alive) {
+                hostBlocked = host.hidePlayerBackground
+                state = HyperCanvasBridge.synchronizeBlock(context, hostBlocked)
+            } else state = HyperCanvasBridge.query(context)
+            delay(2500L)
+        }
     }
     fun push(key: String, value: Int) {
         val updated = Bundle(state)
@@ -33,9 +42,11 @@ internal fun ExtensionsPageView(isBlurEnabled: Boolean, isCurrent: Boolean, extr
         state = updated
         scope.launch { state = HyperCanvasBridge.configure(context, updated) }
     }
+    val blocked = hostBlocked || state.getBoolean("hostBlocked")
     val installed = state.getBoolean("installed")
     val enabled = state.getBoolean("enabled")
     val status = when {
+        blocked -> R.string.hypercanvas_background_blocked
         !installed -> R.string.hypercanvas_missing
         state.getString("scopeState") == "awaiting-approval" -> R.string.hypercanvas_approval
         state.getString("scopeState") == "enable-module" -> R.string.hypercanvas_enable_module
@@ -49,7 +60,7 @@ internal fun ExtensionsPageView(isBlurEnabled: Boolean, isCurrent: Boolean, extr
         item {
             Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                 SwitchPreference(title = stringResource(R.string.hypercanvas_title), summary = stringResource(R.string.hypercanvas_summary),
-                    checked = enabled, enabled = installed, onCheckedChange = { push("enabled", if (it) 1 else 0) })
+                    checked = enabled, enabled = installed && !blocked, onCheckedChange = { push("enabled", if (it) 1 else 0) })
                 Text(stringResource(status), modifier = Modifier.padding(16.dp))
                 if (installed && enabled) {
                     SwitchPreference(title = stringResource(R.string.hypercanvas_show_in_pill),

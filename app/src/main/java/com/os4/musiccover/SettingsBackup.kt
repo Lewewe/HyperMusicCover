@@ -87,6 +87,8 @@ object SettingsBackup {
             // worse than not importing it.
             json.put(KEY_BIAS, module.bias.toDouble())
             json.put(KEY_COVER_STYLE, module.coverStyle)
+            json.put("hidePlayerBackground", module.hidePlayerBackground)
+            json.put("wallpaperDim", module.wallpaperDim)
             if (module.clockSize > 0f) json.put(KEY_CLOCK_SIZE, module.clockSize.toDouble())
             json.put(KEY_CARD_TITLE_TAP, module.mcTitleTap)
             json.put(KEY_HIDE_FINGERPRINT, module.hideFingerprint)
@@ -130,6 +132,10 @@ object SettingsBackup {
             // before them is not read for any of it - the module holds them where they are.
             // Only when the file has one: a file without the module's half (exported while the
             // module did not answer, or from before it was included) used to reset it to FULL.
+            if (obj.has("wallpaperDim")) ModuleBridge.setWallpaperDim(context, obj.getInt("wallpaperDim"))
+            if (obj.has("hidePlayerBackground")) {
+                ModuleBridge.setHidePlayerBackground(context, obj.getBoolean("hidePlayerBackground"))
+            }
             if (obj.has(KEY_COVER_STYLE)) {
                 ModuleBridge.setCoverStyle(context, "mode", obj.getInt(KEY_COVER_STYLE).toFloat())
             }

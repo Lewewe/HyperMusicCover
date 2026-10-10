@@ -305,7 +305,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         float p = Math.max(0f, Math.min(1f, motion.value));
         float startRadius = mini ? MiniPlayerRuntime.artworkRadius()
                 : Main.coverMorphThumbnailRadius();
-        CoverCardStyle style = Main.sCoverCardStyle;
+        CoverCardStyle style = Main.effectiveCoverStyle();
         float endRadius = cardMode ? style.radius(Math.min(cover.w, cover.h)) : 0f;
         float radius = CoverMorphMotion.artworkRadius(startRadius, endRadius,
                 Math.min(drawn.width(), drawn.height()), Math.min(cover.w, cover.h), p,

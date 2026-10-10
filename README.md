@@ -80,6 +80,7 @@ The styling foundation is adapted from [HyperLyrics-Enhanced](https://github.com
 - Improve rapid track changes and previous-track handling, avoiding stale covers and transition effects when only restarting or seeking within a track.
 - Compatibility fixes for Spotify, NetEase Music and Salt Player.
 - A single full-screen artwork background with supplementary cover-derived color regions.
+- Optional **Use wallpaper background** mode with adjustable dimming behind floating cover art and lyrics. Its dim layer stays full-screen on AOD, and HyperCanvas is temporarily suspended while this mode is enabled.
 - A lyrics button on big cover art when lyrics are available; tracks without lyrics can return to the player with one tap when tap gestures are enabled.
 
 ### Notifications, pill mode and AOD

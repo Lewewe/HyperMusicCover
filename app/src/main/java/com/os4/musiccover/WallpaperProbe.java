@@ -101,6 +101,8 @@ public class WallpaperProbe {
      * card blur sample it too - which is the whole point of coming into this process.
      */
     private static volatile Bitmap sArt;
+    private static volatile boolean sBackdropHidden;
+    private static long sBackdropSeq;
     /** Which of the two cover compositions the current source represents. */
     private static volatile boolean sCardMode;
     /** When the running fade-out of the cover began, and how long it runs; 0 when none is. */
@@ -696,7 +698,7 @@ public class WallpaperProbe {
                             sFadeInFlight = false;
                         }
                     }
-                    Bitmap art = sArt;
+                    Bitmap art = sBackdropHidden ? null : sArt;
                     sTexShowsCover = art != null;
                     // The one moment the real lock wallpaper passes through here. Once the art
                     // is set the getBitmap short-circuit below means the OEM never decodes it
@@ -706,7 +708,7 @@ public class WallpaperProbe {
                         // Drawing the keyguard with no cover to draw: the one moment worth
                         // asking, and the retry for the two asks above that fire before
                         // SystemUI's receiver exists. Rate-limited and capped in askForArt().
-                        askForArt("renderer");
+                        if (!sBackdropHidden) askForArt("renderer");
                     }
                     if (art != null) {
                         // Match the original exactly: updateDimensions/updateMatrix derive
@@ -1072,6 +1074,7 @@ public class WallpaperProbe {
      * unknown. Cached, so a track change scales once rather than on every GL callback.
      */
     private static Bitmap fittedArt() {
+        if (sBackdropHidden) return null;
         return frostedIfWanted(sharpFittedArt());
     }
 
@@ -1129,6 +1132,7 @@ public class WallpaperProbe {
     }
 
     private static Bitmap sharpFittedArt() {
+        if (sBackdropHidden) return null;
         Bitmap art = sArt;
         if (art == null) return null;
         int targetW = sReportedW;
@@ -1832,6 +1836,7 @@ public class WallpaperProbe {
                         // What the lyrics want of THIS cover. See applyArt(), which is where it
                         // takes effect; older builds of SystemUI send no such extra, and an older
                         // SystemUI sends the answer without its place in line.
+                        takeBackdropDecision(i);
                         boolean blurMine = true;
                         if (i.hasExtra("blurseq")) {
                             blurMine = takeBlurDecision(i.getLongExtra("blurseq", 0L),
@@ -1994,6 +1999,8 @@ public class WallpaperProbe {
                                     : "off - desktop wallpaper back to its own picture"));
                             reloadDesktopTexture();
                         }
+                    } else if ("backdrop".equals(op)) {
+                        takeBackdropDecision(i);
                     } else if ("lyricblur".equals(op)) {
                         final boolean on = i.getBooleanExtra("on", false);
                         sMsgSeq++;
@@ -2151,6 +2158,26 @@ public class WallpaperProbe {
      * face value that answer undoes the switch that came after it, and nothing re-sends, which is
      * a song playing out sharp under its lyrics.
      */
+    private static void takeBackdropDecision(Intent intent) {
+        if (!intent.hasExtra("backdropseq")) return;
+        long seq = intent.getLongExtra("backdropseq", 0L);
+        if (seq < sBackdropSeq) return;
+        sBackdropSeq = seq;
+        boolean hide = intent.getBooleanExtra("backdrophidden", false);
+        if (hide == sBackdropHidden) return;
+        Bitmap from = fittedArt();
+        if (from == null) from = sOrig;
+        cancelFade();
+        sMsgSeq++;
+        sBackdropHidden = hide;
+        if (videoPath()) videoWindowTakeover(hide);
+        else {
+            Bitmap to = hide ? sOrig : fittedArt();
+            if (from != null && to != null) startFade(from, to, null);
+            else reloadTexture();
+        }
+    }
+
     private static boolean takeBlurDecision(long seq, boolean on, String via) {
         if (seq != 0L && seq < sBlurSeq) {
             Xp.log(TAG + "the " + via + " carried an answer made before the one in hand ("
@@ -3546,6 +3573,7 @@ public class WallpaperProbe {
      * to change - because SystemUI holds its own half of the transition until it hears it.
      */
     private static boolean videoWindowTakeover(boolean on) {
+        on = on || sBackdropHidden;
         final int gen = sTakeoverGen.incrementAndGet();
         if (on) {
             sFadeFrom = null;

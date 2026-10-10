@@ -2078,6 +2078,7 @@ final class LockLyrics {
 
     /** again = tell the other side even when the answer has not changed. */
     private static void updateBlur(boolean again) {
+        CoverBackdrop.sync(again);
         if (!Main.coverModeOn()) {
             setBlurSent(false);
             return;

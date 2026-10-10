@@ -20,6 +20,18 @@ final class CanvasHostBridge {
     private static boolean backdropAllowed = true;
     private static boolean showInPill;
     private static boolean frozenInAod;
+    static void suspendForBackdrop() {
+        if (!Main.sHidePlayerBackground || !canvasReady && !fallbackBackdrop && !frozenInAod
+                && !backdropHeld && !clockOwned && !autoCollapsed) return;
+        canvasReady = fallbackBackdrop = frozenInAod = backdropHeld = autoCollapsed = false;
+        activeTrack = backdropTrack = "";
+        resumeUntil = 0L;
+        if (clockOwned) {
+            clockOwned = false;
+            LockHold.give(LockHold.Owner.CANVAS, Main.screenOnCached());
+        }
+        Main.refreshCanvasControls();
+    }
     static boolean keepsClockInAod() {
         return !MiniPlayerRuntime.canvasPlayerInPill()
                 && (canvasReady || frozenInAod || fallbackBackdrop);
@@ -77,6 +89,12 @@ final class CanvasHostBridge {
         String track = intent.getStringExtra("track");
         Bundle out = new Bundle();
         try {
+            if (Main.sHidePlayerBackground) {
+                suspendForBackdrop();
+                out.putBoolean("canvasBlocked", true);
+                out.putBoolean("canvasVisible", false);
+                return out;
+            }
             if (!verified) {
                 verified = context.getPackageManager().checkSignatures("com.yzc26623.HyperMusicCoverEnhanced", "com.yzc26623.HyperCanvas") == android.content.pm.PackageManager.SIGNATURE_MATCH;
                 if (!verified) return out;
