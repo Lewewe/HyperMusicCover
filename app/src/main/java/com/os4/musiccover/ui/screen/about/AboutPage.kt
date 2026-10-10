@@ -442,6 +442,11 @@ private fun AboutContent(
                     painter = painterResource(R.drawable.ic_about_logo),
                     contentDescription = null,
                 )
+                Image(
+                    modifier = Modifier.size(100.dp),
+                    painter = painterResource(R.drawable.ic_app_mark),
+                    contentDescription = null,
+                )
             }
             MiuixText(
                 modifier = Modifier

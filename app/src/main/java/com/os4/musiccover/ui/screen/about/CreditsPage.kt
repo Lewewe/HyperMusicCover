@@ -73,7 +73,7 @@ fun CreditsPageContent(
         Credit(
             "@puhboo",
             stringResource(R.string.credits_puhboo),
-            "https://github.com/puhboo/HyperMusicCover-Extra",
+            "https://github.com/puhboo",
         ),
         Credit(
             "@juren233",

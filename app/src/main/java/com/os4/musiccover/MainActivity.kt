@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.View
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
@@ -133,9 +132,8 @@ class MainActivity : ComponentActivity() {
         // of this runs, so it can only be steered through the configuration. Normally a no-op -
         // it only does anything the first launch after the theme mode changes.
         AppNightMode.apply(this, savedSettings.themeMode)
-        // A config change (rotation, language) re-runs onCreate with no splash behind it,
-        // and holding a blank window then would be a delay the user just sees.
-        holdSplashUntilContentIsReady(splashIsShowing = savedInstanceState == null)
+        // Show the UI as soon as Compose is ready, without an icon-animation delay.
+        holdSplashUntilContentIsReady()
 
         setContent {
             // Re-read on the way back from the theme screen, which saves its own changes while
@@ -207,20 +205,14 @@ class MainActivity : ComponentActivity() {
      * The timeout is the escape hatch: a launch must never be held hostage by a composition that
      * is slower than expected, so past it the window is shown with whatever it has.
      */
-    private fun holdSplashUntilContentIsReady(splashIsShowing: Boolean) {
+    private fun holdSplashUntilContentIsReady() {
         val content = findViewById<View>(android.R.id.content)
-        val start = SystemClock.uptimeMillis()
-        // Compose is usually ready before the record has finished spinning. Handing over then
-        // would cut the icon animation off mid-turn, so the splash also stays for as long as the
-        // animation lasts - it is the whole point of having drawn one.
-        val minimumHold = if (splashIsShowing) SPLASH_ANIMATION_MS else 0L
         content.viewTreeObserver.addOnPreDrawListener(
             object : ViewTreeObserver.OnPreDrawListener {
                 override fun onPreDraw(): Boolean {
                     // Cancelling the draw makes ViewRootImpl schedule another traversal, so this
-                    // re-asks every frame on its own until both conditions hold.
+                    // re-asks every frame on its own until the UI is ready.
                     if (!uiReady) return false
-                    if (SystemClock.uptimeMillis() - start < minimumHold) return false
                     content.viewTreeObserver.removeOnPreDrawListener(this)
                     return true
                 }
@@ -230,8 +222,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        /** Matches windowSplashScreenAnimationDuration in themes.xml. */
-        const val SPLASH_ANIMATION_MS = 700L
         const val SPLASH_HOLD_MAX_MS = 1500L
     }
 }

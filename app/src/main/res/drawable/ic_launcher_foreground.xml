@@ -1,51 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    A record sitting on its sleeve: the album art is what this module puts on the lock screen.
-
-    The path data is ic_about_logo.xml's, unchanged, so the launcher icon and the About page show
-    the same drawing. The About logo is drawn across a full 108 square; an adaptive icon only ever
-    shows the middle 72x72 of its canvas, the outer 18 on each side being bleed the launcher's
-    mask eats. Scaling the whole thing by 72/108 puts that same drawing inside what the mask
-    shows, at the same proportions.
--->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.6667"
-        android:scaleY="0.6667">
-
-        <!-- the sleeve, peeking out behind the record -->
-        <path
-            android:pathData="M26,27.5h32a5,5 0 0 1 5,5v36a5,5 0 0 1 -5,5h-32a5,5 0 0 1 -5,-5v-36a5,5 0 0 1 5,-5z"
-            android:fillColor="#FFFFFF"
-            android:fillAlpha="0.32" />
-
-        <!-- the record -->
-        <path
-            android:pathData="M62,55.5m-25,0a25,25 0 1,0 50,0a25,25 0 1,0 -50,0"
-            android:fillColor="#FFFFFF" />
-
-        <!-- grooves -->
-        <path
-            android:pathData="M62,55.5m-18,0a18,18 0 1,0 36,0a18,18 0 1,0 -36,0"
-            android:strokeColor="#33000000"
-            android:strokeWidth="1.6"
-            android:fillColor="#00000000" />
-        <path
-            android:pathData="M62,55.5m-12,0a12,12 0 1,0 24,0a12,12 0 1,0 -24,0"
-            android:strokeColor="#26000000"
-            android:strokeWidth="1.4"
-            android:fillColor="#00000000" />
-
-        <!-- spindle hole -->
-        <path
-            android:pathData="M62,55.5m-5,0a5,5 0 1,0 10,0a5,5 0 1,0 -10,0"
-            android:fillColor="#FF6C3BC4" />
-    </group>
-</vector>
+<!-- Keep the supplied mark inside the adaptive icon safe area without altering the PNG. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="16.6667%"
+    android:insetTop="16.6667%"
+    android:insetRight="16.6667%"
+    android:insetBottom="16.6667%">
+    <bitmap android:src="@drawable/ic_app_mark" android:gravity="fill" />
+</inset>
