@@ -23,13 +23,13 @@ final class JapaneseRomanizer {
 
     /** Fills local values in-place; safe to call more than once and intended for worker threads. */
     static void apply(List<LyricLine> lines) {
-        if (!LockLyrics.sOnDeviceTransliteration || unavailable || lines == null || lines.isEmpty()
+        if (!LockLyrics.sOnDeviceTransliteration || !LockLyrics.sLocalJapanese || unavailable || lines == null || lines.isEmpty()
                 || !hasKana(lines) || tokenizer == null && !JapaneseDictionary.ready(Main.appContext())) return;
         for (LyricLine line : lines) apply(line);
     }
 
     static boolean needsApply(List<LyricLine> lines) {
-        if (!LockLyrics.sOnDeviceTransliteration || unavailable || lines == null || lines.isEmpty()
+        if (!LockLyrics.sOnDeviceTransliteration || !LockLyrics.sLocalJapanese || unavailable || lines == null || lines.isEmpty()
                 || !hasKana(lines)) return false;
         if (tokenizer == null && !JapaneseDictionary.ready(Main.appContext())) return false;
         for (LyricLine line : lines) if (needsApply(line)) return true;
@@ -37,16 +37,17 @@ final class JapaneseRomanizer {
     }
 
     private static boolean needsApply(LyricLine line) {
-        return line != null && (line.localRomaRevision != REVISION && hasKana(line.text)
+        return line != null && (!LocalRomanizer.currentReading(line) && hasKana(line.text)
                 || needsApply(line.bg));
     }
 
     private static void apply(LyricLine line) {
         if (line == null) return;
-        if (line.localRomaRevision != REVISION && hasKana(line.text)) {
+        if (!LocalRomanizer.currentReading(line) && hasKana(line.text)) {
             String romanized = romanize(line.text);
             if (romanized != null) {
                 line.localRoma = romanized;
+                line.localRomaSettings = LocalRomanizer.settingsMask();
                 line.localRomaRevision = REVISION;
             }
         }
@@ -95,7 +96,7 @@ final class JapaneseRomanizer {
     }
 
     static String romanize(String text) {
-        if (text == null || text.trim().isEmpty() || unavailable || !LockLyrics.sOnDeviceTransliteration) return null;
+        if (text == null || text.trim().isEmpty() || unavailable || !LockLyrics.sOnDeviceTransliteration || !LockLyrics.sLocalJapanese) return null;
         try {
             Tokenizer t = tokenizer();
             if (t == null) return null;

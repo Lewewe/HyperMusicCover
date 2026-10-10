@@ -157,6 +157,8 @@ final class LockLyrics {
     /** Downloads and enables the optional local Japanese reading dictionary. */
     static volatile boolean sOnDeviceTransliteration = false;
     /** Small built-in reading engines, individually opt-in from Dictionaries. */
+    // Enabled by default to preserve existing Japanese dictionary behavior.
+    static volatile boolean sLocalJapanese = true;
     static volatile boolean sLocalChinese = false;
     static volatile boolean sLocalKorean = false;
     static volatile boolean sLocalCyrillic = false;
@@ -536,10 +538,17 @@ final class LockLyrics {
         return sLines;
     }
 
-    /** The optional Japanese dictionary has finished downloading in SystemUI's storage. */
+    /** Rebuild current readings and invalidate stale prefetch results after local settings change. */
+    static void localRomanizationChanged() {
+        LocalRomanizer.invalidateReadings(sLines);
+        NextLyrics.configurationChanged();
+        setLines(sLines, "local transliteration settings changed");
+    }
+
+    /** An optional reading dictionary has finished downloading in SystemUI's storage. */
     static void localRomanizationReady() {
         if (!sOnDeviceTransliteration || sLines == null || sLines.isEmpty()) return;
-        setLines(sLines, "on-device transliteration ready");
+        localRomanizationChanged();
     }
 
     /**

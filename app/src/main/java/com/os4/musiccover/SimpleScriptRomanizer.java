@@ -13,8 +13,8 @@ final class SimpleScriptRomanizer {
     }
     static void apply(List<LyricLine> lines) { if (lines != null) for (LyricLine line : lines) apply(line); }
     private static boolean enabled() { return LockLyrics.sOnDeviceTransliteration && (LockLyrics.sLocalKorean || LockLyrics.sLocalCyrillic || LockLyrics.sLocalGreek); }
-    private static boolean needs(LyricLine l) { return l.localRomaRevision != LocalRomanizer.REVISION && script(l.text) != 0; }
-    private static void apply(LyricLine l) { if (l == null) return; if (needs(l)) { String r = romanize(l.text); if (r != null) { l.localRoma = r; l.localRomaRevision = LocalRomanizer.REVISION; } } apply(l.bg); }
+    private static boolean needs(LyricLine l) { return !LocalRomanizer.currentReading(l) && script(l.text) != 0; }
+    private static void apply(LyricLine l) { if (l == null) return; if (needs(l)) { String r = romanize(l.text); if (r != null) { l.localRoma = r; l.localRomaSettings = LocalRomanizer.settingsMask(); l.localRomaRevision = LocalRomanizer.REVISION; } } apply(l.bg); }
     private static int script(String text) { if (text == null) return 0; for (int i = 0; i < text.length();) { int cp = text.codePointAt(i); if (LockLyrics.sLocalKorean && cp >= 0xac00 && cp <= 0xd7a3) return 1; if (LockLyrics.sLocalCyrillic && cp >= 0x0400 && cp <= 0x052f) return 2; if (LockLyrics.sLocalGreek && cp >= 0x0370 && cp <= 0x03ff) return 3; i += Character.charCount(cp); } return 0; }
     private static String romanize(String text) {
         StringBuilder out = new StringBuilder();
@@ -25,7 +25,7 @@ final class SimpleScriptRomanizer {
         if (!LockLyrics.sLocalKorean || cp < 0xac00 || cp > 0xd7a3) return null;
         final String[] lead = {"g","kk","n","d","tt","r","m","b","pp","s","ss","","j","jj","ch","k","t","p","h"};
         final String[] vowel = {"a","ae","ya","yae","eo","e","yeo","ye","o","wa","wae","oe","yo","u","wo","we","wi","yu","eu","ui","i"};
-        final String[] tail = {"","k","k","k","n","n","n","t","l","k","m","p","l","l","l","p","l","m","p","p","t","t","ng","t","t","k","t","p","t"};
+        final String[] tail = {"","k","k","k","n","n","n","t","l","k","m","p","l","l","p","l","m","p","p","t","t","ng","t","t","k","t","p","t"};
         int n = cp - 0xac00; return lead[n / 588] + vowel[n % 588 / 28] + tail[n % 28];
     }
     private static String cyrillic(int cp) {

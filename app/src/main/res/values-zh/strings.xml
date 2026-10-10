@@ -323,4 +323,5 @@
     <string name="mini_notification_compact_unavailable">仅支持位置较低的屏下指纹，较高的屏下指纹及侧边指纹无法启用。</string>
     <string name="mini_notification_size">通知胶囊大小</string>
     <string name="mini_notification_drop">通知胶囊下移距离</string>
+    <string name="lyrics_dictionary_use">使用此词典</string>
 </resources>

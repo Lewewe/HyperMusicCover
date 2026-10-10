@@ -153,13 +153,14 @@ object ModuleBridge {
         val lyricOfflineCache: Boolean = true,
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
-        /** Enables the optional downloaded Japanese dictionary used for local romaji. */
+        /** Enables on-device transliteration using the individually selected script engines. */
         val onDeviceTransliteration: Boolean = false,
         /** 0 absent, 1 downloading, 2 ready, 3 failed; owned by the injected module. */
         val onDeviceTransliterationState: Int = 0,
         /** 0..100 when known, or -1 when the server did not report a size. */
         val onDeviceTransliterationProgress: Int = -1,
         val onDeviceTransliterationError: String = "",
+        val localJapanese: Boolean = true,
         val localChinese: Boolean = false,
         val localKorean: Boolean = false,
         val localCyrillic: Boolean = false,
@@ -895,6 +896,7 @@ object ModuleBridge {
             onDeviceTransliterationState = b.getInt("lyriclocalromastate", 0),
             onDeviceTransliterationProgress = b.getInt("lyriclocalromaprogress", -1),
             onDeviceTransliterationError = b.getString("lyriclocalromaerror") ?: "",
+            localJapanese = b.getBoolean("lyriclocaljapanese", true),
             localChinese = b.getBoolean("lyriclocalchinese", false),
             localKorean = b.getBoolean("lyriclocalkorean", false),
             localCyrillic = b.getBoolean("lyriclocalcyrillic", false),

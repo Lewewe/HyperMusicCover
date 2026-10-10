@@ -86,6 +86,11 @@ internal fun DictionariesPageView(isBlurEnabled: Boolean, refreshKey: Int, onBac
                     forText = stringResource(R.string.lyrics_dictionary_japanese_for),
                     state = japaneseState, progress = module.onDeviceTransliterationProgress,
                     error = module.onDeviceTransliterationError,
+                    enabled = module.alive, checked = module.localJapanese,
+                    onToggle = { on ->
+                        module = module.copy(localJapanese = on)
+                        ModuleBridge.setLocalRomanizer(context, "japanese", on)
+                    },
                 ) {
                     ModuleBridge.manageJapaneseDictionary(context, "delete")
                     module = module.copy(onDeviceTransliterationState = DICT_ABSENT,
@@ -98,6 +103,11 @@ internal fun DictionariesPageView(isBlurEnabled: Boolean, refreshKey: Int, onBac
                     forText = stringResource(R.string.lyrics_dictionary_chinese_for),
                     state = chineseState, progress = module.localChineseProgress,
                     error = module.localChineseError,
+                    enabled = module.alive, checked = module.localChinese,
+                    onToggle = { on ->
+                        module = module.copy(localChinese = on)
+                        ModuleBridge.setLocalRomanizer(context, "chinese", on)
+                    },
                 ) {
                     ModuleBridge.manageChineseDictionary(context, "delete")
                     module = module.copy(localChineseState = DICT_ABSENT,
@@ -134,7 +144,7 @@ internal fun DictionariesPageView(isBlurEnabled: Boolean, refreshKey: Int, onBac
                 enabled = module.alive && module.onDeviceTransliterationState != DICT_DOWNLOADING,
                 onClick = {
                     showAdd = false
-                    module = module.copy(onDeviceTransliterationState = DICT_DOWNLOADING,
+                    module = module.copy(localJapanese = true, onDeviceTransliterationState = DICT_DOWNLOADING,
                         onDeviceTransliterationProgress = 0, onDeviceTransliterationError = "")
                     ModuleBridge.manageJapaneseDictionary(context, "download")
                 },
@@ -145,7 +155,7 @@ internal fun DictionariesPageView(isBlurEnabled: Boolean, refreshKey: Int, onBac
                 enabled = module.alive,
                 onClick = {
                     showAdd = false
-                    module = module.copy(localChineseState = DICT_DOWNLOADING,
+                    module = module.copy(localChinese = true, localChineseState = DICT_DOWNLOADING,
                         localChineseProgress = 0, localChineseError = "")
                     ModuleBridge.manageChineseDictionary(context, "download")
                 },
@@ -156,7 +166,8 @@ internal fun DictionariesPageView(isBlurEnabled: Boolean, refreshKey: Int, onBac
 
 @Composable
 private fun DictionaryRow(title: String, forText: String, state: Int, progress: Int,
-                          error: String, onDelete: () -> Unit) {
+                          error: String, enabled: Boolean, checked: Boolean,
+                          onToggle: (Boolean) -> Unit, onDelete: () -> Unit) {
     val detail = when (state) {
         DICT_DOWNLOADING -> if (progress in 0..100)
             stringResource(R.string.lyrics_on_device_transliteration_downloading_progress, progress)
@@ -168,36 +179,44 @@ private fun DictionaryRow(title: String, forText: String, state: Int, progress: 
         else -> ""
     }
     Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                MiuixText(title, fontSize = 16.sp)
-                MiuixText(
-                    forText,
-                    fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-                MiuixText(
-                    detail,
-                    fontSize = 13.sp,
-                    color = if (state == DICT_ERROR) MiuixTheme.colorScheme.error
-                    else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                if (state == DICT_DOWNLOADING) LinearProgressIndicator(
-                    progress = progress.takeIf { it in 0..100 }?.div(100f),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-            }
-            if (state == DICT_READY) {
-                Spacer(Modifier.padding(horizontal = 4.dp))
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.lyrics_dictionary_delete),
-                        tint = MiuixTheme.colorScheme.onBackground)
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    MiuixText(title, fontSize = 16.sp)
+                    MiuixText(
+                        forText,
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    MiuixText(
+                        detail,
+                        fontSize = 13.sp,
+                        color = if (state == DICT_ERROR) MiuixTheme.colorScheme.error
+                        else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    if (state == DICT_DOWNLOADING) LinearProgressIndicator(
+                        progress = progress.takeIf { it in 0..100 }?.div(100f),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+                if (state == DICT_READY) {
+                    Spacer(Modifier.padding(horizontal = 4.dp))
+                    IconButton(onClick = onDelete, enabled = enabled) {
+                        Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.lyrics_dictionary_delete),
+                            tint = MiuixTheme.colorScheme.onBackground)
+                    }
                 }
             }
+            if (state == DICT_READY) SwitchPreference(
+                title = stringResource(R.string.lyrics_dictionary_use),
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = onToggle,
+            )
         }
     }
 }

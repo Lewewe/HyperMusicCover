@@ -43,7 +43,11 @@ final class NextLyrics {
                 String.valueOf(LockLyrics.sSpicyLyricsEnabled), LockLyrics.sSpicyLyricsApiKey,
                 LockLyrics.sTranslateProvider, LockLyrics.sTranslateEndpoint,
                 LockLyrics.sTranslateSourceLang, LockLyrics.sTranslateTargetLang,
-                String.valueOf(LockLyrics.sOnlineTranslateMode), LockLyrics.sTranslateApiKey);
+                String.valueOf(LockLyrics.sOnlineTranslateMode), LockLyrics.sTranslateApiKey,
+                String.valueOf(LockLyrics.sOnDeviceTransliteration),
+                String.valueOf(LockLyrics.sLocalJapanese), String.valueOf(LockLyrics.sLocalChinese), String.valueOf(LockLyrics.sLocalKorean),
+                String.valueOf(LockLyrics.sLocalCyrillic), String.valueOf(LockLyrics.sLocalGreek),
+                String.valueOf(LocalRomanizer.REVISION));
     }
 
     static Context context() {
@@ -274,12 +278,27 @@ final class NextLyrics {
             onReady.run();
             return;
         }
+        final Context context = context();
+        final List<LyricLine> privateLines = LocalRomanizer.copyLines(lines);
         lyricWork().post(new Runnable() {
             @Override public void run() {
-                LocalRomanizer.apply(lines);
-                Main.main().post(onReady);
+                if (isCurrent(context)) LocalRomanizer.apply(privateLines);
+                Main.main().post(new Runnable() {
+                    @Override public void run() {
+                        publishRomanization(lines, privateLines, context);
+                        // Let the caller re-evaluate current settings even when this task expired.
+                        onReady.run();
+                    }
+                });
             }
         });
+    }
+
+    static boolean publishRomanization(List<LyricLine> lines, List<LyricLine> result,
+                                       Context context) {
+        if (!isCurrent(context)) return false;
+        LocalRomanizer.copyReadings(result, lines);
+        return true;
     }
 
     static String describeTriplet(String pkg, Prefetch.Item previous, Prefetch.Item current,

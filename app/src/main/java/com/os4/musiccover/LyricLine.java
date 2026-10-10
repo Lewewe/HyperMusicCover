@@ -26,6 +26,7 @@ public final class LyricLine {
      */
     String localRoma;
     int localRomaRevision;
+    int localRomaSettings;
     final int start;
     /** Not final: a background vocal hung under this line can outlast it, and extends it. */
     int end;
@@ -163,14 +164,13 @@ public final class LyricLine {
     }
 
     String displayRoma() {
-        return localRoma != null && localRomaRevision == LocalRomanizer.REVISION ? localRoma : roma;
+        return renderedRoma();
     }
 
-    /** Presentation value: Japanese provider roma is intentionally never a fallback. */
+    /** Prefer an enabled local reading, preserving the provider fallback when unavailable. */
     String renderedRoma() {
-        return LockLyrics.sOnDeviceTransliteration && localRoma != null
-                && localRomaRevision == LocalRomanizer.REVISION ? localRoma
-                : LocalRomanizer.handles(text) ? null : roma;
+        return LocalRomanizer.enabledFor(text) && localRoma != null && !localRoma.trim().isEmpty()
+                && LocalRomanizer.currentReading(this) ? localRoma : roma;
     }
 
     /**

@@ -467,7 +467,7 @@ final class LyricSource {
         }
         int previous = -1;
         for (LyricLine line : r.lines) {
-            if (line.start < 0 || (previous >= 0 && line.start <= previous)) {
+            if (line.start < 0 || (previous >= 0 && line.start < previous)) {
                 r.why = "rejected invalid lyric timing: " + r.why;
                 r.lines = java.util.Collections.emptyList();
                 r.source = SRC_NONE;
@@ -475,6 +475,13 @@ final class LyricSource {
             }
             previous = line.start;
         }
+        return false;
+    }
+
+    /** Invalid provider data is a miss, not confirmation that the track is instrumental. */
+    private static boolean sanitizeResult(Rows r) {
+        if (dropPlaceholder(r)) return true;
+        dropUntimedResult(r);
         return false;
     }
 
@@ -935,7 +942,7 @@ final class LyricSource {
                     }
                     // A catalogue that places the song and answers that it is instrumental has
                     // answered: the song has no words, and the next catalogue is not asked for some.
-                    boolean instrumental = dropPlaceholder(r) || dropUntimedResult(r);
+                    boolean instrumental = sanitizeResult(r);
                     Xp.log("[MCLyric] " + pkg + " -> " + r.why);
                     onMainCurrent(gen, cb, r.lines, r.why, r.source);
                     // The other two catalogues, in order, and only for a song the first three could
@@ -987,7 +994,7 @@ final class LyricSource {
                     }
                     // A catalogue that places the song and answers that it is instrumental has
                     // answered: the song has no words, and the next catalogue is not asked for some.
-                    boolean instrumental = dropPlaceholder(r) || dropUntimedResult(r);
+                    boolean instrumental = sanitizeResult(r);
                     // The other two catalogues, in order, and only for a song the first three could
                     // not place. Sequential rather than raced: this is the slow path by definition,
                     // nothing above it is still running by the time it starts, and a song that
@@ -995,7 +1002,7 @@ final class LyricSource {
                     // would otherwise show nothing at all.
                     if (r.lines.isEmpty() && q != null && !instrumental) {
                         web(pkg, q, r);
-                        instrumental = dropPlaceholder(r) || dropUntimedResult(r);
+                        instrumental = sanitizeResult(r);
                     }
                     // The file, for a streaming player, when nothing else had the song - and not
                     // when a catalogue placed it and said it has no words.

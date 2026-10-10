@@ -1954,6 +1954,7 @@ public class Main extends XposedModule {
                     // Off when absent, which is what every file from before it had.
                     + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
                     + "\nlyriclocalroma=" + (LockLyrics.sOnDeviceTransliteration ? 1 : 0)
+                    + "\nlyriclocaljapanese=" + (LockLyrics.sLocalJapanese ? 1 : 0)
                     + "\nlyriclocalchinese=" + (LockLyrics.sLocalChinese ? 1 : 0)
                     + "\nlyriclocalkorean=" + (LockLyrics.sLocalKorean ? 1 : 0)
                     + "\nlyriclocalcyrillic=" + (LockLyrics.sLocalCyrillic ? 1 : 0)
@@ -2091,6 +2092,7 @@ public class Main extends XposedModule {
                         else if ("lyricofflinecache".equals(k)) LockLyrics.sOfflineCache = "1".equals(v);
                         else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
                         else if ("lyriclocalroma".equals(k)) LockLyrics.sOnDeviceTransliteration = "1".equals(v);
+                        else if ("lyriclocaljapanese".equals(k)) LockLyrics.sLocalJapanese = "1".equals(v);
                         else if ("lyriclocalchinese".equals(k)) LockLyrics.sLocalChinese = "1".equals(v);
                         else if ("lyriclocalkorean".equals(k)) LockLyrics.sLocalKorean = "1".equals(v);
                         else if ("lyriclocalcyrillic".equals(k)) LockLyrics.sLocalCyrillic = "1".equals(v);
@@ -2451,14 +2453,17 @@ public class Main extends XposedModule {
                         LockLyrics.sOnDeviceTransliteration = i.getBooleanExtra("on",
                                 !LockLyrics.sOnDeviceTransliteration);
                         Xp.log(TAG + "on-device transliteration: " + LockLyrics.sOnDeviceTransliteration);
-                        LockLyrics.refresh();
+                        LockLyrics.localRomanizationChanged();
                         saveState();
                     } else if ("jdict".equals(op)) {
                         String action = i.getStringExtra("action");
                         if ("delete".equals(action)) {
                             JapaneseDictionary.remove(appContext());
-                            LockLyrics.refresh();
+                            LockLyrics.localRomanizationChanged();
                         } else if ("download".equals(action)) {
+                            LockLyrics.sLocalJapanese = true;
+                            LockLyrics.localRomanizationChanged();
+                            saveState();
                             JapaneseDictionary.ensure(appContext());
                         }
                     } else if ("cdict".equals(op)) {
@@ -2466,20 +2471,23 @@ public class Main extends XposedModule {
                         if ("delete".equals(action)) {
                             ChineseDictionary.remove(appContext());
                             LockLyrics.sLocalChinese = false;
-                            LockLyrics.refresh();
+                            LockLyrics.localRomanizationChanged();
+                            saveState();
                         } else if ("download".equals(action)) {
                             LockLyrics.sLocalChinese = true;
+                            LockLyrics.localRomanizationChanged();
                             saveState();
                             ChineseDictionary.ensure(appContext());
                         }
                     } else if ("localromanizer".equals(op)) {
                         String script = i.getStringExtra("script");
                         boolean on = i.getBooleanExtra("on", false);
-                        if ("chinese".equals(script)) LockLyrics.sLocalChinese = on;
+                        if ("japanese".equals(script)) LockLyrics.sLocalJapanese = on;
+                        else if ("chinese".equals(script)) LockLyrics.sLocalChinese = on;
                         else if ("korean".equals(script)) LockLyrics.sLocalKorean = on;
                         else if ("cyrillic".equals(script)) LockLyrics.sLocalCyrillic = on;
                         else if ("greek".equals(script)) LockLyrics.sLocalGreek = on;
-                        LockLyrics.refresh(); saveState();
+                        LockLyrics.localRomanizationChanged(); saveState();
                     } else if ("lyricsearch".equals(op)) {
                         if (LockLyrics.setSearchMode(i.getIntExtra("v", LockLyrics.SEARCH_ORIGINAL))) {
                             LockLyrics.searchModeChanged();
@@ -2999,6 +3007,7 @@ public class Main extends XposedModule {
                         out.putInt("lyriclocalromastate", japaneseDictionary.phase);
                         out.putInt("lyriclocalromaprogress", japaneseDictionary.progress);
                         out.putString("lyriclocalromaerror", japaneseDictionary.error);
+                        out.putBoolean("lyriclocaljapanese", LockLyrics.sLocalJapanese);
                         out.putBoolean("lyriclocalchinese", LockLyrics.sLocalChinese);
                         out.putBoolean("lyriclocalkorean", LockLyrics.sLocalKorean);
                         out.putBoolean("lyriclocalcyrillic", LockLyrics.sLocalCyrillic);
