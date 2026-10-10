@@ -726,6 +726,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     private CoverCardStyle.Rect lockPlace;
     private CoverCardStyle.Rect bigCoverPlace;
     private boolean aodExpandPending;
+    /** True only when the AOD cannot fit the settled lock-screen cover. */
+    private boolean aodCramped;
     /**
      * The place of the landed cover look, Phase.ON only - what the big clock's fall and wake
      * keep. Not lockPlace: that one is still written while the clock grows into the doze.
@@ -867,16 +869,21 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         getLocationOnScreen(loc);
         // Screen distances into this view's own coordinates, which the zoom above it scales.
         float top = (clock - loc[1]) / k, bottom = (media - loc[1]) / k;
-        float artHeight = held.side * Math.min(1f, 1f / shownAspect());
-        float room = bottom - top - artHeight;
-        if (room < 0f) {
+        float gap = CoverCardStyle.GAP_DP * getResources().getDisplayMetrics().density / k;
+        top += gap;
+        bottom -= gap;
+        float heightRatio = Math.min(1f, 1f / shownAspect());
+        float room = bottom - top;
+        if (!(room > 0f) || !Float.isFinite(room)) {
             aodPlaceNote = "no room clock=" + clock + " media=" + media;
-            return held;
+            return new CoverCardStyle.Rect((getWidth() - held.side) * 0.5f, top, 0f);
         }
-        float y = top + room / 2f - (held.side - artHeight) / 2f;
+        float side = Math.min(held.side, room / heightRatio);
+        float artHeight = side * heightRatio;
+        float y = top + (room - artHeight) / 2f - (side - artHeight) / 2f;
         aodPlaceNote = "centred clock=" + clock + " media=" + media + " k=" + k
-                + " y=" + Math.round(held.y) + "->" + Math.round(y);
-        return new CoverCardStyle.Rect(held.x, y, held.side);
+                + " side=" + Math.round(side);
+        return new CoverCardStyle.Rect((getWidth() - side) * 0.5f, y, side);
     }
 
     /** The product of every ancestor's vertical scale - the doze's 0.95 among them. */
@@ -923,7 +930,13 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         else if (aodSince == 0L) aodSince = nowNs;
         boolean inAod = Main.coverCardInAod();
         boolean visible = style.mode == CoverCardStyle.CARD && Main.coverCardVisible();
-        if (aodExpandPending && inAod && visible) {
+        if (inAod && lockPlace != null) {
+            CoverCardStyle.Rect aod = aodPlace(lockPlace);
+            float minimumSide = 96f * getResources().getDisplayMetrics().density;
+            aodCramped = aod != null && aod.side + 1f < minimumSide;
+        }
+        if (aodExpandPending && visible && (inAod || phase == ClockCollapse.Phase.ENTER)
+                && aodCramped) {
             aodExpandPending = false;
             CoverMorphMotion.Box thumbnail = Main.coverMorphThumbnail();
             if (thumbnail != null) {
@@ -958,7 +971,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         boolean underBig = bigWake || bigFall;
         float target = visible && current != null && (!afterBigClock || underBig)
                 && (phase == ClockCollapse.Phase.EXIT && !bigFall ? exitWithCard : !compactArtwork)
-                ? (inAod ? 1f : underBig ? reveal() : Main.cardProgress()) : 0f;
+                ? (inAod ? (aodCramped ? 0f : 1f)
+                        : underBig ? reveal() : Main.cardProgress()) : 0f;
         float response = Math.max(0.18f, Main.sClockResponse);
         // Tied to the clock's own flight on the lit screen, and to the big clock's edge on the way
         // into and out of its doze. Otherwise falling asleep it eases.

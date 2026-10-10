@@ -95,9 +95,11 @@ public class CoverCardStyleTest {
         assertEquals(96f, r.side, 0.01f);
     }
 
-    @Test public void crampedBandHidesCard() {
+    @Test public void crampedBandClampsCardToAvailableRoom() {
         CoverCardStyle style = new CoverCardStyle(CoverCardStyle.CARD, 0.8f, 0.5f, 0.12f);
-        assertNull(style.place(390f, 800f, 1f, 300f, 400f));
+        CoverCardStyle.Rect cramped = style.place(390f, 800f, 1f, 300f, 400f);
+        assertNotNull(cramped);
+        assertEquals(68f, cramped.side, 0.01f);
         assertNull(style.place(Float.NaN, 800f, 1f, 100f, 600f));
         assertNull(style.place(390f, 800f, 1f, 100f, Float.NaN));
     }
