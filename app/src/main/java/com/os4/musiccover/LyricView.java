@@ -667,7 +667,7 @@ final class LyricView extends View {
             });
             return changed;
         }
-        if (lines.isEmpty()) return changed;
+        if (lines.isEmpty()) return changed || (show > 0f && LockLyrics.companionAnimating());
         // Borrowed translations fading in: a frame each until they are all the way in.
         if (transRevealAt != 0L) {
             if (now - transRevealAt >= TRANS_REVEAL_MS) transRevealAt = 0L;
@@ -1428,8 +1428,7 @@ final class LyricView extends View {
         ClockCollapse.Phase p = ClockCollapse.phase();
         if (p == ClockCollapse.Phase.ENTER || p == ClockCollapse.Phase.EXIT) return true;
         if (lines.isEmpty()) {
-            return (LockLyrics.hasBpmCompanion() || LockLyrics.bpmSearchingLyrics())
-                    && show > 0f;
+            return show > 0f && !LockLyrics.still() && LockLyrics.companionAnimating();
         }
         if (focus < 0 || show == 0f) return false;
         int n = lines.size();
@@ -2278,7 +2277,6 @@ final class LyricView extends View {
         String face = searchingLyrics ? LockLyrics.bpmSearchingFace() : LockLyrics.bpmFace();
         String label = searchingLyrics ? LockLyrics.bpmSearchingMessage() : LockLyrics.bpmMessage();
         String bpmLabel = showBpm ? bpm + " BPM" : "";
-        postInvalidateOnAnimation();
         TextPaint p = companionPaint;
         p.set(paint);
         p.setTypeface(COMPANION_TYPEFACE);

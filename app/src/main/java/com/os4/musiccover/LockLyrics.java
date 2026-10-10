@@ -608,11 +608,11 @@ final class LockLyrics {
     }
 
     static boolean hasBpmCompanion() {
-        return sBpmEnabled && !sKey.isEmpty() && sLines.isEmpty()
+        return sBpmEnabled && Main.bpmPlayerAllowed(sController) && !sKey.isEmpty() && sLines.isEmpty()
                 && SystemClock.uptimeMillis() - sTrackChangedAt >= 3000L;
     }
     static boolean bpmSearchingLyrics() {
-        return sBpmEnabled && !sKey.isEmpty() && sLines.isEmpty() && sLoading;
+        return sBpmEnabled && Main.bpmPlayerAllowed(sController) && !sKey.isEmpty() && sLines.isEmpty() && sLoading;
     }
     static int bpm() { return sBpm; }
     static long bpmFoundAt() { return sBpmFoundAt; }
@@ -637,20 +637,36 @@ final class LockLyrics {
         return BpmEstimator.searchingMessage(bpmPresentationSeed());
     }
     private static void requestBpm(final String key, MediaController controller) {
+        BpmEstimator.stop();
         sBpm = 0;
         sBpmFoundAt = 0L;
-        if (!sBpmEnabled || key == null || key.isEmpty()
-                || !Main.bpmPlayerAllowed(controller)) {
+    }
+
+    static boolean companionAnimating() {
+        return BpmCompanionPolicy.capture(hasBpmCompanion() && !bpmSearchingLyrics(),
+                wantsShown(), sView != null && sView.isAttachedToWindow(),
+                Main.screenOnCached(), !lockScreenGone(), playing(), still())
+                && BpmEstimator.capturing();
+    }
+
+    /** Reconcile capture when the page, lock screen, display, track or playback changes. */
+    private static void syncBpmCapture() {
+        boolean capture = BpmCompanionPolicy.capture(hasBpmCompanion() && !bpmSearchingLyrics(),
+                wantsShown(), sView != null && sView.isAttachedToWindow(),
+                Main.screenOnCached(), !lockScreenGone(), playing(), still());
+        if (!capture) {
             BpmEstimator.stop();
-            refresh();
             return;
         }
-        BpmEstimator.start(key, publishedBpm(controller), new BpmEstimator.Callback() { @Override public void onEstimated(int bpm) {
+        if (BpmEstimator.runningFor(sKey)) return;
+        final String key = sKey;
+        BpmEstimator.start(key, publishedBpm(sController), bpm -> {
             if (!key.equals(sKey)) return;
             sBpm = bpm;
             if (bpm >= 40 && sBpmFoundAt == 0L) sBpmFoundAt = SystemClock.uptimeMillis();
             refresh();
-        }});
+        });
+        BpmEstimator.onPlaybackState(sState);
     }
 
     /**
@@ -714,6 +730,7 @@ final class LockLyrics {
             return;
         }
         requestBpm(sKey, sController);
+        refresh();
     }
 
     /** The native media player keeps its thumbnail without opening an empty lyric view. */
@@ -812,6 +829,7 @@ final class LockLyrics {
      * against, only the desktop behind it.
      */
     static void lockScreenLeaving(String by) {
+        BpmEstimator.stop();
         sLeavingBy = by;
         sLeavingAt = SystemClock.uptimeMillis();
         sLastLeave = by + "@" + sLeavingAt;
@@ -1695,6 +1713,7 @@ final class LockLyrics {
     static void onPlaybackState(PlaybackState s) {
         sState = s;
         sStateReadAt = SystemClock.uptimeMillis();
+        syncBpmCapture();
         BpmEstimator.onPlaybackState(s);
         LyricView v = sView;
         if (v != null) v.kick();
@@ -1767,6 +1786,7 @@ final class LockLyrics {
      * tick does.
      */
     private static void unhost(LyricView v) {
+        BpmEstimator.stop();
         if (v == null) return;
         if (sHolding) {
             sHolding = false;
@@ -1801,6 +1821,7 @@ final class LockLyrics {
         updateBlur();
         updateHdr();
         if (wantsAttached()) attach();
+        syncBpmCapture();
         LyricView v = sView;
         if (v != null) v.kick();
         // A new song or a switch in the still AOD: nothing is shown until the display is let up.
@@ -1946,6 +1967,8 @@ final class LockLyrics {
         return "enabled=" + sEnabled + " tap=" + (sTapHidden ? "hidden" : "shown")
                 + " demo=" + sDemo + " key=" + sKey + " lines=" + sLines.size()
                 + " has=" + hasLyrics() + " loading=" + sLoading
+                + " bpmEnabled=" + sBpmEnabled + " bpmAllowed=" + Main.bpmPlayerAllowed(sController)
+                + " bpmCapture=" + BpmEstimator.capturing() + " bpm=" + sBpm
                 + " (" + sWhy + ") src=" + srcName(sSource)
                 + " compact=" + compactWithoutLyrics()
                 + " sessionHasLyric=" + LyricSource.hasLyricInfo(sController)
@@ -2145,6 +2168,7 @@ final class LockLyrics {
             LyricView v = sView;
             sTicking = v != null && v.isAttachedToWindow();
             if (!sTicking) {
+                BpmEstimator.stop();
                 watchProximity(false);
                 return;
             }
@@ -2152,6 +2176,7 @@ final class LockLyrics {
             holdScreen(v);
             updateHdr();
             updateStill();
+            syncBpmCapture();
             if (sStill) {
                 // The AOD alarm owns still-mode redraws. It acquires the draw wake lock and
                 // advances word-timed lyrics before releasing it; a Handler tick cannot do that
@@ -2338,6 +2363,7 @@ final class LockLyrics {
                     }
                     boolean was = sStill;
                     updateStill();
+                    syncBpmCapture();
                     // Entering, and coming back after the AOD went dark: either way nothing is
                     // set to wake it, and the picture on the panel is whatever was there last.
                     // Not on every 3/4 flip - our own draw lock makes those, with a wake set.
@@ -2506,8 +2532,8 @@ final class LockLyrics {
         // AOD at full brightness. Called from the tick, which never stops, so this would have
         // fired within a second of the screen going off.
         boolean bpmDancerVisible = hasBpmCompanion();
-        boolean asked = (sKeepOn || bpmDancerVisible) && wantsShown() && !inHeldAod()
-                && (!sLines.isEmpty() || bpmDancerVisible) && playing();
+        boolean asked = BpmCompanionPolicy.keepAwake(sKeepOn, wantsShown(), inHeldAod(),
+                !sLines.isEmpty() || bpmDancerVisible, playing());
         // Not in a pocket or face down: with nothing to stop it, a song playing kept the screen
         // lit and the lyrics drawing at 60Hz wherever the phone was put, for as long as it
         // played. Covered, the lock screen's own 10s timeout takes it again.

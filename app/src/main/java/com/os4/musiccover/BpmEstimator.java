@@ -3,7 +3,6 @@ package com.os4.musiccover;
 import android.media.audiofx.Visualizer;
 import android.media.session.PlaybackState;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -19,26 +18,29 @@ final class BpmEstimator {
     private static final Map<String, Integer> CACHE = new LinkedHashMap<String, Integer>(32, .75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<String, Integer> e) { return size() > 80; }
     };
-    private static Visualizer visualizer;
+    private static volatile Visualizer visualizer;
+    private static volatile long generation;
+    private static volatile long captureGeneration;
+    private static volatile String requestedTrack = "";
+    private static android.os.Handler worker;
+    private static Runnable analysis;
     private static String track = "";
     /** Low-band onset envelope; no audio samples are retained. */
-    private static final ArrayList<Float> envelope = new ArrayList<>();
+    private static final BpmSampleWindow envelope = new BpmSampleWindow(420, WINDOW_MS);
     private static volatile float energy;
-    private static long firstSampleAt;
-    private static long lastSampleAt;
-    private static float[] previousMagnitudes;
     private static final float[] previousBands = new float[3];
     private static final float[] bandBaselines = new float[3];
-    private static long lastBeatAt;
-    private static long beatAt;
-    private static long beatCount;
-    private static int beatDirection = 1;
+    private static volatile long lastBeatAt;
+    private static volatile long beatAt;
+    private static volatile long beatCount;
+    private static volatile int beatDirection = 1;
     private static volatile float learnedBeatMs;
     private static volatile boolean analysisReady;
     private static volatile float confidence;
     private static int lastPlaybackState = PlaybackState.STATE_NONE;
     private static long lastMediaPosition;
     private static long lastMediaPositionAt;
+    private static float lastPlaybackSpeed = 1f;
     private static boolean resultDelivered;
     private static final float[] tempoSupport = new float[221];
     private static int stableBpm;
@@ -93,97 +95,191 @@ final class BpmEstimator {
         return messages[Math.floorMod(seed, messages.length)];
     }
 
-    static void start(String key, final Callback cb) {
-        start(key, 0, cb);
+    private static synchronized android.os.Handler worker() {
+        if (worker == null) {
+            android.os.HandlerThread thread = new android.os.HandlerThread("MCBpm",
+                    android.os.Process.THREAD_PRIORITY_BACKGROUND);
+            thread.start();
+            worker = new android.os.Handler(thread.getLooper());
+        }
+        return worker;
     }
 
+    static boolean runningFor(String key) { return key != null && key.equals(requestedTrack); }
+    static boolean capturing() { return visualizer != null && captureGeneration == generation && !requestedTrack.isEmpty(); }
+
+    static void start(String key, final Callback cb) { start(key, 0, cb); }
+
     static void start(String key, int publishedBpm, final Callback cb) {
-        stop(); track = key == null ? "" : key;
+        stop();
+        final long token = ++generation;
+        requestedTrack = key == null ? "" : key;
+        final String wanted = requestedTrack;
+        worker().post(() -> startOnWorker(wanted, publishedBpm, cb, token));
+    }
+
+    private static void deliver(Callback cb, int bpm, long token) {
+        Main.main().post(() -> {
+            if (token == generation && !requestedTrack.isEmpty()) cb.onEstimated(bpm);
+        });
+    }
+
+    private static void releaseCapture() {
+        if (analysis != null) worker().removeCallbacks(analysis);
+        analysis = null;
+        Visualizer old = visualizer;
+        visualizer = null;
+        if (old != null) {
+            try { old.setEnabled(false); } catch (Throwable ignored) { }
+            try { old.release(); } catch (Throwable ignored) { }
+        }
+        envelope.clear();
+        energy = 0f;
+        lastBeatAt = beatAt = beatCount = 0L;
+        beatDirection = 1;
+        analysisReady = false;
+        confidence = 0f;
+    }
+
+    private static void startOnWorker(String key, int publishedBpm, Callback cb, long token) {
+        if (token != generation || key.isEmpty()) return;
+        releaseCapture();
+        track = key;
         Integer cached;
         synchronized (CACHE) { cached = CACHE.get(track); }
         int trustedBpm = validBpm(publishedBpm);
+        Visualizer created = null;
         try {
             final Visualizer v = new Visualizer(0);
-            int[] range = Visualizer.getCaptureSizeRange(); v.setCaptureSize(range[1]);
-            envelope.clear(); previousMagnitudes = null; firstSampleAt = 0L; lastSampleAt = 0L;
+            created = v;
+            int[] range = Visualizer.getCaptureSizeRange();
+            checkStatus(v.setCaptureSize(range[1]), "capture size");
             java.util.Arrays.fill(previousBands, 0f);
             java.util.Arrays.fill(bandBaselines, 0f);
-            lastBeatAt = 0L; beatAt = 0L; beatCount = 0L; beatDirection = 1;
-            confidence = 0f; lastPlaybackState = PlaybackState.STATE_NONE;
-            lastMediaPosition = 0L; lastMediaPositionAt = 0L;
-            learnedBeatMs = cached == null ? 0f : 60000f / cached;
-            stableBpm = cached == null ? 0 : cached;
-            if (trustedBpm > 0) {
-                stableBpm = trustedBpm;
-                cached = trustedBpm;
-            }
-            learnedBeatMs = cached == null ? 0f : 60000f / cached;
-            challengerBpm = 0;
-            challengerObservations = 0;
+            lastPlaybackState = PlaybackState.STATE_NONE;
+            lastMediaPosition = 0L;
+            lastMediaPositionAt = 0L;
+            lastPlaybackSpeed = 1f;
+            stableBpm = trustedBpm > 0 ? trustedBpm : cached == null ? 0 : cached;
+            learnedBeatMs = stableBpm > 0 ? 60000f / stableBpm : 0f;
+            challengerBpm = challengerObservations = 0;
             publishedTempo = trustedBpm > 0;
             java.util.Arrays.fill(tempoSupport, 0f);
-            analysisReady = cached != null;
+            analysisReady = stableBpm > 0;
             resultDelivered = false;
-            energy = 0f; visualizer = v;
-            v.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
-                @Override public void onWaveFormDataCapture(Visualizer ignored, byte[] wave, int rate) { }
-                @Override public void onFftDataCapture(Visualizer ignored, byte[] fft, int rate) { sample(fft, rate); }
-            }, Visualizer.getMaxCaptureRate(), false, true);
-            v.setEnabled(true);
-            if (cached == null && !publishedTempo) {
-                Main.main().postDelayed(new Runnable() { @Override public void run() {
-                    if (visualizer != v) return;
-                    int bpm = estimate();
-                    if (bpm <= 0) {
-                        Main.main().postDelayed(this, 5_000L);
-                        return;
+            if (token != generation) { v.release(); return; }
+            captureGeneration = token;
+            visualizer = v;
+            checkStatus(v.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
+                @Override public void onWaveFormDataCapture(Visualizer source, byte[] wave, int rate) { }
+                @Override public void onFftDataCapture(Visualizer source, byte[] fft, int rate) {
+                    if (!BpmCompanionPolicy.captureCallback(token, generation, source, visualizer)) return;
+                    if (android.os.Looper.myLooper() == worker().getLooper()) {
+                        sample(fft, rate);
+                    } else if (fft != null) {
+                        byte[] owned = fft.clone();
+                        worker().post(() -> {
+                            if (BpmCompanionPolicy.captureCallback(token, generation, source, visualizer)) {
+                                sample(owned, rate);
+                            }
+                        });
                     }
-                    int previousStable = stableBpm;
-                    addTempoObservation(bpm);
-                    stableBpm = consistentTempo();
-                    synchronized (CACHE) { CACHE.put(track, stableBpm); }
-                    learnedBeatMs = 60000f / stableBpm;
-                    analysisReady = true;
-                    if (!resultDelivered || stableBpm != previousStable) {
-                        resultDelivered = true;
-                        cb.onEstimated(stableBpm);
+                }
+            }, Visualizer.getMaxCaptureRate(), false, true), "capture listener");
+            checkStatus(v.setEnabled(true), "enable");
+            resultDelivered = stableBpm > 0;
+            // Wake the renderer once capture starts, even before the first tempo is known.
+            deliver(cb, stableBpm, token);
+            if (!publishedTempo) {
+                analysis = new Runnable() {
+                    @Override public void run() {
+                        if (token != generation || visualizer != v) return;
+                        int bpm = estimate();
+                        if (token != generation || visualizer != v) return;
+                        if (bpm > 0) {
+                            int previousStable = stableBpm;
+                            addTempoObservation(bpm);
+                            stableBpm = consistentTempo();
+                            synchronized (CACHE) {
+                                if (token != generation) return;
+                                CACHE.put(key, stableBpm);
+                            }
+                            learnedBeatMs = 60000f / stableBpm;
+                            analysisReady = true;
+                            if (!resultDelivered || stableBpm != previousStable) {
+                                resultDelivered = true;
+                                deliver(cb, stableBpm, token);
+                            }
+                        }
+                        worker().postDelayed(this, 5_000L);
                     }
-                    Main.main().postDelayed(this, 5_000L);
-                }}, 5_000L);
+                };
+                worker().postDelayed(analysis, 5_000L);
             }
-            if (cached != null) {
-                resultDelivered = true;
-                cb.onEstimated(cached);
+        } catch (Throwable t) {
+            if (created != null && created != visualizer) {
+                try { created.release(); } catch (Throwable ignored) { }
             }
-        } catch (Throwable t) { Xp.w("BPM visualizer unavailable: " + t); cb.onEstimated(0); }
+            releaseCapture();
+            Xp.w("BPM visualizer unavailable: " + t);
+            if (token == generation) deliver(cb, 0, token);
+        }
     }
+    private static void checkStatus(int status, String operation) {
+        if (status != Visualizer.SUCCESS) {
+            throw new IllegalStateException("BPM " + operation + " failed: " + status);
+        }
+    }
+
     private static int validBpm(int bpm) {
         return bpm >= 40 && bpm <= 220 ? bpm : 0;
     }
-    static boolean estimating() { return visualizer != null && !analysisReady; }
-    static float confidence() { return confidence; }
-    static float pulse() { return energy; }
+    static boolean estimating() { return capturing() && !analysisReady; }
+    static float confidence() { return capturing() ? confidence : 0f; }
+    static float pulse() { return capturing() ? energy : 0f; }
     static void clearCache() {
-        synchronized (CACHE) { CACHE.clear(); }
         stop();
+        synchronized (CACHE) { CACHE.clear(); }
     }
-    static void stop() { Visualizer v = visualizer; visualizer = null; if (v != null) try { v.setEnabled(false); v.release(); } catch (Throwable ignored) { } }
-    static synchronized void onPlaybackState(PlaybackState state) {
+    static void stop() {
+        if (requestedTrack.isEmpty() && visualizer == null) return;
+        requestedTrack = "";
+        final long token = ++generation;
+        energy = 0f;
+        lastBeatAt = beatAt = beatCount = 0L;
+        beatDirection = 1;
+        analysisReady = false;
+        confidence = 0f;
+        if (worker != null) worker().post(() -> {
+            if (token == generation) releaseCapture();
+        });
+    }
+
+    static void onPlaybackState(PlaybackState state) {
+        final long token = generation;
+        if (state == null || requestedTrack.isEmpty()) return;
+        worker().post(() -> {
+            if (token == generation) playbackOnWorker(state);
+        });
+    }
+
+    private static void playbackOnWorker(PlaybackState state) {
         if (state == null) return;
         int next = state.getState();
-        long position = Math.max(0L, state.getPosition());
         long now = android.os.SystemClock.elapsedRealtime();
+        long position = Math.max(0L, state.getPosition());
+        if (next == PlaybackState.STATE_PLAYING && state.getLastPositionUpdateTime() > 0L) {
+            position += (long) (Math.max(0L, now - state.getLastPositionUpdateTime()) * state.getPlaybackSpeed());
+        }
         boolean changed = lastPlaybackState != PlaybackState.STATE_NONE
                 && next != lastPlaybackState;
         boolean jumped = lastMediaPositionAt != 0L
-                && Math.abs(position - lastMediaPosition) > 1500L;
+                && Math.abs(position - lastMediaPosition - (lastPlaybackState == PlaybackState.STATE_PLAYING
+                        ? (long) ((now - lastMediaPositionAt) * lastPlaybackSpeed) : 0L)) > 1500L;
         if (changed || jumped) {
             envelope.clear();
-            previousMagnitudes = null;
             java.util.Arrays.fill(previousBands, 0f);
             java.util.Arrays.fill(bandBaselines, 0f);
-            firstSampleAt = 0L;
-            lastSampleAt = 0L;
             lastBeatAt = 0L;
             beatAt = 0L;
             beatCount = 0L;
@@ -193,8 +289,9 @@ final class BpmEstimator {
         lastPlaybackState = next;
         lastMediaPosition = position;
         lastMediaPositionAt = now;
+        lastPlaybackSpeed = state.getPlaybackSpeed();
     }
-    private static synchronized void sample(byte[] fft, int rateMilliHz) {
+    private static void sample(byte[] fft, int rateMilliHz) {
         if (fft == null || fft.length < 4 || visualizer == null) return;
         int bins = fft.length / 2;
         float sampleRate = rateMilliHz > 0 ? rateMilliHz / 1000f : 44100f;
@@ -203,12 +300,10 @@ final class BpmEstimator {
         int to = Math.min(bins - 1, (int) Math.floor(HIGH_HZ / binWidth));
         if (from > to) return;
 
-        float[] magnitudes = new float[to - from + 1];
         float[] bands = new float[3];
         for (int bin = from; bin <= to; bin++) {
             int offset = bin * 2;
             float magnitude = (float) Math.hypot(fft[offset], fft[offset + 1]);
-            magnitudes[bin - from] = (float) Math.log1p(magnitude);
             float hz = bin * binWidth;
             for (int band = 0; band < 3; band++) {
                 if (hz >= BAND_EDGES[band] && hz < BAND_EDGES[band + 1]) {
@@ -229,10 +324,7 @@ final class BpmEstimator {
             lowEnergy += BAND_WEIGHTS[band] * Math.min(1f, bands[band] / 500f);
             previousBands[band] = bands[band];
         }
-        previousMagnitudes = magnitudes;
         long now = android.os.SystemClock.uptimeMillis();
-        if (firstSampleAt == 0L) firstSampleAt = now;
-        lastSampleAt = now;
         float minimumGap = learnedBeatMs > 0f ? learnedBeatMs * .82f : 300f;
         float threshold = 0f;
         for (int band = 0; band < 3; band++) {
@@ -275,12 +367,11 @@ final class BpmEstimator {
             }
         }
         energy = Math.min(1f, energy * .65f + lowEnergy * .35f);
-        envelope.add(flux);
-        if (envelope.size() > 420) envelope.remove(0);
+        envelope.add(flux, now);
     }
-    static long beatAt() { return beatAt; }
-    static long beatCount() { return beatCount; }
-    static int beatDirection() { return beatDirection; }
+    static long beatAt() { return capturing() ? beatAt : 0L; }
+    static long beatCount() { return capturing() ? beatCount : 0L; }
+    static int beatDirection() { return capturing() ? beatDirection : 1; }
     private static void addTempoObservation(int bpm) {
         if (bpm < 40 || bpm > 220) return;
         for (int candidate = Math.max(40, bpm - 2); candidate <= Math.min(220, bpm + 2); candidate++) {
@@ -323,15 +414,9 @@ final class BpmEstimator {
         challengerObservations = 0;
         return candidate;
     }
-    private static synchronized int estimate() {
-        final int n = envelope.size();
-        if (n < 36) return 0;
-        float[] onset = new float[n];
-        for (int i = 0; i < n; i++) onset[i] = envelope.get(i);
-        float samplesPerSecond = lastSampleAt > firstSampleAt
-                ? (n - 1) * 1000f / (lastSampleAt - firstSampleAt)
-                : n * 1000f / WINDOW_MS;
-        return estimateTempo(onset, samplesPerSecond);
+    private static int estimate() {
+        float[] onset = envelope.samples();
+        return estimateTempo(onset, envelope.sampleRate());
     }
 
     static int estimateTempo(float[] onset, float samplesPerSecond) {
