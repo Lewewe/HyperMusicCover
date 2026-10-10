@@ -38,6 +38,26 @@ public class ArtworkQualityTimingTest {
         assertFalse(CoverPush.shouldSoftenArtwork(1024, 1024));
     }
 
+    @Test public void neteaseFinalSquareArtworkDoesNotWaitForAnUpgrade() {
+        assertFalse(CoverPush.shouldSoftenArtwork("com.netease.cloudmusic", 363, 363));
+        assertFalse(CoverPush.shouldSoftenArtwork("com.netease.cloudmusic", 360, 360));
+        assertFalse(CoverPush.shouldSoftenArtwork("com.netease.cloudmusic", 512, 512));
+    }
+
+    @Test public void neteaseSmallAndRectangularThumbnailsStillWait() {
+        assertTrue(CoverPush.shouldSoftenArtwork("com.netease.cloudmusic", 144, 144));
+        assertTrue(CoverPush.shouldSoftenArtwork("com.netease.cloudmusic", 359, 359));
+        assertTrue(CoverPush.shouldSoftenArtwork("com.netease.cloudmusic", 363, 204));
+        assertFalse(CoverPush.shouldSoftenArtwork("com.netease.cloudmusic", 0, 0));
+    }
+
+    @Test public void otherPlayersRetainTheirExistingReadinessThreshold() {
+        assertTrue(CoverPush.shouldSoftenArtwork("com.spotify.music", 363, 363));
+        assertTrue(CoverPush.shouldSoftenArtwork("com.google.android.apps.youtube.music", 363, 363));
+        assertTrue(CoverPush.shouldSoftenArtwork(null, 363, 363));
+        assertFalse(CoverPush.shouldSoftenArtwork("com.spotify.music", 500, 500));
+    }
+
     @Test public void invalidArtworkIsNotSoftened() {
         assertFalse(CoverPush.shouldSoftenArtwork(0, 144));
         assertFalse(CoverPush.shouldSoftenArtwork(144, 0));

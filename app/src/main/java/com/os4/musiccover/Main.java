@@ -5555,7 +5555,7 @@ public class Main extends XposedModule {
         if (Looper.myLooper() == Looper.getMainLooper()) return best;
         boolean spotify = "com.spotify.music".equals(pkg);
         if (!spotify && best != null
-                && !CoverPush.shouldSoftenArtwork(best.getWidth(), best.getHeight())) return best;
+                && !CoverPush.shouldSoftenArtwork(pkg, best.getWidth(), best.getHeight())) return best;
         Bitmap fromUri = Prefetch.currentArtwork(md, pkg);
         // The session may temporarily publish a large generic disc instead of the album.
         if (spotify && fromUri != null) return fromUri;
