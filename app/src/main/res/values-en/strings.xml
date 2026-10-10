@@ -316,4 +316,11 @@
     <string name="donate_afdian">Afdian</string>
     <string name="donate_open_afdian">Open Afdian</string>
     <string name="clock_size_summary">Size of the reduced clock while big cover art is open, up to 55% of its original size.</string>
+    <string name="lyrics_bpm_companion">Lyric companion kaomojis</string>
+    <string name="lyrics_bpm_companion_summary">Show a curious kaomoji while lyrics are being searched, or a beat-reactive kaomoji when no lyrics are found.</string>
+    <string name="lyrics_bpm_players">BPM media players</string>
+    <string name="lyrics_bpm_players_summary">Choose which media players may drive the beat companion. Leave all unchecked to allow every player.</string>
+    <string name="lyrics_bpm_players_all">All media players</string>
+    <string name="lyrics_bpm_players_empty">No compatible media players were found yet. Start a player and reopen this menu.</string>
+    <string name="lyrics_bpm_players_done">Done</string>
 </resources>

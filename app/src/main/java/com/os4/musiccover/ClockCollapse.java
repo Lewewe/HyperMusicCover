@@ -769,7 +769,7 @@ final class ClockCollapse {
 
     /** Resize the clock independently so the media card stays in its current scene. */
     static void refreshArtworkSize() {
-        boolean compact = LockLyrics.compactWithoutLyricsOnEntry()
+        boolean compact = (LockLyrics.compactWithoutLyricsOnEntry() || LockLyrics.companionPage())
                 && !ImmersiveHost.holdsClock();
         android.graphics.Bitmap art = CoverCardLayer.currentArt();
         boolean coverVisible = Main.sCoverCardStyle.mode == CoverCardStyle.CARD
@@ -2261,6 +2261,18 @@ final class ClockCollapse {
         float room;
         android.os.Trace.beginSection("MC c.room");
         try { room = roomBelow(); } finally { android.os.Trace.endSection(); }
+        if (LockLyrics.companionPage()) {
+            View g = firstTarget();
+            if (g != null && g.getParent() instanceof View) {
+                View parent = (View) g.getParent();
+                float zoom = chainScaleY(parent);
+                if (zoom > 0f) {
+                    float media = parentTop(g)
+                            + (LockLyrics.bandBottomOnScreen() - drawnY(parent, 0f, 0f)) / zoom;
+                    room = CompanionLayout.clockRoom(room, media, d);
+                }
+            }
+        }
         if (!Float.isNaN(room)) {
             float ratio = m.box.height() / m.unit;
             float bottom = coverTop + coverUnit * ratio;

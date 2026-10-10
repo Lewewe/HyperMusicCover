@@ -1,0 +1,6 @@
+<resources>
+    <plurals name="lyrics_bpm_players_selected">
+        <item quantity="one">%1$d app selected</item>
+        <item quantity="other">%1$d apps selected</item>
+    </plurals>
+</resources>

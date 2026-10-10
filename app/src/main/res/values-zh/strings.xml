@@ -324,4 +324,11 @@
     <string name="donate_afdian">爱发电</string>
     <string name="donate_open_afdian">打开爱发电</string>
     <string name="clock_size_summary">大封面展开时，时钟缩小后的大小，最高为原始大小的 55%。</string>
+    <string name="lyrics_bpm_players">节拍媒体播放器</string>
+    <string name="lyrics_bpm_players_summary">选择哪些媒体播放器可以驱动节拍伴侣。全部取消选择则允许所有播放器。</string>
+    <string name="lyrics_bpm_players_all">所有媒体播放器</string>
+    <string name="lyrics_bpm_players_empty">暂未找到兼容的媒体播放器。启动播放器后重新打开此菜单。</string>
+    <string name="lyrics_bpm_players_done">完成</string>
+    <string name="lyrics_bpm_companion">歌词伙伴颜文字</string>
+    <string name="lyrics_bpm_companion_summary">搜索歌词时显示好奇的颜文字，找不到歌词时显示随节拍反应的颜文字。</string>
 </resources>

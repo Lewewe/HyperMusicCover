@@ -667,7 +667,7 @@ final class LyricView extends View {
             });
             return changed;
         }
-        if (lines.isEmpty()) return changed;
+        if (lines.isEmpty()) return changed || (show > 0f && LockLyrics.companionAnimating());
         // Borrowed translations fading in: a frame each until they are all the way in.
         if (transRevealAt != 0L) {
             if (now - transRevealAt >= TRANS_REVEAL_MS) transRevealAt = 0L;
@@ -980,7 +980,9 @@ final class LyricView extends View {
      * wherever the OEM fades the clock - the bouncer, the shade over the lock screen).
      */
     private float showTarget() {
-        if (!LockLyrics.wantsShown() || !bandOk || lines.isEmpty()) return 0f;
+        if (!LockLyrics.wantsShown() || !bandOk
+                || (lines.isEmpty() && !LockLyrics.hasBpmCompanion()
+                && !LockLyrics.bpmSearchingLyrics())) return 0f;
         // With the HDR highlight the lyrics are a window of their own above the shade window,
         // and the control centre pulled over the lock screen is drawn in the shade window - so
         // its blur, which takes what is under it, can never reach them: they stood sharp over
@@ -1425,7 +1427,10 @@ final class LyricView extends View {
         if (anchorFix != anchorFixWant) return true;
         ClockCollapse.Phase p = ClockCollapse.phase();
         if (p == ClockCollapse.Phase.ENTER || p == ClockCollapse.Phase.EXIT) return true;
-        if (lines.isEmpty() || focus < 0 || show == 0f) return false;
+        if (lines.isEmpty()) {
+            return show > 0f && !LockLyrics.still() && LockLyrics.companionAnimating();
+        }
+        if (focus < 0 || show == 0f) return false;
         int n = lines.size();
         int lo = Math.max(0, focus - 6), hi = Math.min(n - 1, focus + 12);
         for (int i = lo; i <= hi; i++) {
@@ -1959,7 +1964,11 @@ final class LyricView extends View {
     private boolean updateBand() {
         // Two getLocationOnScreen walks a frame are not free, and this runs from the keyguard's
         // pre-draw: nothing to show, nothing to measure.
-        if (lines.isEmpty() && show == 0f) return false;
+        // The lyricless BPM companion has no rows to bring the band alive first.  It still uses
+        // the exact same clock/card gap, so allow that one empty page to measure before its
+        // show animation starts; otherwise showTarget() and this early return deadlock at zero.
+        if (lines.isEmpty() && show == 0f && !LockLyrics.hasBpmCompanion()
+                && !LockLyrics.bpmSearchingLyrics()) return false;
         // Both edges as drawn, in this view's unzoomed frame: a swipe zooms the clock's and the
         // card's containers and not this layer. See ClockCollapse.contentBottomFor.
         float clock = ClockCollapse.contentBottomFor(this);
@@ -1969,7 +1978,14 @@ final class LyricView extends View {
             getLocationOnScreen(loc);
             float me = loc[1];
             float floor = bandFloor();
-            if (LockLyrics.sStyle.writeBand(clock, floor, density, textPx, bandBounds)) {
+            boolean companion = lines.isEmpty()
+                    && (LockLyrics.hasBpmCompanion() || LockLyrics.bpmSearchingLyrics());
+            if (companion) {
+                float gap = CoverCardStyle.GAP_DP * density;
+                top = clock + gap - me;
+                bottom = floor - gap - me;
+                ok = Float.isFinite(top) && Float.isFinite(bottom) && bottom > top;
+            } else if (LockLyrics.sStyle.writeBand(clock, floor, density, textPx, bandBounds)) {
                 top = bandBounds[0] - me;
                 bottom = bandBounds[1] - me;
                 ok = bottom - top >= MIN_BAND_ROWS * textPx - 0.01f;
@@ -2165,7 +2181,14 @@ final class LyricView extends View {
 
     private void drawLyrics(Canvas canvas) {
         drawCount++;
-        if (show <= 0.003f || lines.isEmpty() || focus < 0 || main.length != lines.size()) return;
+        if (show <= 0.003f) return;
+        if (lines.isEmpty()) {
+            if (LockLyrics.hasBpmCompanion() || LockLyrics.bpmSearchingLyrics()) {
+                drawBpmCompanion(canvas);
+            }
+            return;
+        }
+        if (focus < 0 || main.length != lines.size()) return;
         float bandH = bandBottom - bandTop;
         if (bandH <= 0f) return;
         // The float, added to the anchor so the lines, their dots and their edge fades all move
@@ -2236,6 +2259,74 @@ final class LyricView extends View {
             drawLine(canvas, i, side, y, a);
         }
         canvas.restoreToCount(save);
+    }
+
+    private final TextPaint companionPaint = new TextPaint();
+    private final Paint.FontMetrics companionMetrics = new Paint.FontMetrics();
+    private static final Typeface COMPANION_TYPEFACE = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
+
+    private void drawBpmCompanion(Canvas canvas) {
+        if (!bandOk || bandBottom <= bandTop) return;
+        int bpm = LockLyrics.bpm();
+        long beatAt = LockLyrics.bpmBeatAt();
+        long sinceBeat = beatAt == 0L ? Long.MAX_VALUE : Math.max(0L, now() - beatAt);
+        boolean searchingLyrics = LockLyrics.bpmSearchingLyrics();
+        boolean showBpm = !searchingLyrics && bpm >= 40;
+        float pulse = searchingLyrics || sinceBeat == Long.MAX_VALUE
+                ? 0f : (float) Math.exp(-sinceBeat / 190f);
+        String face = searchingLyrics ? LockLyrics.bpmSearchingFace() : LockLyrics.bpmFace();
+        String label = searchingLyrics ? LockLyrics.bpmSearchingMessage() : LockLyrics.bpmMessage();
+        String bpmLabel = showBpm ? bpm + " BPM" : "";
+        TextPaint p = companionPaint;
+        p.set(paint);
+        p.setTypeface(COMPANION_TYPEFACE);
+        p.setTextSize(textPx * 1.18f);
+        p.getFontMetrics(companionMetrics);
+        float faceTop = companionMetrics.top, faceBottom = companionMetrics.bottom;
+        float faceHeight = faceBottom - faceTop;
+        float faceWidth = p.measureText(face);
+        // Reserve the peak beat size so pulses never enter the clock or the media card.
+        float peak = 1.09f;
+        p.setTextSize(textPx * .48f);
+        p.getFontMetrics(companionMetrics);
+        float labelHeight = companionMetrics.bottom - companionMetrics.top;
+        float lineGap = textPx * .22f;
+        float faceCenterY = faceHeight * peak * .5f;
+        float faceBaseline = faceCenterY - (faceTop + faceBottom) * .5f;
+        float labelBaseline = faceHeight * peak + lineGap - companionMetrics.top;
+        float bpmBaseline = labelBaseline + labelHeight + lineGap;
+        float contentHeight = (showBpm ? bpmBaseline : labelBaseline) + companionMetrics.bottom;
+        float contentWidth = Math.max(faceWidth * peak, Math.max(p.measureText(label), p.measureText(bpmLabel)));
+        float fit = CompanionLayout.fitScale(getWidth() - 2f * CoverCardStyle.GAP_DP * density,
+                bandBottom - bandTop, contentWidth, contentHeight);
+        if (!(fit > 0f)) return;
+        float cx = getWidth() * .5f;
+        float top = (bandTop + bandBottom - contentHeight * fit) * .5f;
+        int blockSave = canvas.save();
+        // Never let fallback glyphs or a moving beat draw over the media player.
+        canvas.clipRect(0f, bandTop, getWidth(), bandBottom);
+        canvas.translate(cx, top);
+        canvas.scale(fit, fit);
+        p.setTextSize(textPx * 1.18f);
+        p.setAlpha((int) (255 * show * .82f));
+        float mirror = searchingLyrics ? 1f
+                : (LockLyrics.bpmBeatDirection() < 0 ? -1f : 1f);
+        float scale = 1f + pulse * .09f;
+        int faceSave = canvas.save();
+        canvas.scale(mirror * scale, scale, 0f, faceCenterY);
+        canvas.drawText(face, -faceWidth * .5f, faceBaseline, p);
+        canvas.restoreToCount(faceSave);
+        p.setTextSize(textPx * .48f);
+        p.setAlpha((int) (255 * show * .72f));
+        canvas.drawText(label, -p.measureText(label) * .5f, labelBaseline, p);
+        if (showBpm) {
+            long foundAt = LockLyrics.bpmFoundAt();
+            float bpmFade = foundAt == 0L ? 0f
+                    : Math.min(1f, Math.max(0L, now() - foundAt) / 900f);
+            p.setAlpha((int) (255 * show * .72f * bpmFade));
+            canvas.drawText(bpmLabel, -p.measureText(bpmLabel) * .5f, bpmBaseline, p);
+        }
+        canvas.restoreToCount(blockSave);
     }
 
     /**

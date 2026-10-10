@@ -117,6 +117,10 @@ final class LockLyrics {
     /** User-supplied Spicy Lyrics API key; never included in exported settings. */
     static volatile String sSpicyLyricsApiKey = "";
     static volatile boolean sSpicyLyricsEnabled = true;
+    /** Optional local output-mix tempo estimate used only by the lyricless beat companion. */
+    static volatile boolean sBpmEnabled;
+    private static volatile int sBpm;
+    private static volatile long sBpmFoundAt;
     private static volatile int sTranslateRevision;
     /** Optional motion/effect level for lyric rendering; see AliveLyricsEffects constants. */
     static volatile int sAliveFx = AliveLyricsEffects.OFF;
@@ -580,12 +584,153 @@ final class LockLyrics {
         return sDemo || !sLines.isEmpty() || CACHE.containsKey(sKey);
     }
 
+    /**
+     * Content that can occupy the lyric page.  The BPM companion deliberately only joins this
+     * once lookup has settled with no rows, so a normal song never briefly opens its companion
+     * while its lyrics are still loading.
+     */
+    static boolean hasDisplayContent() {
+        return hasLyrics() || hasBpmCompanion() || bpmSearchingLyrics();
+    }
+
     /** Whether the last settled answer - not one still loading - had lines. See hasLyrics(). */
     private static boolean sHadLyrics;
 
     /** Whether the view belongs in the keyguard right now. */
     static boolean wantsAttached() {
-        return !Main.aodClockArtworkCompact() && !Main.aodArtworkExpanded() && !sNotificationCompact && wanted() && Main.coverModeOn() && hasLyrics();
+        return !Main.aodClockArtworkCompact() && !Main.aodArtworkExpanded() && !sNotificationCompact && wanted() && Main.coverModeOn()
+                && hasDisplayContent();
+    }
+
+    /** The companion keeps the native clock and fits itself into the remaining room. */
+    static boolean companionPage() {
+        return wantsAttached() && (hasBpmCompanion() || bpmSearchingLyrics());
+    }
+
+    static boolean hasBpmCompanion() {
+        return sBpmEnabled && Main.bpmPlayerAllowed(sController) && !sKey.isEmpty() && sLines.isEmpty()
+                && SystemClock.uptimeMillis() - sTrackChangedAt >= 3000L;
+    }
+    static boolean bpmSearchingLyrics() {
+        return sBpmEnabled && Main.bpmPlayerAllowed(sController) && !sKey.isEmpty() && sLines.isEmpty() && sLoading;
+    }
+    static int bpm() { return sBpm; }
+    static long bpmFoundAt() { return sBpmFoundAt; }
+    static boolean bpmEstimating() { return BpmEstimator.estimating(); }
+    static float bpmPulse() { return BpmEstimator.pulse(); }
+    static long bpmBeatAt() { return BpmEstimator.beatAt(); }
+    static long bpmBeatCount() { return BpmEstimator.beatCount(); }
+    static int bpmBeatDirection() { return BpmEstimator.beatDirection(); }
+    static int bpmPresentationSeed() {
+        return sKey == null ? 0 : sKey.hashCode() & Integer.MAX_VALUE;
+    }
+    static String bpmFace() {
+        return BpmEstimator.presentationFace(bpmPresentationSeed());
+    }
+    static String bpmMessage() {
+        return BpmEstimator.presentationMessage(bpmPresentationSeed());
+    }
+    static String bpmSearchingFace() {
+        return BpmEstimator.searchingFace(bpmPresentationSeed());
+    }
+    static String bpmSearchingMessage() {
+        return BpmEstimator.searchingMessage(bpmPresentationSeed());
+    }
+    private static void requestBpm(final String key, MediaController controller) {
+        BpmEstimator.stop();
+        sBpm = 0;
+        sBpmFoundAt = 0L;
+    }
+
+    static boolean companionAnimating() {
+        return BpmCompanionPolicy.capture(hasBpmCompanion() && !bpmSearchingLyrics(),
+                wantsShown(), sView != null && sView.isAttachedToWindow(),
+                Main.screenOnCached(), !lockScreenGone(), playing(), still())
+                && BpmEstimator.capturing();
+    }
+
+    /** Reconcile capture when the page, lock screen, display, track or playback changes. */
+    private static void syncBpmCapture() {
+        boolean capture = BpmCompanionPolicy.capture(hasBpmCompanion() && !bpmSearchingLyrics(),
+                wantsShown(), sView != null && sView.isAttachedToWindow(),
+                Main.screenOnCached(), !lockScreenGone(), playing(), still());
+        if (!capture) {
+            BpmEstimator.stop();
+            return;
+        }
+        if (BpmEstimator.runningFor(sKey)) return;
+        final String key = sKey;
+        BpmEstimator.start(key, publishedBpm(sController), bpm -> {
+            if (!key.equals(sKey)) return;
+            sBpm = bpm;
+            if (bpm >= 40 && sBpmFoundAt == 0L) sBpmFoundAt = SystemClock.uptimeMillis();
+            refresh();
+        });
+        BpmEstimator.onPlaybackState(sState);
+    }
+
+    /**
+     * Some players expose a catalog tempo in metadata extras. It is preferable to a mix-level
+     * estimate because FFT accents can represent a half-time drop or a double-time subdivision.
+     * Unknown metadata is deliberately ignored; the estimator remains the fallback.
+     */
+    private static int publishedBpm(MediaController controller) {
+        android.media.MediaMetadata metadata = Main.sessionMetadata(controller);
+        if (metadata == null) return 0;
+        android.os.Bundle extras = controller == null ? null : controller.getExtras();
+        String[] keys = {
+                "android.media.metadata.BPM",
+                "com.google.android.music.metainfo.BPM",
+                "bpm",
+                "tempo"
+        };
+        for (String key : keys) {
+            int direct = metadataBpm(metadata, key);
+            if (direct >= 40 && direct <= 220) return direct;
+            int bpm = metadataBpm(extras, key);
+            if (bpm >= 40 && bpm <= 220) return bpm;
+        }
+        return 0;
+    }
+
+    private static int metadataBpm(android.media.MediaMetadata metadata, String key) {
+        if (!metadata.containsKey(key)) return 0;
+        long integer = metadata.getLong(key);
+        if (integer != 0L) return (int) integer;
+        String text = metadata.getString(key);
+        if (text == null) return 0;
+        try {
+            return Math.round(Float.parseFloat(text.trim()));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private static int metadataBpm(android.os.Bundle extras, String key) {
+        if (extras == null || !extras.containsKey(key)) return 0;
+        Object value = extras.get(key);
+        if (value instanceof Number) return Math.round(((Number) value).floatValue());
+        if (value instanceof CharSequence) {
+            try {
+                return Math.round(Float.parseFloat(value.toString().trim()));
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    /** Re-check the current track after the user changes the local BPM companion setting. */
+    static void refreshBpm() {
+        if (!sBpmEnabled) {
+            BpmEstimator.clearCache();
+            sBpm = 0;
+            sBpmFoundAt = 0L;
+            refresh();
+            return;
+        }
+        requestBpm(sKey, sController);
+        refresh();
     }
 
     /** The native media player keeps its thumbnail without opening an empty lyric view. */
@@ -623,6 +768,8 @@ final class LockLyrics {
         if (!sEnabled || hasLyrics()) return;
         if (compact) sArtworkPage.preferCompact();
         else sArtworkPage.preferCover();
+        // Artwork taps and two-finger toggles must select the same companion page.
+        sTapHidden = !compact;
         // Retarget the thumbnail immediately instead of waiting for an unrelated redraw.
         Main.refreshMediaCardForMorph();
         refresh();
@@ -682,6 +829,7 @@ final class LockLyrics {
      * against, only the desktop behind it.
      */
     static void lockScreenLeaving(String by) {
+        BpmEstimator.stop();
         sLeavingBy = by;
         sLeavingAt = SystemClock.uptimeMillis();
         sLastLeave = by + "@" + sLeavingAt;
@@ -827,11 +975,13 @@ final class LockLyrics {
 
     /** The lyric page a tap into cover mode will land on. */
     static boolean willAttachOnEntry() {
-        return hasLyrics() && CoverMorphRoute.lyricsAfterEntry(sEnabled, sTapHidden, sDemo);
+        return hasDisplayContent()
+                && CoverMorphRoute.lyricsAfterEntry(sEnabled, sTapHidden, sDemo);
     }
 
     static boolean willAttachAfterTapToggle() {
-        return hasLyrics() && CoverMorphRoute.lyricsAfterToggle(sEnabled, sTapHidden, sDemo);
+        return hasDisplayContent()
+                && CoverMorphRoute.lyricsAfterToggle(sEnabled, sTapHidden, sDemo);
     }
 
     /**
@@ -1098,12 +1248,20 @@ final class LockLyrics {
             rereadIfNewPayload(key, c);
             return;
         }
-        sArtworkPage.onTrackChanged(wantsAttached(), key.isEmpty());
         String lastKey = sKey;
         sKey = key;
+        sLoading = sEnabled && !key.isEmpty();
+        sArtworkPage.onTrackChanged(wantsAttached(), key.isEmpty());
+        requestBpm(key, c);
         long lastChange = sTrackAt;
         sTrackChangedAt = SystemClock.uptimeMillis();
         sTrackAt = sTrackChangedAt;
+        final String bpmKey = key;
+        Main.main().postDelayed(new Runnable() {
+            @Override public void run() {
+                if (bpmKey.equals(sKey)) refresh();
+            }
+        }, 3000L);
         Main.main().removeCallbacks(SETTLED_LOOKUP);
         unpark();
         sBlurVideoReloaded = false;
@@ -1122,7 +1280,6 @@ final class LockLyrics {
         // - two messages, in the middle of the track change's crossfade, which is exactly when
         // the wallpaper process holds a switch back to wait for the fade. Those two could then
         // land in the wrong order and leave the cover sharp.
-        sLoading = sEnabled && !key.isEmpty();
         setLines(Collections.<LyricLine>emptyList(), "track changed");
         if (!sEnabled || key.isEmpty()) return;
         NextLyrics.Lyrics ahead = NextLyrics.take(c);
@@ -1155,9 +1312,10 @@ final class LockLyrics {
         }
         Cached hit = CACHE.get(key);
         if (hit != null) {
-            sLoading = false;
             sSource = hit.source;
             setLines(hit.lines, "cached");
+            sLoading = false;
+            refresh();
             translateAsync(key, hit.lines, sGen);
             NextLyrics.onLyricsFinal();
             return;
@@ -1188,7 +1346,7 @@ final class LockLyrics {
      * until nothing has moved for SETTLE_MS, and looks the settled key up once.
      */
     private static final long BURST_MS = 1500L;
-    private static final long SETTLE_MS = 500L;
+    private static final long SETTLE_MS = 250L;
 
     /**
      * A new song carrying the old one's duration: QQ 音乐 publishes the next track's name a
@@ -1212,9 +1370,10 @@ final class LockLyrics {
             if (!sEnabled || sDemo || key.isEmpty()) return;
             Cached hit = CACHE.get(key);
             if (hit != null) {
-                sLoading = false;
                 sSource = hit.source;
                 setLines(hit.lines, "cached");
+                sLoading = false;
+                refresh();
                 translateAsync(key, hit.lines, sGen);
                 NextLyrics.onLyricsFinal();
                 return;
@@ -1356,7 +1515,6 @@ final class LockLyrics {
             return;
         }
         Main.main().removeCallbacks(LOOKUP_WATCHDOG);
-        sLoading = false;
         sSource = source;
         // What the LAST lookup found, not what any lookup ever found.
         //
@@ -1386,6 +1544,8 @@ final class LockLyrics {
             persistReady(lines, source, false);
         }
         setLines(lines, why);
+        sLoading = false;
+        refresh();
         translateAsync(want, lines, sGen);
         // A payload that turned up while this was looking. See rereadIfNewPayload().
         rereadIfNewPayload(want, sController);
@@ -1395,13 +1555,14 @@ final class LockLyrics {
     private static void settlePrefetched(String want, NextLyrics.Lyrics ahead) {
         if (!NextLyrics.isCurrent(ahead.context)) return;
         Main.main().removeCallbacks(LOOKUP_WATCHDOG);
-        sLoading = false;
         sSource = ahead.source;
         CACHE.put(want, new Cached(QueuedLyricCache.withoutOnline(ahead.lines), ahead.source));
         NextLyrics.persistReady(sReadyPkg, sReadyMediaId, ahead.lines, ahead.source,
                 ahead.translated, ahead.context);
         setLines(ahead.lines, ahead.translated ? "prefetched + online translation"
                 : "prefetched lyrics");
+        sLoading = false;
+        refresh();
         NextLyrics.onLyricsFinal();
         if (!ahead.translated) translateAsync(want, CACHE.get(want).lines, sGen);
         if (ahead.source == LyricSource.SRC_SPICY && !LyricSource.words(ahead.lines)) {
@@ -1552,6 +1713,8 @@ final class LockLyrics {
     static void onPlaybackState(PlaybackState s) {
         sState = s;
         sStateReadAt = SystemClock.uptimeMillis();
+        syncBpmCapture();
+        BpmEstimator.onPlaybackState(s);
         LyricView v = sView;
         if (v != null) v.kick();
     }
@@ -1623,6 +1786,7 @@ final class LockLyrics {
      * tick does.
      */
     private static void unhost(LyricView v) {
+        BpmEstimator.stop();
         if (v == null) return;
         if (sHolding) {
             sHolding = false;
@@ -1657,12 +1821,13 @@ final class LockLyrics {
         updateBlur();
         updateHdr();
         if (wantsAttached()) attach();
+        syncBpmCapture();
         LyricView v = sView;
         if (v != null) v.kick();
         // A new song or a switch in the still AOD: nothing is shown until the display is let up.
         if (sStill) drawStill();
         CoverCardLayer.refresh();
-        int buttonState = (sEnabled ? 1 : 0) | (hasCurrentLyrics() ? 2 : 0)
+        int buttonState = (sEnabled ? 1 : 0) | (hasDisplayContent() ? 2 : 0)
                 | (wantsCompactArtwork() ? 4 : 0);
         if (buttonState != sLyricsButtonState) {
             sLyricsButtonState = buttonState;
@@ -1802,6 +1967,8 @@ final class LockLyrics {
         return "enabled=" + sEnabled + " tap=" + (sTapHidden ? "hidden" : "shown")
                 + " demo=" + sDemo + " key=" + sKey + " lines=" + sLines.size()
                 + " has=" + hasLyrics() + " loading=" + sLoading
+                + " bpmEnabled=" + sBpmEnabled + " bpmAllowed=" + Main.bpmPlayerAllowed(sController)
+                + " bpmCapture=" + BpmEstimator.capturing() + " bpm=" + sBpm
                 + " (" + sWhy + ") src=" + srcName(sSource)
                 + " compact=" + compactWithoutLyrics()
                 + " sessionHasLyric=" + LyricSource.hasLyricInfo(sController)
@@ -2001,6 +2168,7 @@ final class LockLyrics {
             LyricView v = sView;
             sTicking = v != null && v.isAttachedToWindow();
             if (!sTicking) {
+                BpmEstimator.stop();
                 watchProximity(false);
                 return;
             }
@@ -2008,6 +2176,7 @@ final class LockLyrics {
             holdScreen(v);
             updateHdr();
             updateStill();
+            syncBpmCapture();
             if (sStill) {
                 // The AOD alarm owns still-mode redraws. It acquires the draw wake lock and
                 // advances word-timed lyrics before releasing it; a Handler tick cannot do that
@@ -2194,6 +2363,7 @@ final class LockLyrics {
                     }
                     boolean was = sStill;
                     updateStill();
+                    syncBpmCapture();
                     // Entering, and coming back after the AOD went dark: either way nothing is
                     // set to wake it, and the picture on the panel is whatever was there last.
                     // Not on every 3/4 flip - our own draw lock makes those, with a wake set.
@@ -2361,8 +2531,9 @@ final class LockLyrics {
         // it while the display is dozing takes a screen wake lock and pulls the phone out of the
         // AOD at full brightness. Called from the tick, which never stops, so this would have
         // fired within a second of the screen going off.
-        boolean asked = sKeepOn && wantsShown() && !inHeldAod()
-                && !sLines.isEmpty() && playing();
+        boolean bpmDancerVisible = hasBpmCompanion();
+        boolean asked = BpmCompanionPolicy.keepAwake(sKeepOn, wantsShown(), inHeldAod(),
+                !sLines.isEmpty() || bpmDancerVisible, playing());
         // Not in a pocket or face down: with nothing to stop it, a song playing kept the screen
         // lit and the lyrics drawing at 60Hz wherever the phone was put, for as long as it
         // played. Covered, the lock screen's own 10s timeout takes it again.

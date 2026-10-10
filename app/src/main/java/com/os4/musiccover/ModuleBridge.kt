@@ -35,6 +35,8 @@ object ModuleBridge {
     private const val TARGET = "com.android.systemui"
     private const val QUERY_TIMEOUT_MS = 1500L
 
+    data class MediaPlayerOption(val packageName: String, val label: String)
+
     data class State(
         val alive: Boolean = false,
         val cover: Boolean = false,
@@ -137,6 +139,9 @@ object ModuleBridge {
         /** User-owned API key: optional for custom, required for Google/DeepL. */
         val lyricTranslateApiKey: String = "",
         val spicyLyricsApiKey: String = "",
+        val bpmEnabled: Boolean = false,
+        val bpmPlayers: Set<String> = emptySet(),
+        val bpmPlayerOptions: List<MediaPlayerOption> = emptyList(),
         /** Source language for online translation ("auto" by default). */
         val lyricTranslateSource: String = "auto",
         /** Target language for online translation ("en" by default). */
@@ -516,6 +521,13 @@ object ModuleBridge {
 
     fun setSpicyLyricsApiKey(context: Context, apiKey: String) =
         send(context, "spicylyricscfg") { putExtra("apikey", apiKey.trim()) }
+    fun setBpmConfig(context: Context, on: Boolean) =
+        send(context, "bpmcfg") { putExtra("on", on) }
+
+    fun setBpmPlayers(context: Context, packages: Set<String>) =
+        send(context, "bpmplayers") {
+            putExtra("packages", packages.sorted().joinToString(","))
+        }
     fun setLyricsRoma(context: Context, on: Boolean) =
         send(context, "lyricroma") { putExtra("on", on) }
     fun setOnDeviceTransliteration(context: Context, on: Boolean) =
@@ -880,6 +892,15 @@ object ModuleBridge {
             lyricTranslateEndpoint = b.getString("lyrictrendpoint") ?: "",
             lyricTranslateApiKey = b.getString("lyrictrkey") ?: "",
             spicyLyricsApiKey = b.getString("spicylyricskey") ?: "",
+            bpmEnabled = b.getBoolean("bpmenabled", false),
+            bpmPlayers = b.getStringArrayList("bpmplayers")?.toSet() ?: emptySet(),
+            bpmPlayerOptions = run {
+                val packages = b.getStringArray("bpmplayerpackages")?.toList() ?: emptyList()
+                val labels = b.getStringArray("bpmplayerlabels")?.toList() ?: emptyList()
+                packages.mapIndexed { index, packageName ->
+                    MediaPlayerOption(packageName, labels.getOrNull(index) ?: packageName)
+                }
+            },
             lyricTranslateSource = b.getString("lyrictrsource") ?: "auto",
             lyricTranslateTarget = b.getString("lyrictrtarget") ?: "en",
             lyricsAliveFx = b.getInt("lyricalive", 0),
