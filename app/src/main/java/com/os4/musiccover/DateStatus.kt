@@ -124,6 +124,8 @@ internal object DateStatus {
             anim?.cancel()
             anim = null
             value = v
+            // Apply the snapped value even when the next target is identical.
+            frame()
         }
 
         fun to(target: Float, response: Float, end: (() -> Unit)? = null) {
@@ -131,6 +133,8 @@ internal object DateStatus {
             anim = null
             val from = value
             if (from == target) {
+                // A cancelled animation may have left a translation matrix on the date view.
+                frame()
                 end?.invoke()
                 return
             }
