@@ -33,3 +33,5 @@ local.properties
 # picks this up next, not for the repo's readers.
 /.workbuddy/
 .kotlin/
+
+/hyper-canvas/build/

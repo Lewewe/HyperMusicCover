@@ -29,6 +29,8 @@ final class LockHold {
     enum Owner {
         /** The album cover. Its entry fades the card on the clock's spring. */
         COVER(true),
+        /** Canvas keeps the native-size clock at the top while its player stays expanded. */
+        CANVAS(false),
         /** A full-screen immersive page: ImmersiveHost. */
         IMMERSIVE(false);
 
@@ -52,6 +54,8 @@ final class LockHold {
     static boolean clockHeld() {
         return !sOwners.isEmpty();
     }
+
+    static boolean heldBy(Owner owner) { return sOwners.contains(owner); }
 
     /** The clock is still flying home from [o] giving the lock screen back. */
     static boolean exitingFor(Owner o) {

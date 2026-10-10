@@ -378,4 +378,20 @@
     <string name="media_wave_bt_sync_summary">根据 Android 估算的蓝牙输出延迟调整频谱显示，仅在通过蓝牙播放媒体时生效。</string>
     <string name="media_wave_bt_adjustment">蓝牙同步微调</string>
     <string name="media_wave_bt_adjustment_summary">负值让频谱提前显示，正值让频谱延后显示。如果与耳机声音仍不同步，可在此微调。</string>
+    <string name="tab_extensions">扩展</string>
+    <string name="hypercanvas_title">Spotify Canvas 锁屏背景</string>
+    <string name="hypercanvas_summary">将 Spotify Canvas 用作锁屏背景。视频就绪后，大封面会收回播放器，打开大封面或歌词页面时，视频背景会变得模糊并降低亮度。</string>
+    <string name="hypercanvas_missing">请先安装独立的 HyperCanvas 扩展 APK。</string>
+    <string name="hypercanvas_enable_module">请先在 LSPosed 中启用 HyperCanvas，扩展会请求批准缺少的作用域。</string>
+    <string name="hypercanvas_approval">正在等待 LSPosed 批准，请查看 Spotify 和 SystemUI 的授权通知。</string>
+    <string name="hypercanvas_restart">批准作用域后，请重启 Spotify 和 SystemUI 以加载 HyperCanvas。</string>
+    <string name="hypercanvas_scope_failed">作用域授权尚未完成，关闭后重新开启此选项可再次申请。</string>
+    <string name="hypercanvas_connected">Spotify 和 SystemUI 已连接扩展。</string>
+    <string name="hypercanvas_dim">Canvas 背景变暗程度</string>
+    <string name="hypercanvas_cover_blur">大封面或歌词背后的 Canvas 模糊程度</string>
+    <string name="hypercanvas_cover_dim">大封面或歌词背后的 Canvas 变暗程度</string>
+    <string name="hypercanvas_cache">已缓存的 Canvas 视频：%1$d</string>
+    <string name="hypercanvas_note">实验性功能。Spotify 加载 Canvas 时才会收集数据，可能需要先打开正在播放页面。没有可用 Canvas 的歌曲仍使用原有封面背景，最多缓存当前歌曲及前后歌曲的三个视频，仅使用 Spotify 已提供的 Canvas。关闭 HyperCanvas 后清空缓存，屏幕关闭后停止播放视频。</string>
+    <string name="hypercanvas_show_in_pill">在药丸模式中显示 Canvas</string>
+    <string name="hypercanvas_show_in_pill_summary">播放器收起为药丸后继续显示 Canvas，关闭后会隐藏并暂停视频。</string>
 </resources>

@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
+        <package android:name="com.yzc26623.HyperCanvas" />
         <!-- Whether a lyric provider module is installed, for the notice on the lyrics page.
              Declared because package visibility is filtered from Android 11 on: without this the
              lookup throws NameNotFound even when the package is there. -->

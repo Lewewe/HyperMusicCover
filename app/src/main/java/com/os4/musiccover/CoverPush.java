@@ -210,11 +210,13 @@ final class CoverPush {
             CoverCardLayer.clear();
             if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0, gen, key);
             out.putExtra("off", true);
-            ProbeGuard.send(ctx, out);
-            Main.sTrackKey = "";
+            if (CanvasHostBridge.keepPaletteBackdrop()) CanvasHostBridge.backdropRetained();
+            else ProbeGuard.send(ctx, out);
+            if (!CanvasHostBridge.keepPaletteBackdrop()) Main.sTrackKey = "";
             // Nothing behind the clock any more, so nothing to take a colour from. The repaint
             // that hands the OEM's own colours back happens with the rest of cover mode.
-            Main.sCoverTint = 0;
+            // The wallpaper cover is gone, but Canvas still needs the artwork's clock palette.
+            if (!CanvasHostBridge.active() && !CanvasHostBridge.nativeClockScene()) Main.sCoverTint = 0;
             // The shade has nothing to reveal any more - unless it is set to keep the last cover.
             // This branch is the single funnel for leaving cover mode - the tap, the dismissed
             // card, the release path and the cover op all end up here - so it is the only place
@@ -224,7 +226,7 @@ final class CoverPush {
             return;
         }
         if (art == null) { Xp.log(Main.TAG + "pushart: no album art"); return; }
-        if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) {
+        if (Main.sCoverMode && Main.sCoverCardStyle.mode == CoverCardStyle.CARD) {
             CoverCardLayer.publish(art, temporaryThumbnail, gen, key);
         }
         if (!currentPush(gen, key)) return;
@@ -269,6 +271,7 @@ final class CoverPush {
                 boolean reused = tintKey.equals(sTintKey);
                 if (reused) {
                     Main.sCoverTint = sTintValue;
+                    Main.sLastArtworkTint = sTintValue;
                 } else {
                     Bitmap full;
                     android.os.Trace.beginSection("MC push.compose");
@@ -285,7 +288,7 @@ final class CoverPush {
                     sTintKey = tintKey;
                     sTintValue = Main.sCoverTint;
                 }
-                if (Main.sCoverMode) Main.recolorClock();
+                if (Main.sCoverMode || CanvasHostBridge.active()) Main.recolorClock();
                 // The shade builds its background from the square source and keeps nothing.
                 android.os.Trace.beginSection("MC push.shade");
                 try {
@@ -327,7 +330,7 @@ final class CoverPush {
             return;
         }
         Main.measureCover(full);
-        if (Main.sCoverMode) Main.recolorClock();
+        if (Main.sCoverMode || CanvasHostBridge.active()) Main.recolorClock();
         if (frostTask != null) {
             // Up before the JPEG: the view is this process's own, and only reads `full`, which
             // the encode below only reads too.

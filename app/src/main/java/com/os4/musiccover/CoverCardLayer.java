@@ -131,6 +131,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     private CoverCardLayer(Context context) {
         super(context);
+        setTag("HMCBigCoverArtwork");
         wash = new Wash(context);
         setClickable(false);
         setFocusable(false);

@@ -98,6 +98,10 @@ final class ClockCollapse {
 
     /** Whether the doze about to start should keep our clock. Read once, at the start of sleep. */
     private static boolean keepInAod() {
+        // Canvas and its artwork backdrop retain the upper clock pose in full-screen AOD.
+        if (LockHold.heldBy(LockHold.Owner.CANVAS) && !Main.coverModeOn()
+                && !ImmersiveHost.holdsClock())
+            return CanvasHostBridge.keepsClockInAod() && Main.fullAodOn();
         // An immersive page as well as the cover: the full-screen doze keeps the page under the
         // clock (ImmersiveHost), and only that doze - the plain one is the OEM's, page and clock
         // alike.
@@ -574,7 +578,8 @@ final class ClockCollapse {
                 if (!Main.clockHeld()) return;
                 // Cover mode without our clock - unlocked, say. Nothing to walk back; watch the
                 // AOD so the wake has a start.
-                sAodHeld = keepInAod() && Main.aodArtworkExpanded()
+                sAodHeld = keepInAod()
+                        && (Main.aodArtworkExpanded() || CanvasHostBridge.keepsClockInAod())
                         && !Float.isNaN(sCoverRestTop);
                 if (sAodHeld) {
                     sFromTop = sCoverRestTop;
@@ -769,7 +774,8 @@ final class ClockCollapse {
 
     /** Resize the clock independently so the media card stays in its current scene. */
     static void refreshArtworkSize() {
-        boolean compact = (LockLyrics.compactWithoutLyricsOnEntry() || LockLyrics.companionPage())
+        boolean compact = (LockLyrics.compactWithoutLyricsOnEntry() || LockLyrics.companionPage()
+                || CanvasHostBridge.nativeClockScene())
                 && !ImmersiveHost.holdsClock();
         android.graphics.Bitmap art = CoverCardLayer.currentArt();
         boolean coverVisible = Main.sCoverCardStyle.mode == CoverCardStyle.CARD

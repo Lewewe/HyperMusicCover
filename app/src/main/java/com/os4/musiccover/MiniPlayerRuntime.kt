@@ -915,6 +915,8 @@ object MiniPlayerRuntime {
 
     @JvmStatic fun forgetRestoreScene() { restoreScene = false }
 
+    internal fun restoreScenePending(): Boolean = restoreScene
+
     internal fun takeRestoreScene(): Boolean = restoreScene.also { restoreScene = false }
 
     private var routed: WeakReference<MiniPlayerView>? = null
@@ -1485,6 +1487,8 @@ object MiniPlayerRuntime {
         return sb.toString()
     }
 
+    @JvmStatic fun canvasPlayerInPill(): Boolean = live().any { it.canvasPlayerInPill() }
+
     @JvmStatic fun nativeHeaderHidden(): Boolean = synchronized(controllers) {
         controllers.values.any { it.controller.nativeHeaderHidden() }
     }
@@ -1516,6 +1520,11 @@ object MiniPlayerRuntime {
         val previous = musicPillTapActive
         musicPillTapActive = fromPill
         try { action() } finally { musicPillTapActive = previous }
+    }
+
+    /** A Canvas lyrics toggle changes the page while retaining the expanded native player. */
+    @JvmStatic fun keepCanvasPlayerExpanded() {
+        Main.miniPlayerSession()?.sessionToken?.let { chooseNative(it) }
     }
 
     @JvmStatic fun prepareSceneEntry(): Boolean =
@@ -1609,6 +1618,7 @@ object MiniPlayerRuntime {
         if (changed) Xp.log("MCMini: dynamic choice -> native")
         live().forEach { it.beginTransition(toNative = true, scene = false) }
         refresh()
+        CanvasHostBridge.sceneChanged()
     }
 
     internal fun selectMini(token: Any) {
@@ -1616,16 +1626,19 @@ object MiniPlayerRuntime {
         if (changed) Xp.log("MCMini: dynamic choice -> mini")
         live().forEach { it.beginTransition(toNative = false, scene = false) }
         refresh()
+        CanvasHostBridge.sceneChanged()
     }
 
     internal fun chooseNative(token: Any) {
         val changed = synchronized(selectionLock) { sessionSelection.requestNative(token) }
         if (changed) Xp.log("MCMini: dynamic choice -> native (pulled)")
+        if (changed) Main.main().post { CanvasHostBridge.sceneChanged() }
     }
 
     internal fun chooseMini(token: Any) {
         val changed = synchronized(selectionLock) { sessionSelection.requestMini(token) }
         if (changed) Xp.log("MCMini: dynamic choice -> mini (out of the scene)")
+        if (changed) Main.main().post { CanvasHostBridge.sceneChanged() }
     }
 
     /** The media card dismissed, its session still alive (Main.sCardRemoved). */
@@ -4681,6 +4694,10 @@ private class MiniPlayerController(
         coverActive = includeCover && Main.coverModeOn(),
     )
 
+    fun canvasPlayerInPill(): Boolean = config.getBoolean(MiniPlayerConfig.ENABLED) &&
+        controller != null && !Main.coverModeOn() &&
+        !MiniPlayerRuntime.nativeRequested(controller?.sessionToken)
+
     /** The music is out as the media card, the row holding the others. */
     private fun musicCarded(): Boolean = musicExpanded(includeCover = false)
 
@@ -5999,9 +6016,11 @@ private class MiniPlayerController(
         trace("switch tap ${key.takeLast(6)} small=$small")
         val wasOut = x.movers[key]?.morph != null
         MiniPlayerRuntime.withMusicPillTap(key == MUSIC_ISLAND && !small) {
-            requestUp(x, key, fromPill = !small, cover = key == MUSIC_ISLAND)
+            val restorePlayer = key == MUSIC_ISLAND && CanvasHostBridge.hasBackgroundScene() &&
+                !MiniPlayerRuntime.restoreScenePending()
+            requestUp(x, key, fromPill = !small, cover = key == MUSIC_ISLAND && !restorePlayer)
             // The music opens the cover from any place, as from the pill (tapIsland).
-            if (key == MUSIC_ISLAND && !wasOut) {
+            if (key == MUSIC_ISLAND && !wasOut && !restorePlayer) {
                 MiniPlayerRuntime.forgetRestoreScene()
                 Main.miniPlayerEnterCover()
             }
@@ -6023,6 +6042,12 @@ private class MiniPlayerController(
     }
 
     private fun openCoverFromTap() {
+        if (CanvasHostBridge.hasBackgroundScene() && !MiniPlayerRuntime.restoreScenePending()) {
+            // Use the island flight so notifications reseat while music leaves the pill.
+            if (othersBesideMusic()) expandNote(MUSIC_ISLAND)
+            else controller?.sessionToken?.let(MiniPlayerRuntime::selectNative)
+            return
+        }
         MiniPlayerRuntime.forgetRestoreScene()
         // A notification still on its way - opening, or springing back out after a pull too
         // short to collapse it - is not "out" yet to expandedKey, and the cover came up over it

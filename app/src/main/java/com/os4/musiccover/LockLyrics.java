@@ -1847,6 +1847,27 @@ final class LockLyrics {
         show(on, key, c, "switched off");
     }
 
+    /** Canvas hides the page while retaining this track's parsed lyrics and cache identity. */
+    static void setCanvasLyricsVisible(boolean visible, String key, MediaController c) {
+        if (!sEnabled) return;
+        if (visible && key != null && !key.isEmpty()) onTrack(key, c);
+        if (visible && sLines.isEmpty()) {
+            // An artwork tap may have cleared the rows without changing the track identity.
+            Cached hit = CACHE.get(sKey);
+            if (hit != null && !hit.lines.isEmpty()) {
+                sSource = hit.source;
+                sLoading = false;
+                setLines(hit.lines, "Canvas lyrics restored from cache");
+                translateAsync(sKey, hit.lines, sGen);
+            }
+        }
+        sTapHidden = !visible;
+        if (visible) sArtworkPage.preferCompact();
+        else sArtworkPage.preferCover();
+        refresh();
+        Main.saveState();
+    }
+
     /**
      * The lock screen's two-finger tap: the cover and the lyrics, swapped until the next one.
      * The app's switch is not touched - a tap that was not meant would otherwise read as the

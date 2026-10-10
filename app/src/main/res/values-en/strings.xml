@@ -370,4 +370,20 @@
     <string name="media_wave_bt_sync_summary">Delay the visualizer using Android’s estimated Bluetooth output latency. Applies only while media plays through Bluetooth.</string>
     <string name="media_wave_bt_adjustment">Bluetooth sync adjustment</string>
     <string name="media_wave_bt_adjustment_summary">Negative values show the bars earlier, positive values show them later. Adjust if your headphones still feel out of sync.</string>
+    <string name="tab_extensions">Extensions</string>
+    <string name="hypercanvas_title">Spotify Canvas backgrounds</string>
+    <string name="hypercanvas_summary">Use Spotify Canvas on the lock screen. Ready videos fold big cover art into the media player, big cover and lyrics pages blur and dim the video.</string>
+    <string name="hypercanvas_missing">Install the separate HyperCanvas extension APK to enable this feature.</string>
+    <string name="hypercanvas_enable_module">Enable HyperCanvas in LSPosed first. The extension will request approval for missing scopes.</string>
+    <string name="hypercanvas_approval">Waiting for LSPosed approval, check its notification for Spotify and SystemUI.</string>
+    <string name="hypercanvas_restart">After approving the scopes, restart Spotify and SystemUI to load HyperCanvas.</string>
+    <string name="hypercanvas_scope_failed">Scope approval was not completed. Toggle this off and on to request it again.</string>
+    <string name="hypercanvas_connected">Spotify and SystemUI hooks have connected.</string>
+    <string name="hypercanvas_dim">Canvas dimming</string>
+    <string name="hypercanvas_cover_blur">Canvas blur behind cover or lyrics</string>
+    <string name="hypercanvas_cover_dim">Canvas dimming behind cover or lyrics</string>
+    <string name="hypercanvas_cache">Cached Canvas videos: %1$d</string>
+    <string name="hypercanvas_note">Experimental. Canvas is collected when Spotify loads it, you may need to open its Now Playing page first. Tracks without an available Canvas keep the normal cover background. Keeps up to three videos around the current track when Spotify provides them. Turning off HyperCanvas clears its cache. Video playback stops when the screen turns off.</string>
+    <string name="hypercanvas_show_in_pill">Show Canvas in pill mode</string>
+    <string name="hypercanvas_show_in_pill_summary">Keep Canvas visible when the player folds into the pill. When off, the video is hidden and paused.</string>
 </resources>

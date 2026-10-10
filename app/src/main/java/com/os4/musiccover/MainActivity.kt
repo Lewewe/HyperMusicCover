@@ -64,6 +64,8 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.GridView
+import com.os4.musiccover.ui.screen.extensions.ExtensionsPageView
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Settings
@@ -239,7 +241,7 @@ private fun MainScreen(
     onBlurEnabledChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val pagerState = rememberPagerState(pageCount = { 5 })
     var selectedIndex by remember { mutableIntStateOf(0) }
     var isNavigating by remember { mutableStateOf(false) }
     var navJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -247,13 +249,14 @@ private fun MainScreen(
     val items = listOf(
         stringResource(R.string.tab_home),
         stringResource(R.string.tab_features),
+        stringResource(R.string.tab_extensions),
         stringResource(R.string.tab_settings),
         stringResource(R.string.tab_about),
     )
-    val icons = listOf(MiuixIcons.Home, MiuixIcons.Tune, MiuixIcons.Settings, MiuixIcons.Info)
+    val icons = listOf(MiuixIcons.Home, MiuixIcons.Tune, MiuixIcons.GridView, MiuixIcons.Settings, MiuixIcons.Info)
 
     /**
-     * One flag per page rather than one counter shared by all four.
+     * One flag per page rather than one counter shared by all pages.
      *
      * The pages re-ask the module when they come to the front, and a single counter bumped on
      * every tab change made that *every* page: a tap re-composed and re-queried the pages nobody
@@ -267,7 +270,7 @@ private fun MainScreen(
      * otherwise every page is unskippable and the split buys nothing.
      */
     val onHomePage = remember { derivedStateOf { pagerState.currentPage == 0 } }
-    val onAboutPage = remember { derivedStateOf { pagerState.currentPage == 3 } }
+    val onAboutPage = remember { derivedStateOf { pagerState.currentPage == 4 } }
     val isHomeCurrent: () -> Boolean = remember(onHomePage) { { onHomePage.value } }
     val isAboutCurrent: () -> Boolean = remember(onAboutPage) { { onAboutPage.value } }
 
@@ -369,12 +372,18 @@ private fun MainScreen(
                         extraBottomPadding = navBarHeight,
                     )
 
-                    2 -> SettingsPageView(
+                    2 -> ExtensionsPageView(
+                        isBlurEnabled = isBlurEnabled,
+                        isCurrent = pagerState.currentPage == 2,
+                        extraBottomPadding = navBarHeight,
+                    )
+
+                    3 -> SettingsPageView(
                         isBlurEnabled = isBlurEnabled,
                         extraBottomPadding = navBarHeight,
                     )
 
-                    3 -> AboutPageContent(
+                    4 -> AboutPageContent(
                         openLicensePage = {
                             context.startActivity(Intent(context, LicenseActivity::class.java))
                         },

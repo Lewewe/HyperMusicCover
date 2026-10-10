@@ -1,0 +1,3 @@
+[submodule "hyper-canvas"]
+	path = hyper-canvas
+	url = https://github.com/Lewewe/HyperCanvas.git

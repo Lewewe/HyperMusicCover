@@ -13,3 +13,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "HyperMusicCover"
 include(":app")
+
+include(":hyper-canvas")

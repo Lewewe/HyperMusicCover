@@ -30,9 +30,27 @@ final class MiuixNotesDrawable extends Drawable {
             + "390.7 637.7 390.7 622.7 V597.7 Q390.7 580.7 399.2 573.7 Q407.7 566.7 422.7 566.7 H796.7 Q813.7 566.7 821.7 573.7 Q829.7 "
             + "580.7 829.7 597.7 Z";
     private final Path path = PathParser.createPathFromPathData(DATA);
+    private final Path filledPath = createFilledPath();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private boolean filled;
 
     MiuixNotesDrawable() { paint.setColor(0xFFFFFFFF); }
+
+    private static Path createFilledPath() {
+        // Keep the original silhouette and cut the three text lines out of its fill.
+        int outerEnd = DATA.indexOf('Z') + 1;
+        int innerEnd = DATA.indexOf('Z', outerEnd) + 1;
+        Path result = PathParser.createPathFromPathData(
+                DATA.substring(0, outerEnd) + DATA.substring(innerEnd));
+        result.setFillType(Path.FillType.EVEN_ODD);
+        return result;
+    }
+
+    void setFilled(boolean value) {
+        if (filled == value) return;
+        filled = value;
+        invalidateSelf();
+    }
 
     @Override public void draw(Canvas canvas) {
         float side = Math.min(getBounds().width(), getBounds().height());
@@ -43,7 +61,7 @@ final class MiuixNotesDrawable extends Drawable {
         canvas.scale(side / VIEWPORT, side / VIEWPORT);
         canvas.translate(0f, VIEWPORT);
         canvas.scale(1f, -1f);
-        canvas.drawPath(path, paint);
+        canvas.drawPath(filled ? filledPath : path, paint);
         canvas.restoreToCount(save);
     }
 

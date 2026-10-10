@@ -192,6 +192,7 @@ public class Main extends XposedModule {
      * make the glyphs flip dark over a light cover.
      */
     static volatile int sCoverTint;
+    static volatile int sLastArtworkTint;
     /** From a debug op, so a colour can be tried without hunting for the artwork that gives it. */
     private static volatile int sCoverTintOverride;
     /**
@@ -1730,6 +1731,8 @@ public class Main extends XposedModule {
             }
             // Its bounds are computed inside its own draw; see ClockCollapse.onGlyphDrawn().
             Xp.hookAll(timeView, "onDraw", chain -> {
+                View glyph = (View) chain.getThisObject();
+                ClockArtworkColor.apply(glyph, glassStyleFor(glyph) ? coverTint() : 0);
                 Object result = chain.proceed();
                 ClockCollapse.onGlyphDrawn((View) chain.getThisObject());
                 return result;
@@ -2952,6 +2955,8 @@ public class Main extends XposedModule {
                         if (i.hasExtra("json")) MediaCardRuntime.configure(i.getStringExtra("json"));
                         else MediaCardRuntime.set(i.getStringExtra("key"), i.getIntExtra("v", 0));
                         saveState();
+                    } else if ("canvasframe".equals(op)) {
+                        setResultExtras(CanvasHostBridge.frame(c, i));
                     } else if ("islandwavestate".equals(op)) {
                         setResultData(IslandAudioVisualizer.describe() + "\n" + MediaOutputVisualizer.describe()
                                 + "\n" + AudioSpectrumCapture.describe());
@@ -6753,6 +6758,7 @@ public class Main extends XposedModule {
         // is what makes a change land on the next transition and never mid-flight. The cut-out
         // goes with it; both are LockHold's, shared with the immersive pages.
         LockHold.take(LockHold.Owner.COVER, animate, "cover");
+        CanvasHostBridge.sceneChanged();
         // An immersive page closing in the same tap fades out onto this cover, not ahead of it.
         ImmersiveHost.coverEntering();
         // The reading may predate this cover - the card can come up on art that was pushed
@@ -6776,6 +6782,8 @@ public class Main extends XposedModule {
     private static void exitCoverMode(boolean animate) {
         CoverCardLayer.leaving();
         sCoverMode = false;
+        // Hand the clock to Canvas before releasing the cover, avoiding an OEM exit and re-entry.
+        CanvasHostBridge.sceneChanged();
         StatusBarArtwork.refresh();
         sAodArtworkPolicy.clear();
         sAodClockArtworkCompact = false;
@@ -6789,7 +6797,7 @@ public class Main extends XposedModule {
         // wallpaper coming back even less than it described the old one. Dropped at the start:
         // the clock is at its smallest now, so the colour going back to the OEM's is at its
         // least visible.
-        if (sCoverTint != 0) {
+        if (sCoverTint != 0 && !CanvasHostBridge.active() && !CanvasHostBridge.nativeClockScene()) {
             sCoverTint = 0;
             recolorClock();
         }
@@ -6841,6 +6849,16 @@ public class Main extends XposedModule {
         if (sCoverMode) return !LockLyrics.wantsCompactArtwork();
         return sAuto && sCardShowing && !LockLyrics.willAttachOnEntry()
                 && !LockLyrics.compactWithoutLyricsOnEntry();
+    }
+
+    static String canvasBackdropKey() { return trackKey(sWatched); }
+
+    /** Restore artwork identity without changing the user's selected cover or lyrics scene. */
+    static boolean prepareCanvasBackdrop() {
+        String key = trackKey(sWatched);
+        if (key.isEmpty()) return false;
+        sTrackKey = key;
+        return true;
     }
 
     static MediaController miniPlayerSession() {
@@ -7041,6 +7059,7 @@ public class Main extends XposedModule {
 
     /** The wake reached the clock before the SCREEN_ON broadcast did. */
     static void noteAwake() {
+        CanvasHostBridge.waking();
         if (sScreenOn) return;
         sScreenOn = true;
         restoreAwakeArtwork();
@@ -7925,6 +7944,7 @@ public class Main extends XposedModule {
         main().post(new Runnable() {
             @Override
             public void run() {
+                CanvasHostBridge.sceneChanged();
                 View card = findSysuiView("mi_media_controls");
                 if (card == null) {
                     // Only worth waiting for while something still wants something from the
@@ -7953,7 +7973,7 @@ public class Main extends XposedModule {
                         .getIdentifier("header_title", "id", "com.android.systemui"));
                 sCardArtist = card.findViewById(card.getResources()
                         .getIdentifier("header_artist", "id", "com.android.systemui"));
-                if (sCoverMode && (sMcHideArt || sMcTitleTap || LockLyrics.sEnabled)) guardCard(card);
+                if ((sCoverMode && (sMcHideArt || sMcTitleTap || LockLyrics.sEnabled)) || CanvasHostBridge.active()) guardCard(card);
                 else releaseCardGuard();
                 assertMediaCard(card);
             }
@@ -8043,10 +8063,12 @@ public class Main extends XposedModule {
                 && coverMorphCardMode() && !LockLyrics.wantsCompactArtwork()
                 && LockLyrics.sEnabled && LockLyrics.hasDisplayContent()
                 && coverMorphEligible() && sCardShowing && card.isShown();
-        float lyricsInset = LyricsButton.update(card, lyricsButton);
+        boolean canvasLyrics = CanvasHostBridge.active() && onKeyguard && !sCardForced
+                && LockLyrics.sEnabled && LockLyrics.hasLyrics() && sCardShowing && card.isShown();
+        float lyricsInset = LyricsButton.update(card, lyricsButton || canvasLyrics, canvasLyrics);
         alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
         alignCardTextLeft(card, (TextView) sCardArtist, hideP, lyricsInset);
-        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist);
+        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist, sCardArt);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
         MediaCardRuntime.afterCardPass(card);
@@ -8503,7 +8525,9 @@ public class Main extends XposedModule {
                     LockLyrics.setArtworkCompact(false);
                 } else if (sCoverMode && LockLyrics.wantsAttached()) {
                     beginCompactArtworkMorph(true);
-                    LockLyrics.toggleByTap(sTrackKey, sWatched);
+                    if (CanvasHostBridge.active()) {
+                        LockLyrics.setCanvasLyricsVisible(false, trackKey(sWatched), sWatched);
+                    } else LockLyrics.toggleByTap(sTrackKey, sWatched);
                 } else if (sCoverMode) exitFromTap("artwork tapped");
                 else if (MiniPlayerRuntime.wantsNativeArtworkGesture()) miniPlayerEnterCover();
                 else enterFromTap("artwork tapped");
@@ -10417,6 +10441,34 @@ public class Main extends XposedModule {
         });
     }
 
+    static void refreshCanvasControls() { applyMediaCard(); }
+
+    static void toggleCanvasLyrics() {
+        if (!CanvasHostBridge.active() || !LockLyrics.sEnabled || !LockLyrics.hasLyrics()
+                || !keyguardShowing() || bouncerUp()) return;
+        CanvasHostBridge.userSelectedScene();
+        MiniPlayerRuntime.keepCanvasPlayerExpanded();
+        String key = trackKey(sWatched);
+        if (key.isEmpty()) key = sTrackKey;
+        if (LockLyrics.wantsWindow()) {
+            // Hide the page without starting the scene-to-pill transition.
+            MiniPlayerRuntime.forgetRestoreScene();
+            sTapSuppressed = true;
+            CoverMorphLayer.cancel();
+            LockLyrics.setCanvasLyricsVisible(false, key, sWatched);
+            setCoverEnabled(false, true, false);
+        } else if (sCoverMode) {
+            beginCompactArtworkMorph(false);
+            LockLyrics.setCanvasLyricsVisible(true, key, sWatched);
+        }
+        else {
+            sTapSuppressed = false;
+            LockLyrics.setCanvasLyricsVisible(true, key, sWatched);
+            setCoverEnabled(true, true, false);
+        }
+        applyMediaCard();
+    }
+
     static void openLyricsFromButton() {
         if (!sCoverMode || LockLyrics.wantsCompactArtwork()
                 || !LockLyrics.sEnabled || !LockLyrics.hasDisplayContent()) return;
@@ -10473,7 +10525,9 @@ public class Main extends XposedModule {
                 beginCompactArtworkMorph(to == CoverMorphRoute.COVER);
             }
         }
-        LockLyrics.toggleByTap(sTrackKey, sWatched);
+        if (CanvasHostBridge.active()) {
+            LockLyrics.setCanvasLyricsVisible(LockLyrics.sTapHidden, trackKey(sWatched), sWatched);
+        } else LockLyrics.toggleByTap(sTrackKey, sWatched);
         sTwoFired++;
         // How long the swap took. Nothing is written down, so this is its whole cost.
         sTwoWhy = "lyrics " + (LockLyrics.sTapHidden ? "hidden" : "shown") + " in "
@@ -10543,6 +10597,8 @@ public class Main extends XposedModule {
      */
     private static void onLockTap(float y) {
         if (!singleCoverTapEnabled()) return;
+        // Background-only Canvas and its artwork fallback open solely from the player artwork.
+        if (!sCoverMode && CanvasHostBridge.backgroundOnly()) return;
         if (!screenOn() || !keyguardShowing()) return;
         // Only the keyguard shows the clock container, so this is also what rules out the shade
         // being pulled down over an unlocked phone - the same test the card restyle uses.
@@ -10678,9 +10734,9 @@ public class Main extends XposedModule {
         // picture the AOD is not drawn on, and repainting those glyphs in it is the one way this
         // could make things worse than it found them. `isInteractive` is false in AOD, so the
         // OEM's own colouring stands there.
-        if (!sCoverMode || !sScreenOn) return 0;
+        if ((!sCoverMode && !CanvasHostBridge.active() && !CanvasHostBridge.nativeClockScene()) || !sScreenOn) return 0;
         int forced = sCoverTintOverride;
-        return forced != 0 ? forced : sCoverTint;
+        return forced != 0 ? forced : sCoverTint != 0 ? sCoverTint : sLastArtworkTint;
     }
 
     /**
@@ -11060,6 +11116,7 @@ public class Main extends XposedModule {
             // number describing the picture behind the glyphs rather than any one pixel of it.
             sCoverTint = 0xff000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8)
                     | (int) (sb / n);
+            sLastArtworkTint = sCoverTint;
             Xp.log(TAG + "cover tint #" + Integer.toHexString(sCoverTint) + " over " + n
                     + "px, band " + top + ".." + bottom);
         } catch (Throwable t) {
