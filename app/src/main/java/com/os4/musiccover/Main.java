@@ -954,6 +954,7 @@ public class Main extends XposedModule {
         // The mini player hangs off the shortcut row, not the clock container.
         MiniPlayerRuntime.install(cl);
         MediaCardRuntime.install(cl);
+        IslandAudioVisualizer.install(cl);
         PaletteThrottle.INSTANCE.install(cl);
         // Draw lasting lock screen status beside the date, clear of the pill.
         DateStatus.INSTANCE.install(cl);
@@ -2951,6 +2952,9 @@ public class Main extends XposedModule {
                         if (i.hasExtra("json")) MediaCardRuntime.configure(i.getStringExtra("json"));
                         else MediaCardRuntime.set(i.getStringExtra("key"), i.getIntExtra("v", 0));
                         saveState();
+                    } else if ("islandwavestate".equals(op)) {
+                        setResultData(IslandAudioVisualizer.describe() + "\n" + MediaOutputVisualizer.describe()
+                                + "\n" + AudioSpectrumCapture.describe());
                     } else if ("mediastate".equals(op)) {
                         setResultData(MediaCardRuntime.describe());
                     } else if ("minicfg".equals(op)) {

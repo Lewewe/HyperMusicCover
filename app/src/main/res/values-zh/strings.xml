@@ -365,4 +365,17 @@
     <string name="media_background_invert">亮色封面自动反色</string>
     <string name="media_style_note">设置即时生效，大封面、歌词与通知手势保持现有行为。</string>
     <string name="credits_juren_media">媒体播放器自定义参考 HyperLyrics-Enhanced，包含背景渲染、柔光流动与封面取色。</string>
+    <string name="media_super_island_wave">音频波形</string>
+    <string name="media_audio_wave">实时音频波形</string>
+    <string name="media_audio_wave_summary">让摄像头旁的音乐波形随实际声音变化，隐藏或熄屏时停止。</string>
+    <string name="media_wave_lock_screen">锁屏播放器音频波形</string>
+    <string name="media_wave_notification">通知面板播放器音频波形</string>
+    <string name="media_wave_island">超级岛展开播放器音频波形</string>
+    <string name="media_output_wave_summary">将输出设备按钮替换为实时音乐波形，关闭后恢复原按钮。</string>
+    <string name="media_wave_hide_device">隐藏音频设备图标</string>
+    <string name="media_wave_hide_device_summary">使用耳机或其他输出设备时，让超级岛继续显示音乐波形，关闭后立即恢复系统图标。</string>
+    <string name="media_wave_bt_sync">蓝牙音频同步</string>
+    <string name="media_wave_bt_sync_summary">根据 Android 估算的蓝牙输出延迟调整频谱显示，仅在通过蓝牙播放媒体时生效。</string>
+    <string name="media_wave_bt_adjustment">蓝牙同步微调</string>
+    <string name="media_wave_bt_adjustment_summary">负值让频谱提前显示，正值让频谱延后显示。如果与耳机声音仍不同步，可在此微调。</string>
 </resources>

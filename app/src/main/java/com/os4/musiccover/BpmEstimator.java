@@ -1,6 +1,5 @@
 package com.os4.musiccover;
 
-import android.media.audiofx.Visualizer;
 import android.media.session.PlaybackState;
 
 import java.util.LinkedHashMap;
@@ -18,7 +17,7 @@ final class BpmEstimator {
     private static final Map<String, Integer> CACHE = new LinkedHashMap<String, Integer>(32, .75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<String, Integer> e) { return size() > 80; }
     };
-    private static volatile Visualizer visualizer;
+    private static volatile AudioSpectrumCapture.Lease visualizer;
     private static volatile long generation;
     private static volatile long captureGeneration;
     private static volatile String requestedTrack = "";
@@ -127,10 +126,9 @@ final class BpmEstimator {
     private static void releaseCapture() {
         if (analysis != null) worker().removeCallbacks(analysis);
         analysis = null;
-        Visualizer old = visualizer;
+        AudioSpectrumCapture.Lease old = visualizer;
         visualizer = null;
         if (old != null) {
-            try { old.setEnabled(false); } catch (Throwable ignored) { }
             try { old.release(); } catch (Throwable ignored) { }
         }
         envelope.clear();
@@ -148,12 +146,20 @@ final class BpmEstimator {
         Integer cached;
         synchronized (CACHE) { cached = CACHE.get(track); }
         int trustedBpm = validBpm(publishedBpm);
-        Visualizer created = null;
+        AudioSpectrumCapture.Lease created = null;
         try {
-            final Visualizer v = new Visualizer(0);
+            final AudioSpectrumCapture.Lease v = AudioSpectrumCapture.acquire((source, fft, rate) -> {
+                if (!BpmCompanionPolicy.captureCallback(token, generation, source, visualizer)) return;
+                if (android.os.Looper.myLooper() == worker().getLooper()) {
+                    sample(fft, rate);
+                } else if (fft != null) {
+                    byte[] owned = fft.clone();
+                    worker().post(() -> {
+                        if (BpmCompanionPolicy.captureCallback(token, generation, source, visualizer)) sample(owned, rate);
+                    });
+                }
+            });
             created = v;
-            int[] range = Visualizer.getCaptureSizeRange();
-            checkStatus(v.setCaptureSize(range[1]), "capture size");
             java.util.Arrays.fill(previousBands, 0f);
             java.util.Arrays.fill(bandBaselines, 0f);
             lastPlaybackState = PlaybackState.STATE_NONE;
@@ -170,23 +176,6 @@ final class BpmEstimator {
             if (token != generation) { v.release(); return; }
             captureGeneration = token;
             visualizer = v;
-            checkStatus(v.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
-                @Override public void onWaveFormDataCapture(Visualizer source, byte[] wave, int rate) { }
-                @Override public void onFftDataCapture(Visualizer source, byte[] fft, int rate) {
-                    if (!BpmCompanionPolicy.captureCallback(token, generation, source, visualizer)) return;
-                    if (android.os.Looper.myLooper() == worker().getLooper()) {
-                        sample(fft, rate);
-                    } else if (fft != null) {
-                        byte[] owned = fft.clone();
-                        worker().post(() -> {
-                            if (BpmCompanionPolicy.captureCallback(token, generation, source, visualizer)) {
-                                sample(owned, rate);
-                            }
-                        });
-                    }
-                }
-            }, Visualizer.getMaxCaptureRate(), false, true), "capture listener");
-            checkStatus(v.setEnabled(true), "enable");
             resultDelivered = stableBpm > 0;
             // Wake the renderer once capture starts, even before the first tempo is known.
             deliver(cb, stableBpm, token);
@@ -225,12 +214,6 @@ final class BpmEstimator {
             if (token == generation) deliver(cb, 0, token);
         }
     }
-    private static void checkStatus(int status, String operation) {
-        if (status != Visualizer.SUCCESS) {
-            throw new IllegalStateException("BPM " + operation + " failed: " + status);
-        }
-    }
-
     private static int validBpm(int bpm) {
         return bpm >= 40 && bpm <= 220 ? bpm : 0;
     }

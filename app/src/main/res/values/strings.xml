@@ -357,4 +357,17 @@
     <string name="media_background_invert">Invert colors for bright covers</string>
     <string name="media_style_note">Changes apply immediately. Big cover art, lyrics and notification gestures keep their existing behavior.</string>
     <string name="credits_juren_media">Media player customization adapted from HyperLyrics-Enhanced: background renderers, soft flow and artwork color extraction.</string>
+    <string name="media_super_island_wave">Audio visualizer</string>
+    <string name="media_audio_wave">Audio-reactive visualizer</string>
+    <string name="media_audio_wave_summary">Let the music wave around the camera follow the actual audio. Stops when hidden or the screen is off.</string>
+    <string name="media_wave_lock_screen">Lock screen visualizer</string>
+    <string name="media_wave_notification">Notification panel visualizer</string>
+    <string name="media_wave_island">Expanded Super Island visualizer</string>
+    <string name="media_output_wave_summary">Replace the output device button with a live music wave. Turning this off restores the button.</string>
+    <string name="media_wave_hide_device">Hide audio device icon</string>
+    <string name="media_wave_hide_device_summary">Keep the Super Island music wave visible when using headphones or other audio devices. Turning this off restores the native icon immediately.</string>
+    <string name="media_wave_bt_sync">Bluetooth audio sync</string>
+    <string name="media_wave_bt_sync_summary">Delay the visualizer using Android’s estimated Bluetooth output latency. Applies only while media plays through Bluetooth.</string>
+    <string name="media_wave_bt_adjustment">Bluetooth sync adjustment</string>
+    <string name="media_wave_bt_adjustment_summary">Negative values show the bars earlier, positive values show them later. Adjust if your headphones still feel out of sync.</string>
 </resources>

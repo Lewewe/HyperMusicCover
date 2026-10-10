@@ -7,7 +7,7 @@ object MediaCardConfig {
     val scopes = listOf("notification", "island")
     val defaults = linkedMapOf("cover" to 0, "hideSource" to 0, "hideDevice" to 0,
         "background" to 0, "theme" to 0, "flow" to 0, "pauseRestore" to 1,
-        "animate" to 1, "blur" to 8, "invert" to 1, "tone" to 1)
+        "animate" to 1, "blur" to 8, "invert" to 1, "tone" to 1, "visualizer" to 0, "outputWave" to 0, "lockOutputWave" to 0, "hideWaveDevice" to 0, "btSync" to 1, "btOffset" to 0)
 
     fun limit(name: String, value: Int): Int = when (name) {
         "cover" -> value.coerceIn(0, 3)
@@ -15,6 +15,7 @@ object MediaCardConfig {
         "theme" -> value.coerceIn(0, 2)
         "flow" -> value.coerceIn(0, 4)
         "blur" -> value.coerceIn(1, 20)
+        "btOffset" -> value.coerceIn(-250, 250)
         else -> value.coerceIn(0, 1)
     }
 
@@ -36,6 +37,10 @@ object MediaCardConfig {
     }.toString()
 
     fun normalized(json: String?): String = encode(parse(json))
+    fun outputWaveKey(scope: String, onLockScreen: Boolean): String =
+        if (scope == "island") "island.outputWave"
+        else if (onLockScreen) "notification.lockOutputWave" else "notification.outputWave"
+
     fun customBackground(style: Int, flow: Int): Boolean = style > 0 || flow in 1..3
     fun animate(playing: Boolean, pauseRestore: Boolean, shown: Boolean, screenOn: Boolean): Boolean =
         shown && screenOn && (playing || !pauseRestore)

@@ -810,7 +810,7 @@ internal class MediaFlowBackgroundView(
 }
 
 internal object MediaFlowOverlayLayout {
-    fun createConstraintFill(source: ViewGroup.LayoutParams): ViewGroup.LayoutParams? {
+    fun createConstraintFill(source: ViewGroup.LayoutParams, anchorId: Int = 0): ViewGroup.LayoutParams? {
         val sourceClass = source.javaClass
         return runCatching {
             val intType = Int::class.javaPrimitiveType ?: error("No primitive int type")
@@ -821,7 +821,7 @@ internal object MediaFlowOverlayLayout {
                 .forEach { fieldName ->
                     sourceClass.getDeclaredField(fieldName).apply {
                         isAccessible = true
-                        setInt(params, 0)
+                        setInt(params, anchorId)
                     }
                 }
             params

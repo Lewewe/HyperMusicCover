@@ -4,6 +4,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MediaCardConfigTest {
+    @Test fun bluetoothSyncAdjustmentKeepsItsSignAndBounds() {
+        val defaults = MediaCardConfig.parse(null)
+        assertEquals(1, defaults.getValue("island.btSync"))
+        assertEquals(0, defaults.getValue("island.btOffset"))
+        val changed = defaults + ("island.btOffset" to -100)
+        assertEquals(changed, MediaCardConfig.parse(MediaCardConfig.encode(changed)))
+        assertEquals(-250, MediaCardConfig.limit("btOffset", -999))
+        assertEquals(250, MediaCardConfig.limit("btOffset", 999))
+    }
     @Test fun independentProfilesRoundTripWithoutChangingNativeDefaults() {
         val defaults = MediaCardConfig.parse(null)
         assertEquals(0, defaults.getValue("notification.background"))
@@ -36,4 +45,19 @@ class MediaCardConfigTest {
         for (flow in 1..3) assertTrue(MediaCardConfig.customBackground(0, flow))
         for (style in 1..5) assertTrue(MediaCardConfig.customBackground(style, 0))
     }
+    @Test fun outputWavesHaveIndependentLocationsAndDefaultToOff() {
+        val defaults = MediaCardConfig.parse(null)
+        assertEquals("notification.lockOutputWave", MediaCardConfig.outputWaveKey("notification", true))
+        assertEquals("notification.outputWave", MediaCardConfig.outputWaveKey("notification", false))
+        assertEquals("island.outputWave", MediaCardConfig.outputWaveKey("island", true))
+        assertEquals("island.outputWave", MediaCardConfig.outputWaveKey("island", false))
+        assertEquals(0, defaults.getValue("notification.lockOutputWave"))
+        assertEquals(0, defaults.getValue("notification.outputWave"))
+        assertEquals(0, defaults.getValue("island.outputWave"))
+        val changed = defaults + ("notification.lockOutputWave" to 1)
+        assertEquals(changed, MediaCardConfig.parse(MediaCardConfig.encode(changed)))
+        assertEquals(0, changed.getValue("notification.outputWave"))
+        assertEquals(0, changed.getValue("island.outputWave"))
+    }
+
 }

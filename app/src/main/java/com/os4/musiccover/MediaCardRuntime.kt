@@ -62,20 +62,36 @@ object MediaCardRuntime {
     @JvmStatic fun configJson(): String = MediaCardConfig.encode(values)
     @JvmStatic fun configure(json: String?) {
         values = MediaCardConfig.parse(json)
+        IslandAudioVisualizer.configure(on("island", "visualizer"), on("island", "hideWaveDevice"))
+        MediaOutputVisualizer.configure(outputWavesOn())
+        AudioWaveSync.configure(on("island", "btSync"), setting("island", "btOffset"))
         revision++
-        hasOverrides = values.any { (key, value) -> value != MediaCardConfig.defaults[key.substringAfter('.')] }
+        hasOverrides = values.any { (key, value) -> !key.endsWith(".visualizer") && !key.endsWith("outputWave") && !key.endsWith("lockOutputWave") && !key.endsWith("hideWaveDevice") && !key.endsWith(".btSync") && !key.endsWith(".btOffset") && value != MediaCardConfig.defaults[key.substringAfter('.')] }
         refresh()
     }
 
     @JvmStatic fun set(key: String?, value: Int) {
         if (key == null || key !in values) return
         values = values + (key to MediaCardConfig.limit(key.substringAfter('.'), value))
+        if (key.endsWith(".visualizer") || key.endsWith("outputWave") || key.endsWith("lockOutputWave") || key.endsWith("hideWaveDevice") || key.endsWith(".btSync") || key.endsWith(".btOffset")) {
+            IslandAudioVisualizer.configure(on("island", "visualizer"), on("island", "hideWaveDevice"))
+            MediaOutputVisualizer.configure(outputWavesOn())
+            AudioWaveSync.configure(on("island", "btSync"), setting("island", "btOffset"))
+            main.post { states.values.toList().flatten().forEach { safely("output wave") { it.applyElements() } } }
+            return
+        }
         revision++
-        hasOverrides = values.any { (key, value) -> value != MediaCardConfig.defaults[key.substringAfter('.')] }
+        hasOverrides = values.any { (key, value) -> !key.endsWith(".visualizer") && !key.endsWith("outputWave") && !key.endsWith("lockOutputWave") && !key.endsWith("hideWaveDevice") && !key.endsWith(".btSync") && !key.endsWith(".btOffset") && value != MediaCardConfig.defaults[key.substringAfter('.')] }
         refresh()
     }
 
     private fun setting(scope: String, name: String) = values.getValue("$scope.$name")
+    private fun outputWavesOn(): Boolean = on("island", "visualizer") &&
+        (on("notification", "outputWave") || on("notification", "lockOutputWave") || on("island", "outputWave"))
+
+    private fun outputWaveSelected(scope: String): Boolean = on("island", "visualizer") &&
+        values.getValue(MediaCardConfig.outputWaveKey(scope, Main.keyguardLocked())) != 0
+
     private fun on(scope: String, name: String) = setting(scope, name) != 0
 
     @JvmStatic fun install(loader: ClassLoader) {
@@ -89,6 +105,7 @@ object MediaCardRuntime {
                         val owner = chain.thisObject
                         if (owner != null) safely("$scope.$method") {
                             bind(owner, scope, if (method == "bindMediaData") chain.args.firstOrNull() else null)
+                            if (method in listOf("bindMediaData", "setAlbumImage", "setSeamless", "updateForegroundColors")) MediaOutputVisualizer.onMediaChanged()
                         }
                     }
                     result
@@ -201,7 +218,7 @@ object MediaCardRuntime {
     }
 
     @JvmStatic fun describe(): String = states.values.flatten().joinToString("\n") {
-        "${it.scope} theme=${setting(it.scope, "theme")} materialCount=${materials.size} clip=${it.overlay?.clipToOutline} attached=${it.album.isAttachedToWindow} shown=${it.album.isShown} background=${setting(it.scope, "background")} flow=${setting(it.scope, "flow")} cover=${setting(it.scope, "cover")} overlay=${it.overlay != null} rotation=${it.rotation?.isRunning == true} token=${it.requestToken.hashCode()}"
+        "${it.scope} theme=${setting(it.scope, "theme")} materialCount=${materials.size} clip=${it.overlay?.clipToOutline} attached=${it.album.isAttachedToWindow} shown=${it.album.isShown} background=${setting(it.scope, "background")} flow=${setting(it.scope, "flow")} cover=${setting(it.scope, "cover")} overlay=${it.overlay != null} rotation=${it.rotation?.isRunning == true} token=${it.requestToken.hashCode()} geometry=${it.geometryReport()}"
     }
 
     private fun configureLayout(owner: Any) {
@@ -219,7 +236,7 @@ object MediaCardRuntime {
             }
         }
         field(owner, "normalAlbumLayout")?.let { hidden(it, "cover_source", on("notification", "hideSource")) }
-        hidden(layout, "media_seamless", on("notification", "hideDevice"))
+        hidden(layout, "media_seamless", on("notification", "hideDevice") && !outputWaveSelected("notification"))
     }
 
     private class CardState(owner: Any, val holder: Any, val scope: String, val album: ImageView) {
@@ -244,6 +261,7 @@ object MediaCardRuntime {
         var disposed = false
         var imageVisibility: Int? = null
         private var roundApplied = false
+        private var outputWaveTracked = false
         private var activeColors: Pair<Int, Int>? = null
         private val hidden = WeakHashMap<View, Int>()
         private val textColors = WeakHashMap<TextView, ColorStateList>()
@@ -263,7 +281,39 @@ object MediaCardRuntime {
             override fun onViewAttachedToWindow(v: View) { apply() }
             override fun onViewDetachedFromWindow(v: View) { stopMotion() }
         }
-        private val preDraw = android.view.ViewTreeObserver.OnPreDrawListener { if (hasOverrides) motion(); true }
+        private val nativeClip = android.graphics.Rect()
+        private val overlayClip = android.graphics.Rect()
+        private val preDraw = android.view.ViewTreeObserver.OnPreDrawListener {
+            if (hasOverrides) { syncBackgroundGeometry(); motion() }
+            true
+        }
+
+        fun geometryReport(): String {
+            fun bounds(v: View?) = if (v == null) "none" else "${v.javaClass.simpleName}:${v.width}x${v.height},layout=${v.layoutParams?.width}x${v.layoutParams?.height},clip=${v.clipBounds}"
+            return "native[${bounds(background)}],custom[${bounds(overlay)}],progress[${bounds(field(holder, "seekBar") as? View)}]"
+        }
+
+        private fun syncBackgroundGeometry() {
+            val bg = background ?: return
+            val view = overlay ?: return
+            if (view.parent !== bg.parent) return
+            // Native AOD can crop or resize the background independently of its layout params.
+            // The custom surface must follow that geometry rather than retain the seek-bar area.
+            if (view.left != bg.left || view.top != bg.top || view.right != bg.right || view.bottom != bg.bottom) {
+                view.layout(bg.left, bg.top, bg.right, bg.bottom)
+            }
+            if (view.pivotX != bg.pivotX) view.pivotX = bg.pivotX
+            if (view.pivotY != bg.pivotY) view.pivotY = bg.pivotY
+            if (view.scaleX != bg.scaleX) view.scaleX = bg.scaleX
+            if (view.scaleY != bg.scaleY) view.scaleY = bg.scaleY
+            if (view.translationX != bg.translationX) view.translationX = bg.translationX
+            if (view.translationY != bg.translationY) view.translationY = bg.translationY
+            val clipped = bg.getClipBounds(nativeClip)
+            val overlayClipped = view.getClipBounds(overlayClip)
+            if (clipped != overlayClipped || (clipped && nativeClip != overlayClip)) {
+                view.clipBounds = if (clipped) nativeClip else null
+            }
+        }
 
         init {
             album.addOnAttachStateChangeListener(attachListener)
@@ -280,6 +330,16 @@ object MediaCardRuntime {
         }
 
         fun applyElements() {
+            val outputIcon = field(holder, "seamlessIcon") as? ImageView
+            val outputButton = field(holder, "seamless") as? View
+            if (!outputWaveTracked && outputIcon != null && outputButton != null) {
+                outputWaveTracked = true
+                val weak = WeakReference(this)
+                MediaOutputVisualizer.track(outputIcon, outputButton, album, scope == "notification",
+                    { weak.get()?.let { !it.disposed && outputWaveSelected(it.scope) } == true },
+                    { weak.get()?.let { !it.disposed && AudioSpectrumCapture.mediaPlaying(
+                        field(it.media, "packageName") as? String, it.playing()) } == true })
+            }
             val cover = setting(scope, "cover")
             val round = cover == 1 || cover == 2
             if (round) {
@@ -315,7 +375,7 @@ object MediaCardRuntime {
                 albumView.visibility = imageVisibility!!
                 imageVisibility = null
             }
-            for ((fieldName, hide) in listOf("appIcon" to on(scope, "hideSource"), "seamless" to on(scope, "hideDevice"))) {
+            for ((fieldName, hide) in listOf("appIcon" to on(scope, "hideSource"), "seamless" to (on(scope, "hideDevice") && !outputWaveSelected(scope)))) {
                 val view = field(holder, fieldName) as? View ?: continue
                 if (hide) {
                     hidden.putIfAbsent(view, view.visibility)
@@ -457,9 +517,13 @@ object MediaCardRuntime {
                 }
             }
             view.clipToOutline = true
-            val params = MediaFlowOverlayLayout.copyForOverlay(bg.layoutParams) ?: return
+            // Anchor to the native surface instead of copying a fixed height. Otherwise this
+            // sibling can keep a wrap-content player tall after AOD removes the progress row.
+            val params = (if (bg.id > 0) MediaFlowOverlayLayout.createConstraintFill(bg.layoutParams, bg.id) else null)
+                ?: MediaFlowOverlayLayout.copyForOverlay(bg.layoutParams) ?: return
             parent.addView(view, parent.indexOfChild(bg) + 1, params)
             overlay = view
+            syncBackgroundGeometry()
             // Moving colors complement the native themed surface. Static artwork replaces it.
             bg.alpha = if (view is ImageView) 0f else originalAlpha
             pauseNative()
@@ -619,6 +683,7 @@ object MediaCardRuntime {
         }
 
         fun restore() {
+            (field(holder, "seamlessIcon") as? ImageView)?.let { MediaOutputVisualizer.detach(it) }
             islandTheme.restore()
             disposed = true
             stopRotation(); removeOverlay(); restoreColors()
