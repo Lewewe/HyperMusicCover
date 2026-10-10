@@ -2,6 +2,17 @@ package com.os4.musiccover;
 
 /** Restore only notification-constrained big artwork, never a user-selected compact page. */
 final class AodArtworkPolicy {
+    /** Edge contact and invalid measurements must not collapse artwork. */
+    static boolean clockOverlapsArtwork(float left, float top, float right, float bottom,
+                                         float artLeft, float artTop, float artRight, float artBottom) {
+        if (!Float.isFinite(left) || !Float.isFinite(top) || !Float.isFinite(right)
+                || !Float.isFinite(bottom) || !Float.isFinite(artLeft) || !Float.isFinite(artTop)
+                || !Float.isFinite(artRight) || !Float.isFinite(artBottom)
+                || right <= left || bottom <= top || artRight <= artLeft || artBottom <= artTop) return false;
+        return Math.min(right, artRight) - Math.max(left, artLeft) > 1f
+                && Math.min(bottom, artBottom) - Math.max(top, artTop) > 1f;
+    }
+
     private boolean notificationsBeforeUnlock;
     private boolean wakePending;
 

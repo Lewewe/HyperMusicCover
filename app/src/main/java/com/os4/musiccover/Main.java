@@ -1960,6 +1960,12 @@ public class Main extends XposedModule {
                     + "\nlyricofflinecache=" + (LockLyrics.sOfflineCache ? 1 : 0)
                     // Off when absent, which is what every file from before it had.
                     + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
+                    + "\nlyriclocalroma=" + (LockLyrics.sOnDeviceTransliteration ? 1 : 0)
+                    + "\nlyriclocaljapanese=" + (LockLyrics.sLocalJapanese ? 1 : 0)
+                    + "\nlyriclocalchinese=" + (LockLyrics.sLocalChinese ? 1 : 0)
+                    + "\nlyriclocalkorean=" + (LockLyrics.sLocalKorean ? 1 : 0)
+                    + "\nlyriclocalcyrillic=" + (LockLyrics.sLocalCyrillic ? 1 : 0)
+                    + "\nlyriclocalgreek=" + (LockLyrics.sLocalGreek ? 1 : 0)
                     + "\nlyricsearch=" + LockLyrics.sSearchMode
                     + "\nlyricgroups=" + (LockLyrics.sRapidGroups ? 1 : 0)
                     // 0 left, 1 centre, 2 right, and left when the key is absent: a file from
@@ -2094,6 +2100,12 @@ public class Main extends XposedModule {
                         else if ("providervariants".equals(k)) LockLyrics.sProviderVariants = "1".equals(v);
                         else if ("lyricofflinecache".equals(k)) LockLyrics.sOfflineCache = "1".equals(v);
                         else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
+                        else if ("lyriclocalroma".equals(k)) LockLyrics.sOnDeviceTransliteration = "1".equals(v);
+                        else if ("lyriclocaljapanese".equals(k)) LockLyrics.sLocalJapanese = "1".equals(v);
+                        else if ("lyriclocalchinese".equals(k)) LockLyrics.sLocalChinese = "1".equals(v);
+                        else if ("lyriclocalkorean".equals(k)) LockLyrics.sLocalKorean = "1".equals(v);
+                        else if ("lyriclocalcyrillic".equals(k)) LockLyrics.sLocalCyrillic = "1".equals(v);
+                        else if ("lyriclocalgreek".equals(k)) LockLyrics.sLocalGreek = "1".equals(v);
                         else if ("lyricsearch".equals(k)) LockLyrics.setSearchMode(Integer.parseInt(v));
                         else if ("lyricgroups".equals(k)) LockLyrics.sRapidGroups = "1".equals(v);
                         // Clamped in the setter; absent or unreadable means left, see saveState.
@@ -2454,6 +2466,45 @@ public class Main extends XposedModule {
                         Xp.log(TAG + "lyrics romanisations: " + LockLyrics.sRoma);
                         LockLyrics.refresh();
                         saveState();
+                    } else if ("lyriclocalroma".equals(op)) {
+                        LockLyrics.sOnDeviceTransliteration = i.getBooleanExtra("on",
+                                !LockLyrics.sOnDeviceTransliteration);
+                        Xp.log(TAG + "on-device transliteration: " + LockLyrics.sOnDeviceTransliteration);
+                        LockLyrics.localRomanizationChanged();
+                        saveState();
+                    } else if ("jdict".equals(op)) {
+                        String action = i.getStringExtra("action");
+                        if ("delete".equals(action)) {
+                            JapaneseDictionary.remove(appContext());
+                            LockLyrics.localRomanizationChanged();
+                        } else if ("download".equals(action)) {
+                            LockLyrics.sLocalJapanese = true;
+                            LockLyrics.localRomanizationChanged();
+                            saveState();
+                            JapaneseDictionary.ensure(appContext());
+                        }
+                    } else if ("cdict".equals(op)) {
+                        String action = i.getStringExtra("action");
+                        if ("delete".equals(action)) {
+                            ChineseDictionary.remove(appContext());
+                            LockLyrics.sLocalChinese = false;
+                            LockLyrics.localRomanizationChanged();
+                            saveState();
+                        } else if ("download".equals(action)) {
+                            LockLyrics.sLocalChinese = true;
+                            LockLyrics.localRomanizationChanged();
+                            saveState();
+                            ChineseDictionary.ensure(appContext());
+                        }
+                    } else if ("localromanizer".equals(op)) {
+                        String script = i.getStringExtra("script");
+                        boolean on = i.getBooleanExtra("on", false);
+                        if ("japanese".equals(script)) LockLyrics.sLocalJapanese = on;
+                        else if ("chinese".equals(script)) LockLyrics.sLocalChinese = on;
+                        else if ("korean".equals(script)) LockLyrics.sLocalKorean = on;
+                        else if ("cyrillic".equals(script)) LockLyrics.sLocalCyrillic = on;
+                        else if ("greek".equals(script)) LockLyrics.sLocalGreek = on;
+                        LockLyrics.localRomanizationChanged(); saveState();
                     } else if ("lyricsearch".equals(op)) {
                         if (LockLyrics.setSearchMode(i.getIntExtra("v", LockLyrics.SEARCH_ORIGINAL))) {
                             LockLyrics.searchModeChanged();
@@ -2973,6 +3024,20 @@ public class Main extends XposedModule {
                         out.putBoolean("providervariants", LockLyrics.sProviderVariants);
                         out.putBoolean("lyricofflinecache", LockLyrics.sOfflineCache);
                         out.putBoolean("lyricroma", LockLyrics.sRoma);
+                        out.putBoolean("lyriclocalroma", LockLyrics.sOnDeviceTransliteration);
+                        JapaneseDictionary.Status japaneseDictionary = JapaneseDictionary.status(c);
+                        ChineseDictionary.Status chineseDictionary = ChineseDictionary.status(c);
+                        out.putInt("lyriclocalromastate", japaneseDictionary.phase);
+                        out.putInt("lyriclocalromaprogress", japaneseDictionary.progress);
+                        out.putString("lyriclocalromaerror", japaneseDictionary.error);
+                        out.putBoolean("lyriclocaljapanese", LockLyrics.sLocalJapanese);
+                        out.putBoolean("lyriclocalchinese", LockLyrics.sLocalChinese);
+                        out.putBoolean("lyriclocalkorean", LockLyrics.sLocalKorean);
+                        out.putBoolean("lyriclocalcyrillic", LockLyrics.sLocalCyrillic);
+                        out.putBoolean("lyriclocalgreek", LockLyrics.sLocalGreek);
+                        out.putInt("lyriclocalchinesestate", chineseDictionary.phase);
+                        out.putInt("lyriclocalchineseprogress", chineseDictionary.progress);
+                        out.putString("lyriclocalchineseerror", chineseDictionary.error);
                         out.putInt("lyricsearch", LockLyrics.sSearchMode);
                         out.putBoolean("lyricgroups", LockLyrics.sRapidGroups);
                         out.putInt("lyricalign", LockLyrics.sAlign);
@@ -3936,7 +4001,7 @@ public class Main extends XposedModule {
         if (Float.isNaN(v) || v <= 0f) {
             sClockSize = Float.NaN;
         } else {
-            sClockSize = v < CLOCK_SIZE_MIN ? CLOCK_SIZE_MIN : (v > 1f ? 1f : v);
+            sClockSize = Math.max(CLOCK_SIZE_MIN, Math.min(0.55f, v));
         }
         Xp.log(TAG + "clock size = " + sClockSize);
     }
@@ -6695,6 +6760,7 @@ public class Main extends XposedModule {
         sCoverMode = false;
         StatusBarArtwork.refresh();
         sAodArtworkPolicy.clear();
+        sAodClockArtworkCompact = false;
         sAodArtworkExpanded = false;
         sAodArtworkFromCompact = false;
         LockLyrics.setNotificationCompact(false);
@@ -7001,6 +7067,22 @@ public class Main extends XposedModule {
     private static final AodArtworkPolicy sAodArtworkPolicy = new AodArtworkPolicy();
     private static boolean sAodArtworkExpanded;
     private static boolean sAodArtworkFromCompact;
+    private static boolean sAodClockArtworkCompact;
+
+    static boolean aodClockArtworkCompact() {
+        return sAodClockArtworkCompact && !sScreenOn
+                && ClockCollapse.phase() == ClockCollapse.Phase.AOD;
+    }
+
+    static void compactArtworkForAodClock() {
+        if (sScreenOn || ClockCollapse.phase() != ClockCollapse.Phase.AOD
+                || !sCoverMode || sAodClockArtworkCompact || LockLyrics.wantsCompactArtwork()) return;
+        sAodClockArtworkCompact = true;
+        refreshMediaCardForMorph();
+        LockLyrics.refresh();
+        CoverCardLayer.refresh();
+        Xp.log(TAG + "AOD artwork compacted to avoid the clock");
+    }
 
     static boolean aodArtworkFromCompact() {
         return sAodArtworkFromCompact;
@@ -7034,6 +7116,12 @@ public class Main extends XposedModule {
     }
 
     static void restoreAwakeArtwork() {
+        if (sAodClockArtworkCompact) {
+            sAodClockArtworkCompact = false;
+            refreshMediaCardForMorph();
+            LockLyrics.refresh();
+            CoverCardLayer.refresh();
+        }
         if (!sAodArtworkExpanded) return;
         if (sAodArtworkPolicy.wakePending()) return;
         if (sCoverMode && keyguardShowing()) {
@@ -7210,6 +7298,13 @@ public class Main extends XposedModule {
                 layer.getResources().getDisplayMetrics().density,
                 ClockCollapse.contentBottomFor(layer) - xy[1],
                 ClockCollapse.unzoomY(layer, mediaTop) - xy[1], aspect);
+        // Start the morph even when the old native clock has not made room for the cover yet.
+        if (r == null && sScreenOn && CoverCardStyle.usesNativeClock(aspect)) {
+            r = sCoverCardStyle.place(layer.getWidth(), layer.getHeight(),
+                    layer.getResources().getDisplayMetrics().density,
+                    ClockCollapse.compactContentBottomFor(layer) - xy[1],
+                    ClockCollapse.unzoomY(layer, mediaTop) - xy[1], aspect);
+        }
         return r == null ? null : CoverMorphMotion.cardBox(xy[0] + r.x,
                 xy[1] + r.y, r.side, CoverCardLayer.renderedScale(layer),
                 aspect);

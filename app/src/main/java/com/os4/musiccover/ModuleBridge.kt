@@ -158,6 +158,21 @@ object ModuleBridge {
         val lyricOfflineCache: Boolean = true,
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
+        /** Enables on-device transliteration using the individually selected script engines. */
+        val onDeviceTransliteration: Boolean = false,
+        /** 0 absent, 1 downloading, 2 ready, 3 failed; owned by the injected module. */
+        val onDeviceTransliterationState: Int = 0,
+        /** 0..100 when known, or -1 when the server did not report a size. */
+        val onDeviceTransliterationProgress: Int = -1,
+        val onDeviceTransliterationError: String = "",
+        val localJapanese: Boolean = true,
+        val localChinese: Boolean = false,
+        val localKorean: Boolean = false,
+        val localCyrillic: Boolean = false,
+        val localGreek: Boolean = false,
+        val localChineseState: Int = 0,
+        val localChineseProgress: Int = -1,
+        val localChineseError: String = "",
         /** Keep fast lyrics together in small groups instead of scrolling on every line. */
         val lyricsGroups: Boolean = false,
         /** Where the lines settle in their column: 0 left, 1 centre, 2 right. */
@@ -515,6 +530,14 @@ object ModuleBridge {
         }
     fun setLyricsRoma(context: Context, on: Boolean) =
         send(context, "lyricroma") { putExtra("on", on) }
+    fun setOnDeviceTransliteration(context: Context, on: Boolean) =
+        send(context, "lyriclocalroma") { putExtra("on", on) }
+    fun manageJapaneseDictionary(context: Context, action: String) =
+        send(context, "jdict") { putExtra("action", action) }
+    fun manageChineseDictionary(context: Context, action: String) =
+        send(context, "cdict") { putExtra("action", action) }
+    fun setLocalRomanizer(context: Context, script: String, on: Boolean) =
+        send(context, "localromanizer") { putExtra("script", script); putExtra("on", on) }
 
     fun setLyricsGroups(context: Context, on: Boolean) =
         send(context, "lyricgroups") { putExtra("on", on) }
@@ -890,6 +913,18 @@ object ModuleBridge {
             providerVariants = b.getBoolean("providervariants", true),
             lyricOfflineCache = b.getBoolean("lyricofflinecache", true),
             lyricsRoma = b.getBoolean("lyricroma", false),
+            onDeviceTransliteration = b.getBoolean("lyriclocalroma", false),
+            onDeviceTransliterationState = b.getInt("lyriclocalromastate", 0),
+            onDeviceTransliterationProgress = b.getInt("lyriclocalromaprogress", -1),
+            onDeviceTransliterationError = b.getString("lyriclocalromaerror") ?: "",
+            localJapanese = b.getBoolean("lyriclocaljapanese", true),
+            localChinese = b.getBoolean("lyriclocalchinese", false),
+            localKorean = b.getBoolean("lyriclocalkorean", false),
+            localCyrillic = b.getBoolean("lyriclocalcyrillic", false),
+            localGreek = b.getBoolean("lyriclocalgreek", false),
+            localChineseState = b.getInt("lyriclocalchinesestate", 0),
+            localChineseProgress = b.getInt("lyriclocalchineseprogress", -1),
+            localChineseError = b.getString("lyriclocalchineseerror") ?: "",
             lyricsGroups = b.getBoolean("lyricgroups", false),
             lyricsSearchMode = b.getInt("lyricsearch", 0),
             lyricsAlign = b.getInt("lyricalign", 0),

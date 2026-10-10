@@ -59,6 +59,39 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     private CoverCardStyle style = sStyle;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final RectF square = new RectF();
+    private final RectF aodClockBounds = new RectF();
+    private final RectF aodArtworkBounds = new RectF();
+    private long aodClockOverlapSince;
+
+    /** Latch only a real, sustained AOD collision; wake restores the user's page choice. */
+    private boolean avoidAodClock(long nowNs, ClockCollapse.Phase phase, boolean compact) {
+        if (Main.screenOnCached() || phase != ClockCollapse.Phase.AOD || compact
+                || opacity <= 0.05f || current == null || Float.isNaN(drawX)
+                || !ClockCollapse.clockBoundsOnScreen(aodClockBounds)) {
+            aodClockOverlapSince = 0L;
+            return false;
+        }
+        CoverMorphMotion.Box box = CoverMorphMotion.cardBox(drawX, drawY, drawSide,
+                scale.value * (RISE_FROM + (1f - RISE_FROM) * rise), shownAspect());
+        aodArtworkBounds.set(box.x, box.y, box.x + box.w, box.y + box.h);
+        ClockCollapse.boundsOnScreen(this, aodArtworkBounds);
+        boolean overlaps = AodArtworkPolicy.clockOverlapsArtwork(aodClockBounds.left,
+                aodClockBounds.top, aodClockBounds.right, aodClockBounds.bottom,
+                aodArtworkBounds.left, aodArtworkBounds.top,
+                aodArtworkBounds.right, aodArtworkBounds.bottom);
+        if (!overlaps) {
+            aodClockOverlapSince = 0L;
+            return false;
+        }
+        if (aodClockOverlapSince == 0L) aodClockOverlapSince = nowNs;
+        if (nowNs - aodClockOverlapSince >= 120_000_000L) {
+            Main.compactArtworkForAodClock();
+            aodClockOverlapSince = 0L;
+            return false;
+        }
+        return true;
+    }
+
     /** Per-frame scratch, kept rather than allocated on every draw. */
     private final Path clipPath = new Path();
     private final int[] tmpLoc = new int[2];
@@ -979,6 +1012,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         }
         boolean treating = followSkipTreatment(dt);
         boolean placing = followPlace(phase, dt, response, target);
+        boolean checkingClock = avoidAodClock(nowNs, phase, compactArtwork);
         if (previous != null && (phase == ClockCollapse.Phase.AOD
                 || SystemClock.uptimeMillis() - changedAt > trackFadeMs)) {
             previous.recycle();
@@ -990,7 +1024,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         int visibility = opacity > 0f || target > 0f ? VISIBLE : GONE;
         if (getVisibility() != visibility) setVisibility(visibility);
         if (visibility == VISIBLE) invalidate();
-        boolean settling = blurring || treating || Math.abs(target - opacity) > 0.001f
+        boolean settling = checkingClock || blurring || treating || Math.abs(target - opacity) > 0.001f
                 || (phase != ClockCollapse.Phase.AOD && !scale.atRest(scaleTarget))
                 || previous != null || placing || (rise < 1f && opacity > 0f)
                 || (aodSince != 0L && nowNs - aodSince < AOD_SETTLE_NS)

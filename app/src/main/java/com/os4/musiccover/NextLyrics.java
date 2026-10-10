@@ -33,7 +33,9 @@ final class NextLyrics {
     }
 
     static String configurationKey() {
-        return LyricCacheScope.digest("lyric-settings-v2",
+        // v3 keeps queue entries made before per-line target-language filtering from restoring
+        // stale online translations (notably English-to-English rows) into the renderer.
+        return LyricCacheScope.digest("lyric-settings-v3",
                 String.valueOf(LockLyrics.sSearchMode),
                 String.valueOf(LockLyrics.sProviderQq), String.valueOf(LockLyrics.sProviderNetease),
                 String.valueOf(LockLyrics.sProviderKuwo), String.valueOf(LockLyrics.sProviderKugou),
@@ -41,7 +43,11 @@ final class NextLyrics {
                 String.valueOf(LockLyrics.sSpicyLyricsEnabled), LockLyrics.sSpicyLyricsApiKey,
                 LockLyrics.sTranslateProvider, LockLyrics.sTranslateEndpoint,
                 LockLyrics.sTranslateSourceLang, LockLyrics.sTranslateTargetLang,
-                String.valueOf(LockLyrics.sOnlineTranslateMode), LockLyrics.sTranslateApiKey);
+                String.valueOf(LockLyrics.sOnlineTranslateMode), LockLyrics.sTranslateApiKey,
+                String.valueOf(LockLyrics.sOnDeviceTransliteration),
+                String.valueOf(LockLyrics.sLocalJapanese), String.valueOf(LockLyrics.sLocalChinese), String.valueOf(LockLyrics.sLocalKorean),
+                String.valueOf(LockLyrics.sLocalCyrillic), String.valueOf(LockLyrics.sLocalGreek),
+                String.valueOf(LocalRomanizer.REVISION));
     }
 
     static Context context() {
@@ -165,6 +171,7 @@ final class NextLyrics {
                     if (!isCurrent(context)) return;
                     QueuedLyricCache.Entry cached = QueuedLyricCache.read(pkg, item.mediaId, context.configuration);
                     if (cached != null) {
+                        LocalRomanizer.apply(cached.lines);
                         complete(key, request, context, new Lyrics(pkg, item, cached.lines, cached.source,
                                 cached.translated, context));
                         Xp.log(TAG + "restored ready lyrics for \"" + item.title + "\": "
@@ -177,6 +184,7 @@ final class NextLyrics {
                                 @Override public void onLines(final List<LyricLine> lines,
                                                               String why, final int source) {
                                     if (!isCurrent(context)) return;
+                                    LocalRomanizer.apply(lines);
                                     LockLyrics.translateAhead(key, lines, context,
                                             new LockLyrics.AheadTranslationCallback() {
                                                 @Override public void onReady(List<LyricLine> merged,
@@ -262,6 +270,35 @@ final class NextLyrics {
         }
         return "lyricReady=" + ready + "(" + readyLines + " lyrics) "
                 + NcmLyrics.describeSearches();
+    }
+
+    /** Runs the dictionary on the lyric worker, never on SystemUI's main thread. */
+    static void romanizeAsync(final List<LyricLine> lines, final Runnable onReady) {
+        if (!LocalRomanizer.needsApply(lines)) {
+            onReady.run();
+            return;
+        }
+        final Context context = context();
+        final List<LyricLine> privateLines = LocalRomanizer.copyLines(lines);
+        lyricWork().post(new Runnable() {
+            @Override public void run() {
+                if (isCurrent(context)) LocalRomanizer.apply(privateLines);
+                Main.main().post(new Runnable() {
+                    @Override public void run() {
+                        publishRomanization(lines, privateLines, context);
+                        // Let the caller re-evaluate current settings even when this task expired.
+                        onReady.run();
+                    }
+                });
+            }
+        });
+    }
+
+    static boolean publishRomanization(List<LyricLine> lines, List<LyricLine> result,
+                                       Context context) {
+        if (!isCurrent(context)) return false;
+        LocalRomanizer.copyReadings(result, lines);
+        return true;
     }
 
     static String describeTriplet(String pkg, Prefetch.Item previous, Prefetch.Item current,

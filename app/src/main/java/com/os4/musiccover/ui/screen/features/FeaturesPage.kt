@@ -18,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import com.os4.musiccover.ExtrasActivity
 import com.os4.musiccover.CoverActivity
+import com.os4.musiccover.DictionaryActivity
 import com.os4.musiccover.TranslationProvider
 import com.os4.musiccover.ModuleBridge
 import com.os4.musiccover.R
@@ -37,6 +40,9 @@ import com.os4.musiccover.ShadeActivity
 import com.os4.musiccover.MiniPlayerActivity
 import com.os4.musiccover.ui.util.PageScaffold
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -287,6 +293,15 @@ internal fun ExtrasPageView(
     val context = LocalContext.current
     var module by remember { mutableStateOf(ModuleBridge.State()) }
     LaunchedEffect(refreshKey) { module = ModuleBridge.queryAlive(context) }
+    // The dictionary is downloaded by the injected SystemUI process, so poll only while that
+    // short-lived job is running. This keeps the row honest without a permanent background poll.
+    LaunchedEffect(module.alive, module.onDeviceTransliterationState) {
+        if (!module.alive || module.onDeviceTransliterationState != 1) return@LaunchedEffect
+        while (module.onDeviceTransliterationState == 1) {
+            delay(400)
+            module = ModuleBridge.query(context)
+        }
+    }
     PageScaffold(
         title = stringResource(R.string.extras_section),
         isBlurEnabled = isBlurEnabled,
@@ -374,14 +389,13 @@ private fun ClockGroup(
 ) {
     val context = LocalContext.current
     Column {
-        // A fraction of the style's own full clock, the one shown with cover mode off. The
-        // collapse cannot make a clock bigger than that, so 100% is the top. Cut with the others
-        // below on 2026-09-28 and put back on its own two days later (user).
+        // Cap the collapsed clock at 55% to leave enough space for the big artwork.
         ValueSlider(
             title = stringResource(R.string.clock_size),
+            summary = stringResource(R.string.clock_size_summary),
             value = (if (module.clockSize > 0f) module.clockSize else DEFAULT_CLOCK_SIZE)
-                .coerceIn(CLOCK_SIZE_MIN, 1f),
-            valueRange = CLOCK_SIZE_MIN..1f,
+                .coerceIn(CLOCK_SIZE_MIN, 0.55f),
+            valueRange = CLOCK_SIZE_MIN..0.55f,
             detent = DEFAULT_CLOCK_SIZE,
             enabled = enabled,
             label = { "${(it * 100f).roundToInt()}%" },
@@ -560,6 +574,24 @@ private fun LyricDisplayControls(
                 ModuleBridge.setLyricsRoma(context, it)
             },
         )
+        if (module.lyricsRoma) {
+            SwitchPreference(
+                title = stringResource(R.string.lyrics_on_device_transliteration),
+                summary = stringResource(R.string.lyrics_on_device_transliteration_summary),
+                checked = module.onDeviceTransliteration,
+                enabled = enabled,
+                onCheckedChange = {
+                    onChange(module.copy(onDeviceTransliteration = it))
+                    ModuleBridge.setOnDeviceTransliteration(context, it)
+                },
+            )
+            if (module.onDeviceTransliteration) ArrowPreference(
+                title = stringResource(R.string.lyrics_dictionaries),
+                summary = stringResource(R.string.lyrics_dictionaries_summary),
+                enabled = enabled,
+                onClick = { context.startActivity(Intent(context, DictionaryActivity::class.java)) },
+            )
+        }
 
     }
 
@@ -1070,6 +1102,10 @@ private fun CardGroup(
     onChange: (ModuleBridge.State) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sinkRestartPending by rememberSaveable { mutableStateOf(false) }
+    var sinkRestarting by remember { mutableStateOf(false) }
+    var sinkRestartFailed by remember { mutableStateOf(false) }
     Column {
         // Two switches were here and are gone: hiding the card's thumbnail, and bringing it back
         // while the lyrics are up. Both are on and neither is a setting - the artwork is the
@@ -1129,14 +1165,51 @@ private fun CardGroup(
         val avoidIndex = module.fpAvoid.coerceIn(0, avoidModes.lastIndex)
         WindowDropdownPreference(
             title = stringResource(R.string.fp_sink),
+            summary = stringResource(R.string.fp_sink_summary),
             items = avoidModes,
             selectedIndex = avoidIndex,
             enabled = enabled,
             onSelectedIndexChange = {
-                onChange(module.copy(fpAvoid = it))
-                ModuleBridge.setFingerprintAvoid(context, it)
+                if (it != avoidIndex) {
+                    onChange(module.copy(fpAvoid = it))
+                    ModuleBridge.setFingerprintAvoid(context, it)
+                    sinkRestartPending = true
+                    sinkRestartFailed = false
+                }
             },
         )
+        if (sinkRestartPending) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                MiuixText(
+                    text = stringResource(
+                        if (sinkRestartFailed) R.string.fp_sink_restart_failed
+                        else R.string.fp_sink_restart_hint,
+                    ),
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                TextButton(
+                    text = stringResource(R.string.restart_systemui),
+                    enabled = enabled && !sinkRestarting,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        sinkRestarting = true
+                        scope.launch {
+                            try {
+                                val restarted = withContext(Dispatchers.IO) {
+                                    ModuleBridge.restartSystemUi()
+                                }
+                                sinkRestartFailed = !restarted
+                                if (restarted) sinkRestartPending = false
+                            } finally {
+                                sinkRestarting = false
+                            }
+                        }
+                    },
+                )
+            }
+        }
     }
 }
 
