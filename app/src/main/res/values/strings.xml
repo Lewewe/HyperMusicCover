@@ -142,6 +142,31 @@
     <string name="lyrics_provider_got_it_wait">Got it (%1$d)</string>
     <string name="lyrics_trans">Show translations</string>
     <string name="lyrics_roma">Show romanisations</string>
+    <string name="lyrics_on_device_transliteration">On-device transliteration</string>
+    <string name="lyrics_on_device_transliteration_summary">Download dictionaries for clean local romaji.</string>
+    <string name="lyrics_on_device_transliteration_downloading">Downloading Japanese dictionary…</string>
+    <string name="lyrics_on_device_transliteration_downloading_progress">Downloading Japanese dictionary: %1$d%%</string>
+    <string name="lyrics_on_device_transliteration_ready">Japanese dictionary downloaded.</string>
+    <string name="lyrics_on_device_transliteration_failed">%1$s — turn on to retry.</string>
+    <string name="lyrics_dictionaries">Dictionaries</string>
+    <string name="lyrics_dictionaries_summary">Manage downloadable local reading dictionaries.</string>
+    <string name="lyrics_dictionaries_empty">No dictionaries downloaded. Use the plus button to add one.</string>
+    <string name="lyrics_dictionary_add">Add dictionary</string>
+    <string name="lyrics_dictionary_japanese">Japanese</string>
+    <string name="lyrics_dictionary_japanese_summary">Japanese readings and romaji • about 46 MB</string>
+    <string name="lyrics_dictionary_japanese_for">For Japanese lyrics and local romaji</string>
+    <string name="lyrics_dictionary_chinese">Chinese</string>
+    <string name="lyrics_dictionary_chinese_summary">Chinese pinyin readings • about 80 KB</string>
+    <string name="lyrics_dictionary_chinese_for">For Chinese lyrics and local pinyin</string>
+    <string name="lyrics_dictionary_korean">Korean</string>
+    <string name="lyrics_dictionary_korean_for">Built-in Hangul romanisation</string>
+    <string name="lyrics_dictionary_cyrillic">Cyrillic</string>
+    <string name="lyrics_dictionary_cyrillic_for">Built-in Cyrillic romanisation</string>
+    <string name="lyrics_dictionary_greek">Greek</string>
+    <string name="lyrics_dictionary_greek_for">Built-in Greek romanisation</string>
+    <string name="lyrics_dictionary_ready">Downloaded</string>
+    <string name="lyrics_dictionary_error">Download failed</string>
+    <string name="lyrics_dictionary_delete">Delete dictionary</string>
     <string name="lyrics_groups">Gentle lyric flow</string>
     <string name="lyrics_groups_summary">Keep up to four fast-moving lines together, giving every phrase a little more room to breathe.</string>
     <string name="lyrics_align">Lyric alignment</string>
@@ -290,4 +315,5 @@
     <string name="mini_notification_compact_unavailable">Requires a low under-display fingerprint sensor. High or side-mounted sensors are not supported.</string>
     <string name="mini_notification_size">Notification pill size</string>
     <string name="mini_notification_drop">Notification pill downward offset</string>
+    <string name="lyrics_dictionary_use">Use this dictionary</string>
 </resources>

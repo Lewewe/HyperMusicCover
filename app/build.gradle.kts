@@ -80,10 +80,15 @@ android {
     packaging {
         resources.excludes += listOf(
             "META-INF/**/LICENSE*",
+            "META-INF/LICENSE*",
+            "META-INF/CONTRIBUTORS.md",
             "META-INF/*.version",
             "META-INF/*.kotlin_module",
             "kotlin/**",
             "DebugProbesKt.bin",
+            // UniDic's eight binary tables are downloaded on demand by the optional local
+            // transliteration feature. Keep its tokenizer classes, not the 46 MiB data files.
+            "com/atilika/kuromoji/unidic/*.bin",
         )
     }
 
@@ -135,6 +140,10 @@ dependencies {
     // The lyric bridge the LyricProvider plugins publish through. Optional at runtime: when
     // nothing on the device implements it, LyriconSource simply never connects.
     implementation(libs.lyricon.subscriber)
+
+    // Offline Japanese tokenisation and readings.  Unlike the provider's syllable-oriented
+    // romanisation, this gives us whole lexical words locally, before the renderer sees a line.
+    implementation("com.atilika.kuromoji:kuromoji-unidic:0.9.0")
 
     // The release notes are Markdown and are rendered as such in the update dialog.
     implementation(libs.commonmark)

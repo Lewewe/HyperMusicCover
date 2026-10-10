@@ -127,6 +127,12 @@
             android:theme="@style/Theme.HyperMusicCover" />
 
         <activity
+            android:name=".DictionaryActivity"
+            android:exported="false"
+            android:label="@string/lyrics_dictionaries"
+            android:theme="@style/Theme.HyperMusicCover" />
+
+        <activity
             android:name=".ShadeActivity"
             android:exported="false"
             android:label="@string/features_shade_title"

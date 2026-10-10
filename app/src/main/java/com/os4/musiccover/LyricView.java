@@ -162,8 +162,8 @@ final class LyricView extends View {
     private static final int LIFT_RETURN_MS = 280;
     /** Karaoke letters ease in over a short, softly blurred offset. */
     private static final int KARAOKE_LETTER_FLY_MS = 250;
-    /** Eye-candy's deliberately theatrical entrance: a word arrives with a visible overshoot. */
-    private static final int EYE_WORD_FLY_MS = 420;
+    /** The last timed token needs a finite, calm focus transition. */
+    private static final int EYE_WORD_FLY_MS = 200;
     /** A syllable at least this long is a held note, and glows. */
     private static final int GLOW_MIN_MS = 1000;
     private static final float GLOW_DP = 9f;
@@ -276,6 +276,7 @@ final class LyricView extends View {
 
     private final TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint transPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint romaPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint onlineTransPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint bgPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -311,6 +312,7 @@ final class LyricView extends View {
     private int layoutWidth = -1;
     private StaticLayout[] main = new StaticLayout[0];
     private StaticLayout[] trans = new StaticLayout[0];
+    private StaticLayout[] roma = new StaticLayout[0];
     private StaticLayout[] onlineTrans = new StaticLayout[0];
     private StaticLayout[] bgLay = new StaticLayout[0];
     /** Top of each line in content coordinates, and its full height with translation. */
@@ -451,6 +453,7 @@ final class LyricView extends View {
         blurPad = (int) Math.ceil((BLUR_NEXT_DP + BLUR_DP_PER_ROW * BLUR_MAX_ROWS) * density * 2f);
         paint.setColor(0xFFFFFFFF);
         transPaint.setColor(0xFFFFFFFF);
+        romaPaint.setColor(0xFFFFFFFF);
         onlineTransPaint.setColor(0xFFFFFFFF);
         bgPaint.setColor(0xFFFFFFFF);
         applyPaintStyle(LockLyrics.sStyle);
@@ -480,8 +483,10 @@ final class LyricView extends View {
         paint.setTypeface(Typeface.create(Typeface.DEFAULT, style.weight, false));
         transPaint.setTextSize(textPx * TRANS_SP / TEXT_SP);
         transPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
+        romaPaint.setTextSize(textPx * ONLINE_TRANS_SP / TEXT_SP);
+        romaPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
         onlineTransPaint.setTextSize(textPx * ONLINE_TRANS_SP / TEXT_SP);
-        onlineTransPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
+        onlineTransPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, true));
         bgPaint.setTextSize(textPx * BG_SP / TEXT_SP);
         bgPaint.setTypeface(Typeface.create(Typeface.DEFAULT, BG_WEIGHT, false));
     }
@@ -1635,14 +1640,16 @@ final class LyricView extends View {
         bp.setTextSize(buildTextPx * BG_SP / TEXT_SP);
         final TextPaint tp = new TextPaint(transPaint);
         tp.setTextSize(buildTextPx * TRANS_SP / TEXT_SP);
+        final TextPaint rp = new TextPaint(romaPaint);
         final TextPaint op = new TextPaint(onlineTransPaint);
+        rp.setTextSize(buildTextPx * ONLINE_TRANS_SP / TEXT_SP);
         op.setTextSize(buildTextPx * ONLINE_TRANS_SP / TEXT_SP);
         if (ls.isEmpty()) {
             wantVersion = wantWidth = -1;
             wantTrans = transOn;
             wantAlign = alignOn;
             wantStyle = null;
-            apply(build(v, width, ls, p, bp, tp, op, transOn, alignOn, style,
+            apply(build(v, width, ls, p, bp, tp, rp, op, transOn, alignOn, style,
                     buildTextPx, buildSidePx));
             return true;
         }
@@ -1654,7 +1661,7 @@ final class LyricView extends View {
         layoutHandler().post(new Runnable() {
             @Override
             public void run() {
-                final Built b = build(v, width, ls, p, bp, tp, op, transOn, alignOn,
+                final Built b = build(v, width, ls, p, bp, tp, rp, op, transOn, alignOn,
                         style, buildTextPx, buildSidePx);
                 post(new Runnable() {
                     @Override
@@ -1693,7 +1700,7 @@ final class LyricView extends View {
         /** The alignment pref this layout was made under; see LockLyrics.sAlign. */
         int align;
         List<LyricLine> lines;
-        StaticLayout[] main, trans, onlineTrans, bgLay;
+        StaticLayout[] main, trans, roma, onlineTrans, bgLay;
         float[] base, height, dotsTop;
         float[][] charX, charXBg;
         int[][] clusterEnd, clusterEndBg;
@@ -1713,9 +1720,14 @@ final class LyricView extends View {
         return right ? Layout.Alignment.ALIGN_OPPOSITE : Layout.Alignment.ALIGN_NORMAL;
     }
 
+    /** Online mode owns the secondary translation row, including while its request is in flight. */
+    static String translationFor(LyricLine line) {
+        return LyricTranslationLogic.translationFor(line, LockLyrics.sOnlineTranslateMode);
+    }
+
     /** Touches nothing of the view's but its constants, so it can run off the UI thread. */
     private Built build(int v, int width, List<LyricLine> ls, TextPaint p, TextPaint bp,
-                        TextPaint tp, TextPaint op, int transOn, int alignOn, LyricStyle style,
+                        TextPaint tp, TextPaint rp, TextPaint op, int transOn, int alignOn, LyricStyle style,
                         float buildTextPx, float buildSidePx) {
         long t0 = SystemClock.uptimeMillis();
         Built b = new Built();
@@ -1730,6 +1742,7 @@ final class LyricView extends View {
         b.w = w;
         b.main = new StaticLayout[n];
         b.trans = new StaticLayout[n];
+        b.roma = new StaticLayout[n];
         b.onlineTrans = new StaticLayout[n];
         b.bgLay = new StaticLayout[n];
         b.base = new float[n];
@@ -1781,50 +1794,22 @@ final class LyricView extends View {
             // Left out of the layout entirely when the switch is off, rather than laid out and
             // skipped in the draw: the rows it would have taken are most of a line's height, and
             // a gap there would leave every line floating with a hole under it.
-            if ((transOn & LockLyrics.BELOW_TRANS) != 0) {
-                boolean onlineMode = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF;
-                String nativeSecondary = onlineMode ? null
-                        : (l.onlineTranslation == null ? l.under(transOn) : null);
-                String onlineSecondary = l.onlineTranslation;
-                // Online mode owns the translation row; optional provider romanisation is a
-                // supplement to that result, never a competing provider translation.
-                if (onlineMode && onlineSecondary != null && LockLyrics.sRoma
-                        && l.roma != null) {
-                    onlineSecondary += "\n" + l.roma;
-                }
-                if (nativeSecondary != null) {
-                    b.trans[i] = StaticLayout.Builder.obtain(nativeSecondary, 0,
-                                    nativeSecondary.length(), tp, w)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    h += TRANS_GAP_DP * density + b.trans[i].getHeight();
-                    if (onlineSecondary != null) {
-                        b.onlineTrans[i] = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                        onlineSecondary.length(), op, w)
-                                .setAlignment(align)
-                                .setIncludePad(false)
-                                .build();
-                        h += ONLINE_TRANS_GAP_DP * density + b.onlineTrans[i].getHeight();
-                    }
-                } else if (onlineSecondary != null) {
-                    // With no native secondary, use the normal translation row and size.
-                    b.trans[i] = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                    onlineSecondary.length(), tp, w)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    h += TRANS_GAP_DP * density + b.trans[i].getHeight();
-                }
-            }
-            String under = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF
-                    ? null : l.under(transOn);
-            if (under != null && b.trans[i] == null && b.onlineTrans[i] == null) {
-                b.trans[i] = StaticLayout.Builder.obtain(under, 0, under.length(), tp, w)
+            String localRoma = (transOn & LockLyrics.BELOW_ROMA) != 0 ? l.renderedRoma() : null;
+            String translation = (transOn & LockLyrics.BELOW_TRANS) != 0 ? translationFor(l) : null;
+            if (localRoma != null) {
+                b.roma[i] = StaticLayout.Builder.obtain(localRoma, 0, localRoma.length(), rp, w)
                         .setAlignment(align)
                         .setIncludePad(false)
                         .build();
-                h += TRANS_GAP_DP * density + b.trans[i].getHeight();
+                h += TRANS_GAP_DP * density + b.roma[i].getHeight();
+            }
+            if (translation != null) {
+                b.onlineTrans[i] = StaticLayout.Builder.obtain(translation, 0, translation.length(), op, w)
+                        .setAlignment(align)
+                        .setIncludePad(false)
+                        .build();
+                h += (b.roma[i] == null ? TRANS_GAP_DP : ONLINE_TRANS_GAP_DP) * density
+                        + b.onlineTrans[i].getHeight();
             }
             b.base[i] = y;
             b.height[i] = h;
@@ -1855,6 +1840,7 @@ final class LyricView extends View {
         int n = lines.size();
         main = b.main;
         trans = b.trans;
+        roma = b.roma;
         onlineTrans = b.onlineTrans;
         bgLay = b.bgLay;
         charXBg = b.charXBg;
@@ -1885,7 +1871,10 @@ final class LyricView extends View {
         transFadeAt = new long[n];
         boolean fxOn = AliveLyricsEffects.enabled(LockLyrics.sAliveFx) && !LockLyrics.still()
                 && oldVersion >= 0;
-        for (int i = 0; i < n; i++) transFadeAt[i] = b.trans[i] != null && fxOn ? -1L : 0L;
+        for (int i = 0; i < n; i++) {
+            boolean hasSecondary = b.trans[i] != null || b.roma[i] != null || b.onlineTrans[i] != null;
+            transFadeAt[i] = hasSecondary && fxOn ? -1L : 0L;
+        }
         focus = -1;
         duetLyrics.setLines(lines);
         dotsFor = -1;
@@ -2103,6 +2092,14 @@ final class LyricView extends View {
             anchorIndex = focus;
         }
         float stageH = base[stageLast] - base[stageFirst] + height[stageLast];
+        // A long original plus romaji and translation can be taller than the lit keyguard's
+        // clock-to-card lane while still fitting in AOD. Centring that block puts both ends past
+        // the clip; drawLyrics then (correctly for ordinary rows) fades it to zero. Pin its top
+        // inside the lane instead, preserving the actual lyric before any secondary row is cut.
+        if (stageH > bandH) {
+            return bandTop + Math.min(8f * density, bandH * 0.08f)
+                    + base[anchorIndex] - base[stageFirst] - anchor;
+        }
         return bandTop + (bandH - stageH) / 2f + base[anchorIndex] - base[stageFirst] - anchor;
     }
 
@@ -2223,8 +2220,12 @@ final class LyricView extends View {
             if (y + renderedHeight < bandTop) continue;
             // Faded by the row's own top against the top edge and its own bottom against the
             // bottom edge, so a line is already gone by the time it would be cut.
-            float edge = Math.min(clamp01((y - bandTop) / fade),
-                    clamp01((bandBottom - (y + renderedHeight)) / fade));
+            // A focused row that is taller than the band is intentionally top-pinned above.
+            // It must be clipped, not faded to zero merely because its secondary rows extend
+            // below the card; otherwise the complete lyric vanishes on the lit lock screen.
+            float edge = i == focus && renderedHeight > bandH ? 1f
+                    : Math.min(clamp01((y - bandTop) / fade),
+                            clamp01((bandBottom - (y + renderedHeight)) / fade));
             float a = vis * edge;
             a *= simultaneousDepartureAlpha(i);
             // Lines already sung, above the focus, sit further back than the ones to come.
@@ -2475,6 +2476,7 @@ final class LyricView extends View {
         final float radius = blurFor(rows);
         final TextPaint p = new TextPaint(paint);
         final TextPaint tp = new TextPaint(transPaint);
+        final TextPaint rp = new TextPaint(romaPaint);
         final TextPaint op = new TextPaint(onlineTransPaint);
         final TextPaint bp = new TextPaint(bgPaint);
         final int pad = blurPad;
@@ -2485,7 +2487,7 @@ final class LyricView extends View {
         blurHandler().post(new Runnable() {
             @Override
             public void run() {
-                final Bitmap b = makeBlurred(l, width, fullW, fullH, pad, radius, p, tp, op, bp,
+                final Bitmap b = makeBlurred(l, width, fullW, fullH, pad, radius, p, tp, rp, op, bp,
                         transGap, onlineTransGap, bgGap, down, alignOn);
                 post(new Runnable() {
                     @Override
@@ -2506,7 +2508,7 @@ final class LyricView extends View {
      * canvas.
      */
     private static Bitmap makeBlurred(LyricLine l, int width, int fullW, int fullH, int pad,
-                                      float radius, TextPaint p, TextPaint tp, TextPaint op,
+                                      float radius, TextPaint p, TextPaint tp, TextPaint rp, TextPaint op,
                                       TextPaint bp, float transGap, float onlineTransGap,
                                       float bgGap, int down, int alignOn) {
         try {
@@ -2546,59 +2548,29 @@ final class LyricView extends View {
                 c.restoreToCount(save);
                 below += bgGap + bl.getHeight();
             }
-            boolean onlineMode = LockLyrics.sOnlineTranslateMode != LockLyrics.TR_MODE_OFF;
-            String nativeSecondary = onlineMode ? null
-                    : (l.onlineTranslation == null ? l.under(LockLyrics.below()) : null);
-            String onlineSecondary = l.onlineTranslation;
-            if (LockLyrics.sTrans) {
-                if (onlineMode && onlineSecondary != null && LockLyrics.sRoma
-                        && l.roma != null) {
-                    onlineSecondary += "\n" + l.roma;
-                }
-                if (nativeSecondary != null) {
-                    tp.setAlpha(Math.round(255f * TRANS_ALPHA));
-                    tp.setMaskFilter(mf);
-                    StaticLayout t = StaticLayout.Builder.obtain(nativeSecondary, 0,
-                                    nativeSecondary.length(), tp, width)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    c.translate(0f, below + transGap);
-                    t.draw(c);
-                    below += transGap + t.getHeight();
-                    if (onlineSecondary != null) {
-                        op.setAlpha(Math.round(255f * TRANS_ALPHA));
-                        op.setMaskFilter(mf);
-                        StaticLayout ot = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                        onlineSecondary.length(), op, width)
-                                .setAlignment(align)
-                                .setIncludePad(false)
-                                .build();
-                        c.translate(0f, onlineTransGap);
-                        ot.draw(c);
-                    }
-                } else if (onlineSecondary != null) {
-                    tp.setAlpha(Math.round(255f * TRANS_ALPHA));
-                    tp.setMaskFilter(mf);
-                    StaticLayout t = StaticLayout.Builder.obtain(onlineSecondary, 0,
-                                    onlineSecondary.length(), tp, width)
-                            .setAlignment(align)
-                            .setIncludePad(false)
-                            .build();
-                    c.translate(0f, below + transGap);
-                    t.draw(c);
-                }
-            }
-            String under = onlineMode ? null : l.under(LockLyrics.below());
-            boolean secondaryDrawn = nativeSecondary != null || onlineSecondary != null;
-            if (under != null && !secondaryDrawn) {
-                tp.setAlpha(Math.round(255f * TRANS_ALPHA));
-                tp.setMaskFilter(mf);
-                StaticLayout t = StaticLayout.Builder.obtain(under, 0, under.length(), tp, width)
+            int belowMode = LockLyrics.below();
+            String localRoma = (belowMode & LockLyrics.BELOW_ROMA) != 0 ? l.renderedRoma() : null;
+            String translation = (belowMode & LockLyrics.BELOW_TRANS) != 0 ? translationFor(l) : null;
+            float romaHeight = 0f;
+            if (localRoma != null) {
+                rp.setAlpha(Math.round(255f * TRANS_ALPHA));
+                rp.setMaskFilter(mf);
+                StaticLayout r = StaticLayout.Builder.obtain(localRoma, 0, localRoma.length(), rp, width)
                         .setAlignment(align)
                         .setIncludePad(false)
                         .build();
                 c.translate(0f, below + transGap);
+                r.draw(c);
+                romaHeight = r.getHeight();
+            }
+            if (translation != null) {
+                op.setAlpha(Math.round(255f * TRANS_ALPHA));
+                op.setMaskFilter(mf);
+                StaticLayout t = StaticLayout.Builder.obtain(translation, 0, translation.length(), op, width)
+                        .setAlignment(align)
+                        .setIncludePad(false)
+                        .build();
+                c.translate(0f, localRoma == null ? below + transGap : romaHeight + onlineTransGap);
                 t.draw(c);
             }
             return b;
@@ -2680,8 +2652,9 @@ final class LyricView extends View {
 
     private void drawTranslation(Canvas c, int i, float a) {
         StaticLayout t = trans[i];
+        StaticLayout r = roma[i];
         StaticLayout online = onlineTrans[i];
-        if (t == null && online == null) return;
+        if (t == null && r == null && online == null) return;
         float fade = 1f;
         float lift = 0f;
         int fx = LockLyrics.sAliveFx;
@@ -2703,16 +2676,44 @@ final class LyricView extends View {
         int save = c.save();
         c.translate(0f, transTop(i) - lift);
         if (t != null) {
-            t.getPaint().setColor(ink(a * TRANS_ALPHA * fade, 0f));
-            t.draw(c);
-            t.getPaint().setColor(0xFFFFFFFF);
+            drawTranslationLayout(c, t, a, fade, fx);
+        }
+        if (r != null) {
+            if (t != null) c.translate(0f, t.getHeight() + ONLINE_TRANS_GAP_DP * density);
+            drawTranslationLayout(c, r, a, fade, fx);
         }
         if (online != null) {
-            if (t != null) c.translate(0f, t.getHeight() + ONLINE_TRANS_GAP_DP * density);
-            online.getPaint().setColor(ink(a * TRANS_ALPHA * fade, 0f));
-            online.draw(c);
-            online.getPaint().setColor(0xFFFFFFFF);
+            if (r != null) c.translate(0f, r.getHeight() + ONLINE_TRANS_GAP_DP * density);
+            else if (t != null) c.translate(0f, t.getHeight() + ONLINE_TRANS_GAP_DP * density);
+            drawTranslationLayout(c, online, a, fade, fx);
         }
+        c.restoreToCount(save);
+    }
+
+    /** Eye-candy writes translations on, instead of revealing the complete row in one alpha step. */
+    private void drawTranslationLayout(Canvas c, StaticLayout layout, float a, float fade, int fx) {
+        TextPaint p = layout.getPaint();
+        if (!AliveLyricsEffects.eyeCandy(fx)) {
+            p.setColor(ink(a * TRANS_ALPHA * fade, 0f));
+            layout.draw(c);
+            p.setColor(0xFFFFFFFF);
+            return;
+        }
+        float reveal = smoothUnit(fade);
+        int save = c.save();
+        float feather = Math.max(2f * density, textPx * 0.18f);
+        c.clipRect(-feather, -feather, layout.getWidth() * reveal + feather,
+                layout.getHeight() + feather);
+        float oldRadius = p.getShadowLayerRadius(), oldDx = p.getShadowLayerDx();
+        float oldDy = p.getShadowLayerDy();
+        long oldShadow = p.getShadowLayerColorLong();
+        float blur = (1f - reveal) * 3f * density;
+        if (blur > 0.1f) p.setShadowLayer(blur, 0f, 0f, white(0.28f * (1f - reveal), 0f));
+        p.setColor(ink(a * TRANS_ALPHA * (0.35f + 0.65f * reveal), 0f));
+        layout.draw(c);
+        p.setColor(0xFFFFFFFF);
+        if (oldRadius > 0f) p.setShadowLayer(oldRadius, oldDx, oldDy, oldShadow);
+        else p.clearShadowLayer();
         c.restoreToCount(save);
     }
 
@@ -2871,24 +2872,37 @@ final class LyricView extends View {
             if (!aliveEffects) {
                 float wordRise = smoothUnit(clamp01((ms - s) / (float) BASIC_WORD_RISE_MS));
                 lift = glowOn ? liftPx * 1.65f * e * wordRise : 0f;
+            } else if (AliveLyricsEffects.eyeCandy(fx)) {
+                // Eye-candy supplies the same rise per shaped grapheme in its reveal pass.
+                // Do not lift the whole syllable first or the individual rises would stack.
+                lift = 0f;
             } else {
                 // Alive motion is part of the lyric effect and is layered on this shared rise.
                 lift = liftPx * liftScale * e * letterRise(syllableProgress, end);
             }
-            float glow = 0f;
+            // The visual tail is allowed on every completed token, but HDR is deliberately
+            // reserved for a held note. Coupling the two made every short word flash above
+            // white as its tail began, especially on character-timed lyrics.
+            float sustainedGlow = 0f;
             boolean syllableStarted = sungChars > cs;
             if (LockLyrics.sHdr && glowOn && syllableStarted
                     && dur >= GLOW_MIN_MS) {
-                glow = ms < end ? clamp01((ms - s) / (dur * 0.3f))
+                sustainedGlow = ms < end ? clamp01((ms - s) / (dur * 0.3f))
                         : 1f - clamp01((ms - end) / (float) GLOW_TAIL_MS);
-                glow *= e;
+                sustainedGlow *= e;
             }
+            float glow = sustainedGlow;
             if (aliveEffects && glowOn) {
                 float trail = AliveLyricsEffects.wordTrailIntensity(fx, ms, end, dur, GLOW_MIN_MS);
                 if (trail > 0f) glow = Math.max(glow, trail * e);
             }
+            float hdrGlow = 0f;
             if (glow > 0f) {
-                glow = clamp01(glow * AliveLyricsEffects.glowMultiplier(fx));
+                float multiplier = AliveLyricsEffects.glowMultiplier(fx);
+                glow = clamp01(glow * multiplier);
+                // Never let a short-token trail change the canvas' HDR brightness. It is an
+                // SDR halo only; a long, still-held note is the one intentional HDR event.
+                hdrGlow = clamp01(sustainedGlow * multiplier);
             }
             float x0 = xs[cs];
             if (glow > 0.01f) {
@@ -2897,7 +2911,7 @@ final class LyricView extends View {
                 float widthScale = AliveLyricsEffects.glowWidthScale(fx, dur, GLOW_MIN_MS, glow);
                 float swell = 1f + GLOW_SWELL * glow * widthScale;
                 c.scale(swell, swell, (x0 + x1) / 2f, baseline);
-                float g = glowGain(glow);
+                float g = glowGain(hdrGlow);
                 long halo = white(GLOW_ALPHA * glow, g);
                 p.setShadowLayer(glowPx * glow * widthScale, 0f, 0f, halo);
                 // The glowing syllable itself goes above white with its halo: its sung part
@@ -3003,7 +3017,8 @@ final class LyricView extends View {
                 drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, baseline, false, gain);
             } else {
                 setWordEntrance(l, syllable, cs, phraseOnset, true);
-                drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, phraseOnset,
+                drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, phraseOnset, start, end,
+                        phraseOnset,
                         AliveLyricsEffects.wordEntranceMs(LockLyrics.sAliveFx, true),
                         baseline, whiteness, lead, gain, eyeWordMotion[0],
                         eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
@@ -3015,10 +3030,24 @@ final class LyricView extends View {
                     ? clusterEndBg[rowLeadIndex] : clusterEnd[rowLeadIndex]) : null;
         boolean backing = !lead;
         int entranceStart = backing ? Math.min(start, l.start + syllable * 55) : start;
+        int previousToken = previousEyeTokenOnset(l, syllable);
+        // QQ/Spicy provide English syllables at word boundaries. Treating each grapheme inside
+        // one of those words as a separate preview made "hi" reveal "i" rather than staging
+        // "there". CJK has no such whitespace boundary, so it deliberately keeps the more
+        // useful character-by-character behavior below.
+        if (eyeCandy && usesWordPreview(l)) {
+            int wordPreviewAfter = syllable == 0 ? l.start : l.sylStart[syllable - 1];
+            setWordEntrance(l, syllable, cs, entranceStart, true);
+            drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re, entranceStart, start, end,
+                    wordPreviewAfter, AliveLyricsEffects.wordEntranceMs(
+                            LockLyrics.sAliveFx, backing), baseline, whiteness, lead, gain,
+                    eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
+            return;
+        }
         if (ends == null || !canSplitClusters(lay, xs, ends, cs, ce, re)) {
             setWordEntrance(l, syllable, cs, entranceStart, eyeCandy);
             drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re,
-                    entranceStart, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+                    entranceStart, start, end, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
                     eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
             return;
         }
@@ -3028,7 +3057,7 @@ final class LyricView extends View {
             if (next <= ch || next > ce) {
                 setWordEntrance(l, syllable, cs, start, eyeCandy);
                 drawKaraokeCluster(c, l, lay, p, xs, cs, ce, rs, re,
-                        start, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
+                        start, start, end, previousToken, KARAOKE_LETTER_FLY_MS, baseline, whiteness, lead, gain,
                         eyeWordMotion[0], eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
                 return;
             }
@@ -3037,19 +3066,22 @@ final class LyricView extends View {
             int following = next < ce ? clusterStartAt(next, from, syllableEnd, start, end)
                     : ce < syllableEnd ? clusterStartAt(ce, from, syllableEnd, start, end)
                     : syllable + 1 < l.sylStart.length ? l.sylStart[syllable + 1]
-                    : onset + KARAOKE_LETTER_FLY_MS;
+                    : onset + (eyeCandy ? EYE_WORD_FLY_MS : KARAOKE_LETTER_FLY_MS);
+            int flightCap = eyeCandy ? AliveLyricsEffects.wordEntranceMs(
+                    LockLyrics.sAliveFx, backing) : KARAOKE_LETTER_FLY_MS;
             int flightMs = following > onset
-                    ? Math.min(KARAOKE_LETTER_FLY_MS, Math.max(80, following - onset))
-                    : KARAOKE_LETTER_FLY_MS;
+                    ? Math.min(flightCap, Math.max(80, following - onset))
+                    : flightCap;
             setWordEntrance(l, syllable, ch, onset, eyeCandy);
             drawKaraokeCluster(c, l, lay, p, xs, ch, next, rs, re,
-                    onset, flightMs, baseline, whiteness, lead, gain, eyeWordMotion[0],
+                    onset, start, end, previousToken, flightMs, baseline, whiteness, lead, gain, eyeWordMotion[0],
                     eyeWordMotion[1], eyeWordMotion[2], eyeWordMotion[3]);
+            previousToken = onset;
             ch = next;
         }
     }
 
-    /** A word's letters arrive as a soft wave, with one stable direction for the whole word. */
+    /** A token resolves from one stable side; no per-letter wobble or overshoot. */
     private void setWordEntrance(LyricLine l, int syllable, int charAt, int onset,
                                  boolean eyeCandy) {
         eyeWordMotion[0] = 0f;
@@ -3069,44 +3101,82 @@ final class LyricView extends View {
         int seed = l.text.hashCode() * 31 + l.start * 17 + syllable * 13
                 + (backing ? 1 : 0);
         float direction = (seed & 1) == 0 ? -1f : 1f;
-        float wave = (float) Math.sin((charAt + l.start * 0.001f) * 0.55f);
         float offset = AliveLyricsEffects.wordEntranceOffsetDp(mode, backing);
-        eyeWordMotion[1] = direction * offset * density * (1f - settle)
-                + wave * 2f * density * (1f - settle);
-        eyeWordMotion[2] = smoothUnit(clamp01(t / 0.18f));
+        eyeWordMotion[1] = direction * offset * density * (1f - settle);
+        // First bring the staged token into focus at its existing dim brightness. Only after
+        // that does it gain opacity; resolving blur and brightening together read as a flash.
+        eyeWordMotion[2] = 0.40f + 0.60f * smoothUnit(clamp01((t - 0.55f) / 0.45f));
         eyeWordMotion[3] = AliveLyricsEffects.wordEntranceBlurDp(mode, backing) * density
-                * (1f - smoothUnit(clamp01(t / 0.65f)));
+                * (1f - smoothUnit(clamp01(t / 0.55f)));
     }
 
     private void drawKaraokeCluster(Canvas c, LyricLine l, StaticLayout lay, TextPaint p,
                                     float[] xs, int cs, int ce, int rs, int re, int onset,
-                                    int flightMs, float baseline, float whiteness, boolean lead,
+                                    int syllableStart, int syllableEnd, int previewAfter, int flightMs,
+                                    float baseline, float whiteness, boolean lead,
                                     float gain, float wordX, float wordOffset, float wordAlpha,
                                     float wordBlur) {
-        if (ms < onset) return;
+        if (ms < onset) {
+            // Eye-candy stages precisely one token ahead: the token after the currently singing
+            // one is readable, but later words remain hidden until their own predecessor starts.
+            if (!AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx) || ms < previewAfter
+                    || hasEarlierTimedToken(l, onset)) return;
+            // The preview is the initial reveal frame, not a separate sharp drawing. Keeping
+            // its transform, alpha and softness identical prevents a sharp -> blurred -> sharp
+            // handoff as the next token becomes active.
+            int save = c.save();
+            c.translate(wordX, 0f);
+            int oldAlpha = p.getAlpha();
+            Shader oldShader = p.getShader();
+            long oldColor = p.getColorLong();
+            float oldRowAt = rowAt;
+            android.graphics.MaskFilter oldMask = p.getMaskFilter();
+            float oldRadius = p.getShadowLayerRadius(), oldDx = p.getShadowLayerDx();
+            float oldDy = p.getShadowLayerDy();
+            long oldShadow = p.getShadowLayerColorLong();
+            // A preview must not inherit the current token's white karaoke fill edge or HDR
+            // shimmer. It is always the deliberately dim, unsung ink until its own onset.
+            p.setShader(null);
+            rowAt = Float.NaN;
+            // setAlpha() overwrites the alpha packed into ink(...). Reset it before assigning
+            // the colour, otherwise the 40%-ish unsung ink becomes fully opaque white.
+            p.setAlpha(255);
+            p.setColor(ink(rowUnsungA, 0f));
+            // Match the normal unsung letters exactly. Blur is Eye-candy's only added cue;
+            // an extra opacity animation made the staged word brighter than its neighbours.
+            if (wordBlur > 0.15f) {
+                // Blur the glyph edge itself. A shadow halo always changes apparent lightness,
+                // even when tinted, whereas this preserves the ordinary unsung ink exactly.
+                p.clearShadowLayer();
+                p.setMaskFilter(new BlurMaskFilter(wordBlur, BlurMaskFilter.Blur.NORMAL));
+            }
+            drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, baseline, false, gain);
+            p.setShader(oldShader);
+            p.setColor(oldColor);
+            rowAt = oldRowAt;
+            p.setMaskFilter(oldMask);
+            p.setAlpha(oldAlpha);
+            if (oldRadius > 0f) p.setShadowLayer(oldRadius, oldDx, oldDy, oldShadow);
+            else p.clearShadowLayer();
+            c.restoreToCount(save);
+            return;
+        }
         float progress = clamp01((ms - onset) / (float) Math.max(1, flightMs));
         float remaining = 1f - progress;
         float settled = 1f - remaining * remaining * remaining;
-        float alpha = (0.68f + 0.32f * settled) * wordAlpha;
+        // The row's karaoke gradient owns brightness. Eye-candy only supplies position and
+        // focus, so a token cannot flash white merely because its entrance has started.
+        float alpha = 1f;
         // The line itself already moves as the previous lyric is handed off. Keep Eye-candy
         // entrances on that shared baseline instead of adding a second vertical wave.
         float y = baseline;
         int save = c.save();
         c.translate(wordX, 0f);
-        float softBlur = density * 1.2f * (1f - settled) + wordBlur;
-        boolean theatrical = AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx);
+        float softBlur = wordBlur;
         boolean backing = !lead;
         float settleScale = 1f + AliveLyricsEffects.wordEntranceScale(
                 LockLyrics.sAliveFx, backing) * (1f - settled);
         c.scale(settleScale, settleScale, xs[cs], baseline);
-        if (theatrical) {
-            int seed = l.text.hashCode() * 31 + cs * 13 + (lead ? 0 : 1);
-            float direction = (seed & 1) == 0 ? -1f : 1f;
-            c.rotate(direction * AliveLyricsEffects.wordEntranceRotation(
-                    LockLyrics.sAliveFx, backing) * (1f - settled), xs[cs], baseline);
-            softBlur += density * AliveLyricsEffects.wordEntranceBlurDp(
-                    LockLyrics.sAliveFx, backing) * (1f - settled);
-        }
         Shader oldShader = p.getShader();
         long oldColor = p.getColorLong();
         int oldAlpha = p.getAlpha();
@@ -3115,6 +3185,7 @@ final class LyricView extends View {
         float oldShadowDx = p.getShadowLayerDx();
         float oldShadowDy = p.getShadowLayerDy();
         long oldShadowColor = p.getShadowLayerColorLong();
+        android.graphics.MaskFilter oldMask = p.getMaskFilter();
         boolean colorFill = false;
         if (oldShader != null) {
             p.setShader(oldShader);
@@ -3126,23 +3197,97 @@ final class LyricView extends View {
             p.setColor(oldColor);
             p.setAlpha(Math.round(oldAlpha * alpha));
         }
-        if (softBlur > 0.15f) {
-            float radius = Math.max(oldShadowRadius, softBlur);
-            float blurAlpha = clamp01(0.44f * (1f - settled) + wordBlur / (density * 3f));
-            long color = oldShadowRadius > 0f ? oldShadowColor : white(blurAlpha, gain);
-            p.setShadowLayer(radius, oldShadowDx, oldShadowDy, color);
+        // A token may enter its timing interval before its first grapheme has advanced. Keep
+        // that interval visually identical to the staged preview: the row's active white fill
+        // belongs to sung characters, never to an upcoming token.
+        boolean tokenUnfilled = AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)
+                && l.sungChars(ms) <= cs;
+        if (tokenUnfilled) {
+            p.setShader(null);
+            rowAt = Float.NaN;
+            p.setAlpha(255);
+            p.setColor(ink(rowUnsungA, 0f));
         }
-        drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, y, colorFill, gain);
+        if (softBlur > 0.15f) {
+            if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)) {
+                p.setMaskFilter(new BlurMaskFilter(softBlur, BlurMaskFilter.Blur.NORMAL));
+            } else {
+                float radius = Math.max(oldShadowRadius, softBlur);
+                float blurAlpha = clamp01(0.44f * (1f - settled) + wordBlur / (density * 3f));
+                long color = oldShadowRadius > 0f ? oldShadowColor : white(blurAlpha, gain);
+                p.setShadowLayer(radius, oldShadowDx, oldShadowDy, color);
+            }
+        }
+        int[] ends = rowLeadIndex >= 0 && rowLeadIndex < clusterEnd.length
+                ? (l == lines.get(rowLeadIndex).bg
+                    ? clusterEndBg[rowLeadIndex] : clusterEnd[rowLeadIndex]) : null;
+        if (AliveLyricsEffects.eyeCandy(LockLyrics.sAliveFx)
+                && ends != null && canSplitClusters(lay, xs, ends, cs, ce, re)) {
+            // Keep Eye-candy's preview/reveal transform for the word as a whole, then give
+            // each shaped letter the same timed rise used by Dramatic.
+            float sung = l.sungChars(ms);
+            for (int ch = cs; ch < ce; ) {
+                int next = ends[ch];
+                if (next <= ch || next > ce) {
+                    drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, y, colorFill, gain);
+                    break;
+                }
+                float letterProgress = (sung - ch) / Math.max(1f, next - ch);
+                int completedAt = clusterCompletionAt(l, ch, next, syllableStart, syllableEnd);
+                float letterY = y - liftPx * 1.65f * whiteness
+                        * letterRise(letterProgress, completedAt);
+                drawSyllableRun(c, l, lay, p, xs, ch, next, rs, re, letterY, colorFill, gain);
+                ch = next;
+            }
+        } else {
+            drawSyllableRun(c, l, lay, p, xs, cs, ce, rs, re, y, colorFill, gain);
+        }
         p.setShader(oldShader);
         p.setColor(oldColor);
         p.setAlpha(oldAlpha);
         rowAt = oldRowAt;
+        p.setMaskFilter(oldMask);
         if (oldShadowRadius > 0f) {
             p.setShadowLayer(oldShadowRadius, oldShadowDx, oldShadowDy, oldShadowColor);
         } else {
             p.clearShadowLayer();
         }
         c.restoreToCount(save);
+    }
+
+    /** A preview may not jump over an earlier provider-timed syllable. */
+    private boolean hasEarlierTimedToken(LyricLine l, int candidateOnset) {
+        if (l.sylStart == null) return false;
+        for (int start : l.sylStart) {
+            if (start > ms && start < candidateOnset) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The first cluster of a syllable follows the final grapheme of the preceding syllable, not
+     * that syllable's first timestamp. This matters for Japanese payloads such as どん → な:
+     * using the first timestamp made both ん and な eligible as "the next" preview.
+     */
+    private static int previousEyeTokenOnset(LyricLine l, int syllable) {
+        if (syllable <= 0 || l.sylStart == null || l.charEnd == null) return l.start;
+        int prev = syllable - 1;
+        int from = prev == 0 ? 0 : l.charEnd[prev - 1];
+        int to = Math.max(from + 1, l.charEnd[prev]);
+        int chars = Math.max(1, to - from);
+        int start = l.sylStart[prev], end = Math.max(start, l.sylEnd[prev]);
+        // A timed syllable with N graphemes starts its final visible grapheme at (N - 1) / N.
+        return start + Math.round((end - start) * (chars - 1) / (float) chars);
+    }
+
+    /** True for whitespace-delimited Latin lyrics, false for CJK and other character scripts. */
+    private static boolean usesWordPreview(LyricLine l) {
+        if (l.sylStart == null || l.text.indexOf(' ') < 0) return false;
+        for (int i = 0; i < l.text.length(); i++) {
+            char ch = l.text.charAt(i);
+            if (Character.isLetter(ch) && ch > 0x02ff) return false;
+        }
+        return true;
     }
 
     private static int clusterStartAt(int clusterStart, int syllableStart, int syllableEnd,

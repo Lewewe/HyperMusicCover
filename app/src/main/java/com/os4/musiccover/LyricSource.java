@@ -452,6 +452,39 @@ final class LyricSource {
         return true;
     }
 
+    /**
+     * Reject line-only results that cannot drive lyric playback. A single line with no word
+     * timing is commonly a provider status/snippet, not a complete lyric; real word-timed
+     * responses remain valid even when they contain only one line.
+     */
+    private static boolean dropUntimedResult(Rows r) {
+        if (r.lines.isEmpty() || r.lines.get(0).hasWords()) return false;
+        if (r.lines.size() < 2) {
+            r.why = "rejected incomplete untimed lyric result: " + r.why;
+            r.lines = java.util.Collections.emptyList();
+            r.source = SRC_NONE;
+            return true;
+        }
+        int previous = -1;
+        for (LyricLine line : r.lines) {
+            if (line.start < 0 || (previous >= 0 && line.start < previous)) {
+                r.why = "rejected invalid lyric timing: " + r.why;
+                r.lines = java.util.Collections.emptyList();
+                r.source = SRC_NONE;
+                return true;
+            }
+            previous = line.start;
+        }
+        return false;
+    }
+
+    /** Invalid provider data is a miss, not confirmation that the track is instrumental. */
+    private static boolean sanitizeResult(Rows r) {
+        if (dropPlaceholder(r)) return true;
+        dropUntimedResult(r);
+        return false;
+    }
+
     /** Every line a placeholder or a credit, and at least one a placeholder. */
     static boolean placeholderLines(List<LyricLine> lines) {
         boolean any = false;
@@ -491,7 +524,7 @@ final class LyricSource {
      */
     private static final String[] PLACEHOLDERS = {
             "暂无歌词", "没有歌词", "未找到歌词", "歌词加载中", "正在加载歌词", "纯音乐",
-            "no lyrics", "no lyric", "lyrics not found", "instrumental",
+            "no lyrics", "no lyric", "lyrics not found", "instrumental", "mic check",
     };
 
     /** The payload's rawLyric, verbatim - the form that keeps word timings, when there are any. */
@@ -909,7 +942,7 @@ final class LyricSource {
                     }
                     // A catalogue that places the song and answers that it is instrumental has
                     // answered: the song has no words, and the next catalogue is not asked for some.
-                    boolean instrumental = dropPlaceholder(r);
+                    boolean instrumental = sanitizeResult(r);
                     Xp.log("[MCLyric] " + pkg + " -> " + r.why);
                     onMainCurrent(gen, cb, r.lines, r.why, r.source);
                     // The other two catalogues, in order, and only for a song the first three could
@@ -961,7 +994,7 @@ final class LyricSource {
                     }
                     // A catalogue that places the song and answers that it is instrumental has
                     // answered: the song has no words, and the next catalogue is not asked for some.
-                    boolean instrumental = dropPlaceholder(r);
+                    boolean instrumental = sanitizeResult(r);
                     // The other two catalogues, in order, and only for a song the first three could
                     // not place. Sequential rather than raced: this is the slow path by definition,
                     // nothing above it is still running by the time it starts, and a song that
@@ -969,7 +1002,7 @@ final class LyricSource {
                     // would otherwise show nothing at all.
                     if (r.lines.isEmpty() && q != null && !instrumental) {
                         web(pkg, q, r);
-                        instrumental = dropPlaceholder(r);
+                        instrumental = sanitizeResult(r);
                     }
                     // The file, for a streaming player, when nothing else had the song - and not
                     // when a catalogue placed it and said it has no words.
