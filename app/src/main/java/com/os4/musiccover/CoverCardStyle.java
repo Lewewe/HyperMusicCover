@@ -126,6 +126,19 @@ final class CoverCardStyle {
         return Float.isFinite(aspect) && aspect > 1f;
     }
 
+    /** Keep a native landscape clock only when a full-width cover and both gaps fit below it. */
+    static boolean nativeClockFits(float aspect, float width, float density,
+                                   float clockBottom, float mediaTop, boolean alreadyNative) {
+        if (!usesNativeClock(aspect) || !Float.isFinite(width) || width <= 0f
+                || !Float.isFinite(density) || density <= 0f
+                || !Float.isFinite(clockBottom) || !Float.isFinite(mediaTop)) return false;
+        float gap = GAP_DP * density;
+        float artworkHeight = Math.max(0f, width - 2f * gap) / aspect;
+        // A small return margin prevents resize loops around the fit boundary.
+        float returnMargin = alreadyNative ? 0f : gap;
+        return mediaTop - clockBottom >= artworkHeight + 2f * gap + returnMargin;
+    }
+
     static float clockScale(float aspect) {
         if (!Float.isFinite(aspect) || aspect <= 0f) return 1f;
         return Math.max(0.75f, Math.min(1f, (float) Math.sqrt(aspect)));

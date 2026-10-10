@@ -711,6 +711,62 @@ final class ClockCollapse {
     private static float sArtworkSizeFromUnit = Float.NaN;
     private static float sArtworkSizeProgress = 1f;
 
+    private static final Live ARTWORK_FIT = new Live();
+
+    private static float artworkClockTop(Live m) {
+        float offset = Main.sClockOffsetDp * Main.density();
+        return m.anchored ? coverDateY(m.date) + offset + m.dateH
+                + Main.CLOCK_GAP_DP * Main.density() : m.inkTop + offset;
+    }
+
+    private static float artworkContentBottom(Live m, float unit) {
+        float bottom = artworkClockTop(m) + unit * m.box.height() / m.unit;
+        for (int i = 0; i < m.sigN; i++) {
+            Sig sig = m.sig[i];
+            if (sig.v != null && sig.v.isShown()) {
+                bottom = Math.max(bottom, artworkClockTop(m)
+                        + unit * m.box.height() / m.unit + sig.gap + sig.v.getHeight());
+            }
+        }
+        return bottom;
+    }
+
+    private static boolean nativeLandscapeFits(float aspect) {
+        // AOD keeps the lit-screen decision; its own layout must not restart this animation.
+        if (!Main.screenOnCached()) return sNativeClockSizeTarget;
+        Live m = LIVE;
+        View g = firstTarget();
+        if (g == null || m.box == null || !(m.unit > 0f)
+                || !(g.getParent() instanceof View)) return false;
+        View parent = (View) g.getParent();
+        float zoom = chainScaleY(parent);
+        if (!(zoom > 0f)) return false;
+        float media = parentTop(g)
+                + (Main.liveMediaTop() - drawnY(parent, 0f, 0f)) / zoom;
+        float nativeBottom = artworkContentBottom(m, fullUnitFor(sPhase, m));
+        return CoverCardStyle.nativeClockFits(aspect, Main.screenWidth() / zoom,
+                Main.density(), nativeBottom, media, sNativeClockSizeTarget);
+    }
+
+    /** A long native clock may leave no initial morph endpoint until its collapse starts. */
+    static float compactContentBottomFor(View layer) {
+        Live m = ARTWORK_FIT;
+        if (!measure(m)) return Float.NaN;
+        float full = fullUnitFor(sPhase, m);
+        float reference = sizeReferenceFor(full);
+        float requested = Float.isNaN(Main.sClockSize) ? Main.sClockHeightDp * Main.density()
+                : Main.sClockSize * reference;
+        float unit = ClockSizePolicy.coverUnit(requested, reference, full,
+                1f, Main.MIN_CLOCK_K, 0f);
+        float bottom = artworkContentBottom(m, unit);
+        View g = firstTarget();
+        if (g != null && g.getParent() instanceof View) {
+            View parent = (View) g.getParent();
+            bottom = drawnY(parent, 0f, 0f) + chainScaleY(parent) * (bottom - parentTop(g));
+        }
+        return unzoomY(layer, bottom);
+    }
+
     /** Resize the clock independently so the media card stays in its current scene. */
     static void refreshArtworkSize() {
         boolean compact = LockLyrics.compactWithoutLyricsOnEntry()
@@ -721,7 +777,8 @@ final class ClockCollapse {
                 && art != null && !art.isRecycled();
         float aspect = coverVisible ? CoverCardStyle.aspect(art.getWidth(), art.getHeight()) : 1f;
         float artworkScale = CoverCardStyle.clockScale(aspect);
-        boolean nativeSize = compact || coverVisible && CoverCardStyle.usesNativeClock(aspect);
+        boolean nativeSize = compact || coverVisible && CoverCardStyle.usesNativeClock(aspect)
+                && nativeLandscapeFits(aspect);
         if (!active()) {
             if (sNativeClockSizeAnimator != null) sNativeClockSizeAnimator.cancel();
             sNativeClockSizeAnimator = null;
@@ -2063,7 +2120,6 @@ final class ClockCollapse {
     }
 
     private static void frame() {
-        refreshArtworkSize();
         Phase phase = sPhase;
         if (phase == Phase.OFF) return;
         Live m = LIVE;
@@ -2071,6 +2127,7 @@ final class ClockCollapse {
         android.os.Trace.beginSection("MC c.measure");
         try { measured = measure(m); } finally { android.os.Trace.endSection(); }
         if (!measured) return;
+        refreshArtworkSize();
 
         if (phase == Phase.AOD) {
             if (sWaking && Main.clockHeld()) {
