@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import com.os4.musiccover.ExtrasActivity
 import com.os4.musiccover.CoverActivity
+import com.os4.musiccover.MediaCardActivity
 import com.os4.musiccover.DictionaryActivity
 import com.os4.musiccover.TranslationProvider
 import com.os4.musiccover.ModuleBridge
@@ -137,6 +138,13 @@ private fun FeatureList(
                         title = stringResource(R.string.features_shade_title),
                         summary = stringResource(R.string.features_shade_summary),
                         onClick = { onOpen(ShadeActivity::class.java) },
+                    )
+                }
+                Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    ArrowPreference(
+                        title = stringResource(R.string.media_customization_title),
+                        summary = stringResource(R.string.media_customization_summary),
+                        onClick = { onOpen(MediaCardActivity::class.java) },
                     )
                 }
                 Card(

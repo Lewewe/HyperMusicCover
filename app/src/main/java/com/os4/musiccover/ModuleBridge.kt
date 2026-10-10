@@ -222,6 +222,7 @@ object ModuleBridge {
          * table in the UI; what it means is the module's business.
          */
         val shade: Map<String, Int> = emptyMap(),
+        val mediaCardConfig: String = MediaCardConfig.normalized(null),
         val miniConfig: String = MiniPlayerConfig.defaultJson(),
         val notificationCompactingAvailable: Boolean = false,
         /** The lock screen's torch and camera, in px; see MiniPlayerRuntime.shortcutGeometry. */
@@ -482,6 +483,12 @@ object ModuleBridge {
 
     fun setForceColon(context: Context, on: Boolean) =
         send(context, "colon") { putExtra("on", on) }
+
+    fun setMediaCardStyle(context: Context, key: String, value: Int) =
+        send(context, "mediastyle") { putExtra("key", key); putExtra("v", value) }
+
+    fun setMediaCardConfig(context: Context, json: String) =
+        send(context, "mediastyle") { putExtra("json", MediaCardConfig.normalized(json)) }
 
     fun setMediaBarGlow(context: Context, on: Boolean) =
         send(context, "seekglow") { putExtra("on", on) }
@@ -940,6 +947,7 @@ object ModuleBridge {
             shade = b.keySet()
                 .filter { it.startsWith("shade_") }
                 .associate { it.removePrefix("shade_") to b.getInt(it, 0) },
+            mediaCardConfig = MediaCardConfig.normalized(b.getString("mediastyle")),
             miniConfig = MiniPlayerConfig.normalizedJson(b.getString("minicfg")),
             notificationCompactingAvailable = b.getBoolean("notificationcompactavailable", false),
             miniShortcuts = b.getFloatArray("minishortcuts")?.takeIf { it.size == 9 },

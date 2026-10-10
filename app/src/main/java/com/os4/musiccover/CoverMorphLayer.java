@@ -304,10 +304,12 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
                 box.x + box.w - root[0], box.y + box.h - root[1]);
         float p = Math.max(0f, Math.min(1f, motion.value));
         float startRadius = mini ? MiniPlayerRuntime.artworkRadius()
-                : Math.min(14f * density, Math.min(thumb.w, thumb.h) * 0.20f);
+                : Main.coverMorphThumbnailRadius();
         CoverCardStyle style = Main.sCoverCardStyle;
         float endRadius = cardMode ? style.radius(Math.min(cover.w, cover.h)) : 0f;
-        float radius = startRadius + (endRadius - startRadius) * p;
+        float radius = CoverMorphMotion.artworkRadius(startRadius, endRadius,
+                Math.min(drawn.width(), drawn.height()), Math.min(cover.w, cover.h), p,
+                !mini && MediaCardRuntime.circularNotificationArtwork());
         float decoration = cardMode ? CoverMorphMotion.cardDecoration(motion.value) : 0f;
         // `cover` is the landing box, so the corner share it asks for is the one the card will
         // have when it gets there - which is where this shadow is read. See cornerShare.

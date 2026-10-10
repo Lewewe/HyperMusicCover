@@ -118,6 +118,7 @@
             android:label="@string/extras_section"
             android:theme="@style/Theme.HyperMusicCover" />
 
+        <activity android:name=".MediaCardActivity" android:exported="false" />
         <activity
             android:name=".DictionaryActivity"
             android:exported="false"

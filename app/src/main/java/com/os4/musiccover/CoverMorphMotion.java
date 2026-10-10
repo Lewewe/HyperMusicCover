@@ -11,6 +11,15 @@ final class CoverMorphMotion {
         float cy() { return y + h * 0.5f; }
     }
 
+    /** Match the circular thumbnail continuously while preserving the cover's own corners. */
+    static float artworkRadius(float thumbnailRadius, float coverRadius, float drawnSide,
+                               float coverSide, float progress, boolean circularThumbnail) {
+        float p = Math.max(0f, Math.min(1f, progress));
+        if (!circularThumbnail) return thumbnailRadius + (coverRadius - thumbnailRadius) * p;
+        float coverShare = coverRadius / Math.max(1f, coverSide);
+        return Math.max(0f, drawnSide) * Math.min(0.5f, 0.5f + (coverShare - 0.5f) * p);
+    }
+
     float value;
     float velocity;
     float target;

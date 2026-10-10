@@ -953,6 +953,7 @@ public class Main extends XposedModule {
         PassBlurScaleFix.install();
         // The mini player hangs off the shortcut row, not the clock container.
         MiniPlayerRuntime.install(cl);
+        MediaCardRuntime.install(cl);
         PaletteThrottle.INSTANCE.install(cl);
         // Draw lasting lock screen status beside the date, clear of the pill.
         DateStatus.INSTANCE.install(cl);
@@ -1979,6 +1980,9 @@ public class Main extends XposedModule {
                     // is not.
                     + "\nsawlyric=" + (LockLyrics.sSawSessionLyric ? 1 : 0)
                     + "\nfpavoid=" + sFpAvoid
+                    + "\nmediastyle=" + android.util.Base64.encodeToString(
+                            MediaCardRuntime.configJson().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                            android.util.Base64.NO_WRAP)
                     + "\nminicfg=" + android.util.Base64.encodeToString(
                             MiniPlayerRuntime.configJson(sAppCtx).getBytes(java.nio.charset.StandardCharsets.UTF_8),
                             android.util.Base64.NO_WRAP)
@@ -2118,6 +2122,9 @@ public class Main extends XposedModule {
                             LockLyrics.sSawSessionLyric = "1".equals(v);
                         }
                         else if ("fpavoid".equals(k)) sFpAvoid = Integer.parseInt(v);
+                        else if ("mediastyle".equals(k)) MediaCardRuntime.configure(
+                                new String(android.util.Base64.decode(v, android.util.Base64.DEFAULT),
+                                        java.nio.charset.StandardCharsets.UTF_8));
                         else if ("minicfg".equals(k)) MiniPlayerRuntime.applyConfig(sAppCtx,
                                 new String(android.util.Base64.decode(v, android.util.Base64.DEFAULT),
                                         java.nio.charset.StandardCharsets.UTF_8));
@@ -2940,6 +2947,12 @@ public class Main extends XposedModule {
                         // the same door.
                         ShadeLayer.configure(i.getStringExtra("key"), i.getIntExtra("v", 0));
                         saveState();
+                    } else if ("mediastyle".equals(op)) {
+                        if (i.hasExtra("json")) MediaCardRuntime.configure(i.getStringExtra("json"));
+                        else MediaCardRuntime.set(i.getStringExtra("key"), i.getIntExtra("v", 0));
+                        saveState();
+                    } else if ("mediastate".equals(op)) {
+                        setResultData(MediaCardRuntime.describe());
                     } else if ("minicfg".equals(op)) {
                         MiniPlayerRuntime.applyConfig(c, i.getStringExtra("json"));
                         saveState();
@@ -2950,6 +2963,7 @@ public class Main extends XposedModule {
                         android.os.Bundle out = new android.os.Bundle();
                         out.putBoolean("alive", true);
                         out.putBoolean("cover", sCoverMode);
+                        out.putString("mediastyle", MediaCardRuntime.configJson());
                         out.putString("minicfg", MiniPlayerRuntime.configJson(c));
                         out.putBoolean("notificationcompactavailable", MiniPlayerRuntime.notificationCompactingAvailable(c));
                         float[] shortcuts = MiniPlayerRuntime.shortcutGeometry();
@@ -7210,6 +7224,9 @@ public class Main extends XposedModule {
         if (art == null || art.getWidth() <= 0 || art.getHeight() <= 0) {
             return 14f * density();
         }
+        if (MediaCardRuntime.circularNotificationArtwork()) {
+            return Math.min(art.getWidth(), art.getHeight()) * 0.5f;
+        }
         float radius = art.getClipToOutline() ? outlineRadius(art) : 0f;
         if (radius <= 0f && art.getParent() instanceof View) {
             View box = (View) art.getParent();
@@ -8028,6 +8045,7 @@ public class Main extends XposedModule {
         LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
+        MediaCardRuntime.afterCardPass(card);
     }
 
     /**
@@ -9889,6 +9907,7 @@ public class Main extends XposedModule {
                 android.os.SystemClock.uptimeMillis(), sArtworkSeekUntil,
                 sameTrack(sArtworkSeekKey, actualKey));
         if (seeking) return;
+        MediaCardRuntime.refreshMotion();
         boolean playing = s == PlaybackState.STATE_PLAYING;
         if (sCoverCardPlaying == playing) return;
         sCoverCardPlaying = playing;

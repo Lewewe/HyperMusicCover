@@ -161,4 +161,24 @@ public class CoverMorphMotionTest {
                 > CoverMorphMotion.cardDecoration(0.3f));
         assertEquals(1f, CoverMorphMotion.cardDecoration(1.02f), 0f);
     }
+    @Test public void circularArtworkLandsWithoutChangingShapeAtHandoff() {
+        CoverMorphMotion.Box thumb = new CoverMorphMotion.Box(50f, 1500f, 160f, 160f);
+        CoverMorphMotion.Box cover = new CoverMorphMotion.Box(60f, 700f, 900f, 500f);
+        CoverMorphMotion.Box landed = CoverMorphMotion.frame(thumb, cover, 0f, 3f);
+        assertEquals(landed.w * .5f, CoverMorphMotion.artworkRadius(80f, 24f,
+                Math.min(landed.w, landed.h), 500f, 0f, true), .001f);
+        CoverMorphMotion.Box expanded = CoverMorphMotion.frame(thumb, cover, 1f, 3f);
+        assertEquals(24f, CoverMorphMotion.artworkRadius(80f, 24f,
+                Math.min(expanded.w, expanded.h), 500f, 1f, true), .001f);
+        float previousShare = .5f;
+        for (int i = 1; i <= 20; i++) {
+            float progress = i / 20f;
+            CoverMorphMotion.Box frame = CoverMorphMotion.frame(thumb, cover, progress, 3f);
+            float side = Math.min(frame.w, frame.h);
+            float share = CoverMorphMotion.artworkRadius(80f, 24f, side, 500f, progress, true) / side;
+            assertTrue("Curvature must change continuously toward the cover", share < previousShare);
+            previousShare = share;
+        }
+    }
+
 }

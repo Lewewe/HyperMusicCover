@@ -113,6 +113,7 @@ object SettingsBackup {
             if (module.shade.isNotEmpty()) {
                 json.put(KEY_SHADE, JSONObject(module.shade as Map<*, *>))
             }
+            json.put("mediaCardCustomization", JSONObject(module.mediaCardConfig))
             json.put(KEY_MINI, JSONObject(module.miniConfig))
         }
         return json.toString(2)
@@ -216,6 +217,9 @@ object SettingsBackup {
                 for (key in shade.keys()) {
                     ModuleBridge.setShade(context, key, shade.getInt(key))
                 }
+            }
+            if (obj.has("mediaCardCustomization")) {
+                ModuleBridge.setMediaCardConfig(context, obj.getJSONObject("mediaCardCustomization").toString())
             }
             if (obj.has(KEY_MINI)) {
                 ModuleBridge.setMiniConfig(context, obj.getJSONObject(KEY_MINI).toString())

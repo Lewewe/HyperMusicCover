@@ -76,6 +76,11 @@ fun CreditsPageContent(
             "https://github.com/puhboo/HyperMusicCover-Extra",
         ),
         Credit(
+            "@juren233",
+            stringResource(R.string.credits_juren_media),
+            "https://github.com/juren233/HyperLyrics-Enhanced",
+        ),
+        Credit(
             "@zyl6932",
             stringResource(R.string.credits_original_author),
             "https://github.com/zyl6932/HyperMusicCover",
